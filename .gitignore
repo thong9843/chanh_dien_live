@@ -5,22 +5,3 @@ live/tts/
 .env.*
 .DS_Store
 Thumbs.db
-
-# Python virtual environments & bytecode
-venv/
-.venv/
-__pycache__/
-*.pyc
-*.pyo
-
-# Audio artifacts & reference clips
-*.wav
-
-# Model weights & caches
-*.onnx
-*.onnx_data
-*.gguf
-*.bin
-*.pt
-*.pth
-*.safetensors

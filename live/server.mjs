@@ -390,6 +390,13 @@ function requestCeremony(id, kind, bypassUserCooldown = false){
   return true;
 }
 
+// Dọn bảng cooldown đã hết hạn để treo nhiều giờ không phình bộ nhớ
+setInterval(() => {
+  const now = Date.now(), cd = CONTENT.ceremony.cooldownSec * 1000;
+  for (const [id, at] of ceremonyCooldowns) if (now - at >= cd) ceremonyCooldowns.delete(id);
+  for (const [id, at] of oracleCooldown) if (now - at >= 15_000) oracleCooldown.delete(id);
+}, 60_000).unref?.();
+
 function setSilentUntil(untilMs){
   clearTimeout(silentEndTimer); silentEndTimer = null;
   silentUntil = Math.max(0, Math.round(+untilMs || 0));
@@ -424,7 +431,7 @@ function scheduleNextZoom(){
 
 function fireZoom(id, reason){
   const v = viewers.get(id);
-  if (!v || isAtAltarSpot(id)) return;
+  if (!v || isProtectedCeremonyViewer(id)) return;
   const cycleMs = (CONTENT.zoom.holdSec + CONTENT.zoom.outSec + CONTENT.zoom.cooldownSec) * 1000;
   zoomNextAt = Date.now() + cycleMs;
   broadcast({
@@ -446,7 +453,7 @@ function pumpZoom(){
   if (Date.now() < zoomNextAt){ scheduleNextZoom(); return; }
   while (zoomQueue.length){
     const item = zoomQueue.shift();
-    if (viewers.has(item.id) && !isAtAltarSpot(item.id)){
+    if (viewers.has(item.id) && !isProtectedCeremonyViewer(item.id)){
       fireZoom(item.id, item.reason);
       return;
     }
@@ -456,7 +463,7 @@ function pumpZoom(){
 function enqueueZoom(id, reason){
   if (!settings.zoomEnabled) return;
   if (Date.now() < silentUntil) return;              // không zoom trong 5 phút thiền im lặng
-  if (!viewers.has(id) || isAtAltarSpot(id)) return; // không zoom vào người đang ở điểm lễ
+  if (!viewers.has(id) || isProtectedCeremonyViewer(id)) return; // không zoom vào người đang/đang chờ lên lễ
   const now = Date.now();
   if (now >= zoomNextAt && zoomQueue.length === 0){
     fireZoom(id, reason);

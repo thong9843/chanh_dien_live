@@ -170,7 +170,14 @@ const IMG = {
 };
 for (const [k,src] of Object.entries(IMG)){ const im=new Image(); im.src=src; A[k]=im; }
 const avatars = new Map();
-function avatar(url){ if(!url) return null; let im=avatars.get(url); if(!im){ im=new Image(); im.referrerPolicy='no-referrer'; im.src=url; avatars.set(url,im); } return im.naturalWidth?im:null; }
+const AVATAR_MAX = 200;   // LRU: giữ tối đa ~200 ảnh đại diện, bỏ ảnh lâu không dùng nhất
+function avatar(url){
+  if(!url) return null;
+  let im=avatars.get(url);
+  if(im){ avatars.delete(url); avatars.set(url,im); }
+  else { im=new Image(); im.referrerPolicy='no-referrer'; im.src=url; avatars.set(url,im); if(avatars.size>AVATAR_MAX) avatars.delete(avatars.keys().next().value); }
+  return im.naturalWidth?im:null;
+}
 
 /* ======================= seats ======================= */
 let FLOOR = { yTop: 1430, yBot: 1870, halfTop: 330, halfBot: 470 };

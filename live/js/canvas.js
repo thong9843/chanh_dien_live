@@ -540,7 +540,7 @@
       this.boostPeak = Math.max(this.boostPeak, intensity);
       this.boostIntensity = Math.max(this.boostIntensity, intensity * 0.65);
 
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < 7 && this.embers.length < 160; i++) {
         this.embers.push({
           ox: (Math.random() - 0.5) * 44,
           oy: (Math.random() - 0.5) * 10,
@@ -591,6 +591,7 @@
         this.emberAcc += dt * (8 * boost);
         while (this.emberAcc >= 1) {
           this.emberAcc -= 1;
+          if (this.embers.length >= 160) continue;
           this.embers.push({
             ox: (Math.random() - 0.5) * 30,
             oy: -4,
