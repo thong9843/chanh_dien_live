@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "TikTok LIVE overlay server for Chánh Điện Tịnh Tâm (VieNeu TTS + 2.5D Canvas Upgrade)",
+  "description": "TikTok LIVE overlay server for Chánh Điện Tịnh Tâm",
   "scripts": {
     "start": "node server.mjs",
     "dev": "node server.mjs",

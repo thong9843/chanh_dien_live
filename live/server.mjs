@@ -1,9 +1,9 @@
-// Chánh Điện Tịnh Tâm — live server (Upgraded v2.0)
+// Chánh Điện Tịnh Tâm — live server
 // Runs on the streaming PC. Serves the overlay + control panel, listens to a TikTok LIVE room,
-// keeps the list of seated viewers, generates Vietnamese voice lines via VieNeu TTS Sidecar (:5000)
-// (with automatic Edge TTS fallback) and pushes everything to the overlay over WebSocket.
+// keeps the list of seated viewers, generates Vietnamese voice lines with Edge TTS and pushes
+// everything to the overlay over WebSocket.
 //
-//   cd live && npm install && npm run dev        → http://localhost:3000/live/control.html
+//   cd live && npm install && npm start        → http://localhost:3000/live/control.html
 //
 import http from 'node:http';
 import fs from 'node:fs';
@@ -19,7 +19,6 @@ const TTS_DIR = path.join(__dirname, 'tts');
 fs.mkdirSync(TTS_DIR, { recursive: true });
 for (const f of fs.readdirSync(TTS_DIR)) { try { fs.unlinkSync(path.join(TTS_DIR, f)); } catch {} }
 const PORT = +process.env.PORT || 3000;
-const VIENEU_BASE = (process.env.VIENEU_URL || 'http://127.0.0.1:5000').replace(/\/+$/, '');
 
 /* ------------------------------------------------------------------ content
    Mọi chuỗi hiển thị / đọc nằm trong live/content.json. Thiếu file hoặc thiếu khóa thì dùng content.defaults.mjs.
@@ -92,12 +91,9 @@ const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in var
 const settings = {
   title: CONTENT.channel.title,
   subtitle: CONTENT.channel.subtitle,
-  ttsEngine: 'edge',                 // Mặc định: 'edge' (bản gốc Nam Minh) | 'vieneu' (chỉ gọi :5000 khi bật)
   voice: 'vi-VN-NamMinhNeural',      // vi-VN-NamMinhNeural | vi-VN-HoaiMyNeural
   pitch: -18,                        // Hz — đúng cấu hình gốc kentjuno/chanh-dien-online
   rate: -20,                         // %  — đúng cấu hình gốc kentjuno/chanh-dien-online
-  vieneuVoice: 'nam_trang_nghiem',   // Chỉ dùng khi bật ttsEngine = 'vieneu'
-  vieneuSpeed: 1.0,
   music: true, mo: true, moBpm: 52,
   autoChant: true, chantEveryMin: 3,
   seatMode: 'auto',                  // auto | 24 | 36 | 64 | 100
@@ -106,10 +102,9 @@ const settings = {
   readMemberJoin: false,             // xướng tên chào đón người mới vào phòng (khi bật joinOnEnter)
   gifts: { readAll: true, minDiamonds: 1 },
 };
-const viewers = new Map();           // id -> { id, name, skin, avatar, coins, joinedAt, lastAt, lastText, lastTextAt, demo }
+const viewers = new Map();           // id -> { id, rawName, name, skin, avatar, coins, joinedAt, lastAt, lastText, lastTextAt, demo }
 const startedAt = Date.now();
 let tiktok = null, tiktokState = { status: 'idle', uniqueId: '', error: '' };
-let vieneuState = { enabled: false, online: false, backend: 'disabled', presetVoice: '', url: VIENEU_BASE };
 const log = [];
 function addLog(s){ const line = `[${new Date().toLocaleTimeString('vi-VN')}] ${s}`; log.push(line); if (log.length > 300) log.shift(); broadcast({ t:'log', line }, 'control'); console.log(line); }
 
@@ -214,7 +209,7 @@ function isHighTierGift(giftName, coins, tier){
 }
 
 function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo }; }
-function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, tiktok: tiktokState, vieneu: vieneuState, content: CLIENT_CONTENT }; }
+function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, tiktok: tiktokState, content: CLIENT_CONTENT }; }
 
 function seat(id, name, opts = {}){
   let v = viewers.get(id);
@@ -291,7 +286,7 @@ function onGift(id, name, giftName, count, diamonds, avatar){
   });
 
   if (settings.gifts.readAll || coins >= settings.gifts.minDiamonds){
-    say(line, { tag: 'gift', small: tier < 3, names: [spokenName], voice_id: settings.vieneuVoice }, tier >= 3 ? 3 : 1);
+    say(line, { tag: 'gift', small: tier < 3, names: [spokenName] }, tier >= 3 ? 3 : 1);
   }
 }
 
@@ -304,7 +299,7 @@ function onMember(id, name, avatar){
     lastMemberTtsAt = Date.now();
     const spokenName = spoken(v.rawName || name || v.name);
     const line = fill(CONTENT.member.line, { name: spokenName });
-    say(line, { tag: 'member', voice_id: settings.vieneuVoice }, 0);
+    say(line, { tag: 'member' }, 0);
   }
 }
 
@@ -338,45 +333,16 @@ function onLikes(id, n, total){
   }
 }
 
-/* ------------------------------------------------------------------ TTS Queue & VieNeu Sidecar */
-const ttsQueue = []; let ttsBusy = false, ttsSeq = 0, warnedVieNeuOffline = false;
+/* ------------------------------------------------------------------ Edge TTS Queue */
+const ttsQueue = []; let ttsBusy = false, ttsSeq = 0;
 function esc(s){ return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])); }
 const MAX_Q = 15, MERGE_OVER = 8;
-
-async function checkVieNeuHealth(){
-  if (settings.ttsEngine !== 'vieneu'){
-    if (vieneuState.enabled || vieneuState.online || vieneuState.backend !== 'disabled'){
-      vieneuState = { enabled: false, online: false, backend: 'disabled', presetVoice: '', url: VIENEU_BASE };
-      broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-    }
-    return false;
-  }
-  try {
-    const res = await fetch(`${VIENEU_BASE}/health`, { signal: AbortSignal.timeout(2200) });
-    if (res.ok){
-      const data = await res.json();
-      vieneuState = {
-        enabled: true,
-        online: !!data.ok,
-        backend: String(data.backend || 'vieneu'),
-        presetVoice: String(data.preset_voice || ''),
-        url: VIENEU_BASE,
-      };
-      warnedVieNeuOffline = false;
-      broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-      return true;
-    }
-  } catch {}
-  vieneuState = { enabled: true, online: false, backend: 'offline', presetVoice: '', url: VIENEU_BASE };
-  broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-  return false;
-}
 
 // Thang ưu tiên: 4 say thủ công > 3 quà lớn > 2 follow / mốc tim > 1 quà nhỏ > 0 tụng định kỳ / member.
 function say(text, meta = {}, prio = 1){
   const cleanText = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
   if (!cleanText) return;
-  const item = { text: cleanText, payload: meta, meta, prio };
+  const item = { text: cleanText, meta, prio };
   if (ttsQueue.length >= MAX_Q){
     const low = Math.min(...ttsQueue.map(q => q.prio));
     if (prio <= low){ addLog('Hàng đợi giọng đọc đầy, bỏ qua 1 câu'); return; }
@@ -395,37 +361,11 @@ function mergeSmallGifts(){
   const names = [...new Set(idx.flatMap(i => ttsQueue[i].meta.names || []))];
   const shown = names.slice(0, 3).join(', '), more = names.length - 3;
   const text = more > 0 ? fill(CONTENT.gift.merged, { names: shown, more }) : fill(CONTENT.gift.mergedAll, { names: shown });
-  const merged = { text: text.slice(0, 500), payload: { tag: 'gift', small: true, names }, meta: { tag: 'gift', small: true, names }, prio: 1 };
+  const merged = { text: text.slice(0, 500), meta: { tag: 'gift', small: true, names }, prio: 1 };
   const first = idx[0];
   for (let k = idx.length - 1; k >= 0; k--) ttsQueue.splice(idx[k], 1);
   ttsQueue.splice(first, 0, merged);
   addLog(`Gộp ${idx.length} câu quà nhỏ thành 1 (${names.length} người)`);
-}
-
-async function synthesizeViaVieNeu(text, voiceId){
-  const res = await fetch(`${VIENEU_BASE}/api/tts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text,
-      voice_id: voiceId || settings.vieneuVoice || 'nam_trang_nghiem',
-      speed: settings.vieneuSpeed || 0.96,
-      response_format: 'json',
-    }),
-    signal: AbortSignal.timeout(18_000),
-  });
-  if (!res.ok) throw new Error(`VieNeu HTTP ${res.status}`);
-  const ct = (res.headers.get('content-type') || '').toLowerCase();
-  if (ct.includes('audio/')){
-    const buf = Buffer.from(await res.arrayBuffer());
-    const ext = ct.includes('mpeg') ? 'mp3' : 'wav';
-    return { buf, ext, engine: 'vieneu' };
-  }
-  const data = await res.json();
-  if (!data || !data.audio_base64) throw new Error('Payload VieNeu thiếu audio_base64');
-  const buf = Buffer.from(data.audio_base64, 'base64');
-  const ext = data.ext === 'mp3' ? 'mp3' : 'wav';
-  return { buf, ext, engine: data.backend || 'vieneu' };
 }
 
 async function synthesizeViaEdge(text){
@@ -442,7 +382,7 @@ async function synthesizeViaEdge(text){
     audioStream.on('error', rej);
   });
   try { tts.close(); } catch {}
-  return { buf: Buffer.concat(chunks), ext: 'mp3', engine: 'edge' };
+  return Buffer.concat(chunks);
 }
 
 function pruneTtsFiles(){
@@ -452,42 +392,15 @@ function pruneTtsFiles(){
   }
 }
 
-async function synthesizeCurrentEngine(text, voiceId){
-  let result = null;
-  if (settings.ttsEngine === 'vieneu'){
-    try {
-      result = await synthesizeViaVieNeu(text, voiceId);
-      if (!vieneuState.online){
-        vieneuState = { enabled: true, online: true, backend: result.engine, presetVoice: vieneuState.presetVoice || '', url: VIENEU_BASE };
-        broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-      }
-      warnedVieNeuOffline = false;
-    } catch (err) {
-      if (!warnedVieNeuOffline){
-        warnedVieNeuOffline = true;
-        addLog(`ℹ️ VieNeu Sidecar (${VIENEU_BASE}) không phản hồi (${err.message}) → tạm dùng Edge TTS.`);
-      }
-      if (vieneuState.online){
-        vieneuState = { enabled: true, online: false, backend: 'offline', presetVoice: '', url: VIENEU_BASE };
-        broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-      }
-    }
-  }
-  if (!result){
-    result = await synthesizeViaEdge(text);
-  }
-  return result;
-}
-
 async function pumpTTS(){
   if (ttsBusy || !ttsQueue.length) return;
   ttsBusy = true;
   const { text, meta } = ttsQueue.shift();
   try {
-    const result = await synthesizeCurrentEngine(text, meta?.voice_id);
-    const file = `tts_${Date.now()}_${++ttsSeq}.${result.ext}`;
-    fs.writeFileSync(path.join(TTS_DIR, file), result.buf);
-    broadcast({ t: 'tts', url: `/live/tts/${file}`, text, tag: meta.tag, engine: result.engine });
+    const buf = await synthesizeViaEdge(text);
+    const file = `tts_${Date.now()}_${++ttsSeq}.mp3`;
+    fs.writeFileSync(path.join(TTS_DIR, file), buf);
+    broadcast({ t: 'tts', url: `/live/tts/${file}`, text, tag: meta.tag });
     pruneTtsFiles();
   } catch (e) {
     addLog('TTS lỗi: ' + (e?.message || e));
@@ -511,9 +424,9 @@ async function previewNameTTS(rawName, ws){
     times: '',
   }).slice(0, 500);
   try {
-    const result = await synthesizeCurrentEngine(text, settings.vieneuVoice);
-    const file = `tts_preview_${Date.now()}_${++ttsSeq}.${result.ext}`;
-    fs.writeFileSync(path.join(TTS_DIR, file), result.buf);
+    const buf = await synthesizeViaEdge(text);
+    const file = `tts_preview_${Date.now()}_${++ttsSeq}.mp3`;
+    fs.writeFileSync(path.join(TTS_DIR, file), buf);
     pruneTtsFiles();
     if (ws && ws.readyState === 1){
       ws.send(JSON.stringify({ t: 'preview_tts', url: `/live/tts/${file}`, rawName: raw, spokenName, text }));
@@ -598,14 +511,11 @@ function onControl(m, ws){
     case 'bell': broadcast({ t:'bell' }); break;
     case 'mo': broadcast({ t:'mo1' }); break;
     case 'chant': chant(); break;
-    case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say', voice_id: settings.vieneuVoice }, 4); break;
+    case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }, 4); break;
     case 'test_name': previewNameTTS(m.name, ws); break;
-    case 'settings': {
-      const prevEngine = settings.ttsEngine;
+    case 'settings':
       applySettings(m.settings || {});
-      if (settings.ttsEngine !== prevEngine) checkVieNeuHealth();
       scheduleChant(); broadcast({ t:'settings', settings, cap: capacity() }); break;
-    }
     case 'bots': setBots(!!m.on, +m.n || 12, m.pace); break;
   }
 }
@@ -613,9 +523,6 @@ function onControl(m, ws){
 // Only known keys, right types, sane ranges: the panel is local, but nothing from the socket is trusted blindly.
 const SETTING_RULES = {
   title: v => String(v).slice(0, 40), subtitle: v => String(v).slice(0, 60),
-  ttsEngine: v => ['edge', 'vieneu'].includes(v) ? v : settings.ttsEngine,
-  vieneuVoice: v => ['nam_trang_nghiem', 'duc_tri_nam', 'adam_nam', 'minh_triet_nam', 'nu_thanh_thoat', 'my_duyen_nu'].includes(v) ? v : settings.vieneuVoice,
-  vieneuSpeed: v => Number.isFinite(+v) ? Math.min(1.3, Math.max(0.65, +(+v).toFixed(2))) : 1.0,
   voice: v => ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'].includes(v) ? v : settings.voice,
   pitch: v => clamp(v, -50, 50), rate: v => clamp(v, -50, 50), moBpm: v => clamp(v, 20, 120), chantEveryMin: v => clamp(v, 1, 60),
   music: Boolean, mo: Boolean, autoChant: Boolean, joinOnEnter: Boolean, readMemberJoin: Boolean,
@@ -656,7 +563,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const MIME = {
   '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8',
   '.json':'application/json', '.png':'image/png', '.jpg':'image/jpeg', '.webp':'image/webp',
-  '.mp3':'audio/mpeg', '.wav':'audio/wav', '.svg':'image/svg+xml', '.ico':'image/x-icon',
+  '.mp3':'audio/mpeg', '.svg':'image/svg+xml', '.ico':'image/x-icon',
 };
 const ALLOWED_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`, `[::1]:${PORT}`]);
 const okHost = h => ALLOWED_HOSTS.has(String(h || '').toLowerCase());

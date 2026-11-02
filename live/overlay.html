@@ -368,7 +368,7 @@ function mo(){
 }
 let moTimer=null; function scheduleMo(){ clearInterval(moTimer); if (AC && settings.mo) moTimer=setInterval(mo, 60000/Math.max(20,settings.moBpm||52)); }
 
-// Hàng đợi phát giọng đọc tuần tự ở Client (chống chồng lấp 100%, hỗ trợ cả .wav VieNeu và .mp3 Edge)
+// Hàng đợi phát giọng đọc tuần tự ở Client (chống chồng lấp, phát .mp3 Edge TTS)
 const ttsQ=[]; let ttsPlaying=false;
 function queueTTS(url, onStart){ if (ttsQ.length < 25) ttsQ.push({url,onStart}); playTTS(); }
 function playTTS(){
@@ -430,7 +430,7 @@ function connect(){
       case 'oracle': { const v=visitors.get(m.id); if(v){ v.glow=.9; v.triggerBow(1,0); } enqueueOracle(m); } break;
       case 'gift': { const v=visitors.get(m.id); if(v){ v.coins=m.total; giftFx(v,m); } renderMerit(); showGift(m); } break;
       case 'like': { const v=visitors.get(m.id); if(v) hearts(v,m.n); } break;
-      case 'tts': queueTTS(m.url || m.dataUri); break;
+      case 'tts': queueTTS(m.url); break;
       case 'chant': showChant(m.text); bell(); break;
       case 'bell': bell(true); break;
       case 'mo1': mo(); break;

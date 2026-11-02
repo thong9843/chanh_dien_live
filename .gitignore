@@ -7,8 +7,6 @@ live/tts/
 Thumbs.db
 
 # Python virtual environments & bytecode
-tts_sidecar/venv/
-tts_sidecar/.venv/
 venv/
 .venv/
 __pycache__/
@@ -18,11 +16,7 @@ __pycache__/
 # Audio artifacts & reference clips
 *.wav
 
-# VieNeu / AI TTS model weights & caches
-tts_sidecar/models/
-tts_sidecar/checkpoints/
-tts_sidecar/cache/
-tts_sidecar/outputs/
+# Model weights & caches
 *.onnx
 *.onnx_data
 *.gguf
