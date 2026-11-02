@@ -160,9 +160,28 @@ Mọi số liệu ở `content.json → ceremony` (`inviteText`, `inviteSec 3`, 
 - Nhánh quỳ + lạy bằng `pose_<skin>_kneel/prostrate`: có code nhưng chưa có ảnh để thử.
 - Ảnh pose cho monk/nun/child (hiện các skin này lên lễ bằng cách mờ tại chỗ).
 
-**Đợt tối ưu hiệu suất (đã hẹn)**
-- Đưa chuỗi và toạ độ Sổ Vàng, nhãn ngày/đêm vào `content.json`.
-- Khói nhang tạo `createRadialGradient` mỗi hạt mỗi khung.
+**Đợt tối ưu hiệu suất (kế hoạch đã duyệt, chưa làm)**
+
+Quy tắc đợt này: nêu kế hoạch từng nhóm, commit riêng từng nhóm, **không đổi hình ảnh nhìn thấy** (trừ nhóm 4 khi chủ dự án duyệt), chưa push khi chưa được bảo.
+
+*Kết quả khảo sát (trước khi làm):*
+- Canvas đã là 1080×1920 và `fit()` đã scale `min(rộng/1080, cao/1920)` (letterbox 9:16). Vòng `requestAnimationFrame` chưa giới hạn fps; mỗi khung vẽ lại nền, ánh sáng ngày/đêm, 6 thầy + thẻ tên, người ngồi, khói.
+- Khói tạo 1 `createRadialGradient` cho mỗi hạt mỗi khung (≤ 90 hạt); `shadowBlur` có 4 chỗ trong `canvas.js` (Sổ Vàng, vòng hào quang zoom, thẻ tên zoom).
+- Âm thanh: mỗi câu TTS tạo `Audio` + `createMediaElementSource` nối vào `master` mà không ngắt khi phát xong → nguồn rò rỉ chính khi treo 8–12 giờ. Không có `createObjectURL`.
+- Server: log giữ 300 dòng (cần vòng 500); TikTok mất kết nối chỉ báo `disconnected`, không tự nối lại; tập `followed`, mảng `fx`/`petals` ở overlay chưa có trần.
+- Phông chữ nạp từ Google Fonts qua thẻ `<link>` → máy phát mất mạng thì rơi về phông mặc định.
+
+*Các nhóm, theo thứ tự làm:* **0 → 5 → 1a → 1b → 1c → 2 → 3 → 4 → 6 → 7**
+- **0. Đo mốc**: bot 100 người ~10 phút trên code hiện tại, ghi heap server, heap overlay, fps (không commit).
+- **5. Dọn nợ cấu hình**: chuỗi + toạ độ Sổ Vàng, nhãn "Nắng Chánh Điện / Đêm Tĩnh Tâm" vào `content.json` + `content.defaults.mjs`; gom giá trị `altarSpot` trùng lặp (`Character`, `CeremonyDirector`, `overlay.html`, server) về một chỗ (`layout.altarSpot`, chỉ còn một hằng dự phòng).
+- **1a. Khung hình**: giới hạn 30 fps, mọi chuyển động theo deltaTime; chờ `document.fonts.ready`; lớp tĩnh (nền + 6 thầy + thẻ tên) vẽ vào canvas ẩn, chỉ vẽ lại khi layout hoặc chế độ ngày/đêm đổi. Hào quang thầy trụ trì và ánh sáng nhấp nháy vẫn vẽ mỗi khung, giữ nguyên thứ tự vẽ.
+- **1b. Hạt và bóng**: khói dùng 1 sprite glow vẽ sẵn (thường + vàng) thay gradient mỗi hạt; hạt/cánh hoa dùng object pool có trần; `shadowBlur` thay bằng sprite bóng vẽ sẵn.
+- **1c. Cache sprite** đã scale (LRU ~200) cho người ngồi yên (bỏ qua khi đang đi vì scale đổi liên tục). Chưa chắc có lợi → đo trước/sau; không có lợi rõ thì bỏ và báo.
+- **2. Chống rò rỉ**: log vòng 500 dòng; ngắt + dọn node âm thanh TTS sau khi phát xong; trần cho `followed`, `fx`, `petals`; rà timer/listener; `viewers`/cooldown có dọn; **TikTok tự nối lại, cả lần kết nối đầu thất bại**, backoff 5s→60s, dừng khi bấm Ngắt; control hiện "đang nối lại (lần n, còn x giây)".
+- **3. `live/start-overlay.bat`**: mở Edge cửa sổ riêng `--app=http://localhost:3000/live/overlay.html` với `--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, thêm `--user-data-dir` riêng (nếu không, cửa sổ gộp vào tiến trình Edge cũ và cờ mất tác dụng) và `--autoplay-policy=no-user-gesture-required`; ghi vào README.
+- **4. Vùng an toàn TikTok**: nút trên control phủ tạm các vùng UI TikTok che: trên ~12% (y<230), phải ~15% (x>918), khối dưới-trái ~35% (x 0–810, y 1248–1920) **và thêm dải dưới y 1730–1920**. Chỉ phủ + báo cáo thành phần quan trọng bị che + đề xuất toạ độ mới; **chờ chủ dự án duyệt** rồi mới dời. Dự đoán bị che: điểm số bên phải bảng Công Đức, banner mời lên lễ (`bannerTop 1700`), thẻ tên hàng ngồi trước, dòng credit, nút bật âm thanh.
+- **6. Soak test**: `live/scripts/soak.mjs`; bot 100 người, quà/follow/lên lễ liên tục 2 giờ, mỗi 10 phút ghi heap server (lệnh `stats` chỉ cho vai trò control, không mở HTTP mới), heap overlay (CDP), fps trung bình. Tiêu chí: bộ nhớ đi ngang, fps ≥ 28. Chạy **nền, sau khi xong nhóm 1–5**. Đo bằng Edge headless trên máy này nên có thể không đại diện cho TikTok LIVE Studio.
+- **7. Phông chữ tự lưu**: tải Noto Serif và Be Vietnam Pro (giấy phép OFL) vào repo, nạp bằng `@font-face` cục bộ thay Google Fonts; kèm file giấy phép OFL.
 
 **Nhỏ, cân nhắc**
 - Chế độ 64/100 người: tên bị cắt ("Thiện…") vì hàng dày.
