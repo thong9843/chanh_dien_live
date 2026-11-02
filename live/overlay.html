@@ -20,7 +20,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #c{position:absolute;inset:0;width:1080px;height:1920px}
 .ui{position:absolute;z-index:3}
 /* title plaque */
-#plaque{left:90px;right:90px;top:70px;height:150px;border:3px solid var(--gold);border-radius:28px;
+#plaque{left:max(90px,calc(var(--ix,0px) + 24px));right:max(90px,calc(var(--ix,0px) + 24px));top:70px;height:150px;border:3px solid var(--gold);border-radius:28px;
   background:linear-gradient(180deg,rgba(70,26,10,.92),rgba(30,12,6,.92));box-shadow:0 0 0 6px rgba(0,0,0,.35),0 0 50px rgba(226,176,79,.25) inset;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
 #plaque::before,#plaque::after{content:"❁";position:absolute;top:50%;transform:translateY(-50%);font-size:44px;color:var(--gold)}
@@ -28,17 +28,17 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #title{font-family:var(--display);font-weight:700;font-size:58px;letter-spacing:.06em;color:var(--gold2);text-transform:uppercase;text-shadow:0 2px 0 #3a1406,0 0 20px rgba(255,200,100,.35)}
 #subtitle{font-family:var(--display);font-size:30px;letter-spacing:.12em;color:var(--fg)}
 /* pills */
-#pills{top:244px;left:0;right:0;display:flex;justify-content:center;gap:22px}
+#pills{top:244px;left:var(--ix,0px);right:var(--ix,0px);display:flex;justify-content:center;gap:22px}
 .pill{background:var(--panel);border:2px solid var(--line);border-radius:999px;padding:12px 26px;font-size:32px;font-weight:600;display:flex;align-items:center;gap:12px;font-variant-numeric:tabular-nums}
 .pill small{font-size:19px;font-weight:500;color:var(--muted);line-height:1.05}
 .dot{width:18px;height:18px;border-radius:50%;background:#46d36b;box-shadow:0 0 12px #46d36b}
 #ambientPill{font-size:24px;padding:10px 22px;color:var(--gold2)}
 /* side cards */
 .card{background:var(--panel);border:2px solid var(--line);border-radius:22px;padding:18px 22px;font-size:24px;line-height:1.4;backdrop-filter:blur(4px)}
-#guide{left:24px;top:630px;width:296px}
+#guide{left:calc(24px + var(--ix,0px));top:630px;width:296px}
 #guide div+div{border-top:1px solid rgba(226,176,79,.3);margin-top:10px;padding-top:10px}
 #guide b{color:var(--gold2)}
-#merit{right:24px;top:630px;width:290px;text-align:center}
+#merit{right:calc(24px + var(--ix,0px));top:630px;width:290px;text-align:center}
 #merit h3{margin:0 0 8px;font-family:var(--display);font-size:30px;color:var(--gold2);letter-spacing:.06em}
 #merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:6px}
 #merit li{display:flex;justify-content:space-between;gap:10px}
@@ -46,7 +46,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #merit li span:last-child{color:var(--gold2);font-variant-numeric:tabular-nums}
 #merit .empty{color:var(--muted);text-align:center}
 /* chant banner + gift banner */
-#chant{left:110px;right:110px;top:1235px;padding:22px 30px;text-align:center;border-radius:24px;border:2px solid var(--gold);
+#chant{left:max(110px,calc(var(--ix,0px) + 24px));right:max(110px,calc(var(--ix,0px) + 24px));top:1235px;padding:22px 30px;text-align:center;border-radius:24px;border:2px solid var(--gold);
   background:rgba(40,18,8,.86);opacity:0;transform:translateY(20px);transition:opacity .6s,transform .6s;pointer-events:none}
 #chant.show{opacity:1;transform:none}
 #chant h4{margin:0 0 8px;font-family:var(--display);color:var(--gold2);font-size:30px;letter-spacing:.1em}
@@ -60,7 +60,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   box-shadow:0 10px 30px rgba(0,0,0,.6),0 0 28px rgba(255,204,102,.32);
   opacity:0;transform:translate(-50%,10px);transition:opacity .45s,transform .45s;pointer-events:none}
 #ceremonyInvite.show{opacity:1;transform:translate(-50%,0)}
-#gift{left:70px;right:70px;top:940px;z-index:5;padding:30px 40px;text-align:center;border-radius:28px;border:3px solid var(--gold2);
+#gift{left:max(70px,calc(var(--ix,0px) + 24px));right:max(70px,calc(var(--ix,0px) + 24px));top:940px;z-index:5;padding:30px 40px;text-align:center;border-radius:28px;border:3px solid var(--gold2);
   background:radial-gradient(ellipse at 50% 0%,rgba(150,40,20,.95),rgba(50,14,6,.95));box-shadow:0 0 60px rgba(255,190,90,.45);
   opacity:0;transform:scale(.85);transition:opacity .45s,transform .45s cubic-bezier(.2,1.4,.4,1);pointer-events:none}
 #gift.show{opacity:1;transform:none}
@@ -70,7 +70,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 
 /* Thẻ Thư Pháp "Rút Quẻ Cầu An & Lời Phật Dạy" (3.4 - Hiển thị 8 giây) */
 #oracleCard{
-  left:120px;right:120px;top:915px;z-index:6;padding:28px 38px 30px;text-align:center;
+  left:max(120px,calc(var(--ix,0px) + 24px));right:max(120px,calc(var(--ix,0px) + 24px));top:915px;z-index:6;padding:28px 38px 30px;text-align:center;
   border-radius:22px;border:4px solid #8c2015;
   background:linear-gradient(180deg,#fbf1d8 0%,#efe0ba 52%,#f7ebd0 100%);
   color:#2b1206;
@@ -96,7 +96,10 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 
 /* enable sound (needed once: browsers block autoplay) */
 #unmute{position:absolute;z-index:9;left:50%;top:1540px;transform:translateX(-50%);font:600 36px var(--body);padding:22px 44px;border-radius:24px;border:3px solid var(--gold2);background:var(--red);color:#fff4dc;cursor:pointer}
-#conn{position:absolute;z-index:4;right:16px;bottom:12px;font-size:20px;color:var(--muted);opacity:.6}
+#conn{position:absolute;z-index:4;right:calc(16px + var(--ix,0px));bottom:12px;font-size:20px;color:var(--muted);opacity:.6}
+/* chỉ chế độ cover: dòng căn giữa rộng tới 900px không được vượt vùng nhìn thấy → cho xuống dòng */
+#stage.cover #toast,#stage.cover #ceremonyInvite{white-space:normal;text-align:center;width:max-content;max-width:calc(1080px - 2*var(--ix,0px) - 48px)}
+#stage.cover #unmute{max-width:calc(1080px - 2*var(--ix,0px) - 48px)}
 @media (prefers-reduced-motion:reduce){#chant,#gift,#oracleCard{transition:none}}
 </style>
 </head>
@@ -142,7 +145,13 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 const stage = document.getElementById('stage');
 // ?fit=cover : giữ nguyên chiều dọc 1920, màn hình dài hơn 9:16 thì cắt đều hai mép trái/phải. Mặc định (contain): thấy trọn khung.
 const FIT_COVER = new URLSearchParams(location.search).get('fit') === 'cover';
-function fit(){ const s = FIT_COVER ? innerHeight/1920 : Math.min(innerWidth/1080, innerHeight/1920); stage.style.transform = `translate(-50%,-50%) scale(${s})`; }
+function fit(){
+  const s = FIT_COVER ? innerHeight/1920 : Math.min(innerWidth/1080, innerHeight/1920);
+  stage.style.transform = `translate(-50%,-50%) scale(${s})`;
+  // cover: phần khung bị cắt mỗi bên (đơn vị px của khung 1080) → các thẻ HTML sát mép dịch vào theo --ix. Contain: --ix = 0, không đổi gì.
+  const ix = FIT_COVER ? Math.max(0, (1080 - innerWidth/s)/2) : 0;
+  stage.style.setProperty('--ix', ix.toFixed(1) + 'px'); stage.classList.toggle('cover', FIT_COVER);
+}
 addEventListener('resize', fit); addEventListener('orientationchange', fit); fit();
 
 const {
