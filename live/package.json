@@ -1,10 +1,14 @@
 {
   "name": "chanh-dien-live",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "TikTok LIVE overlay server for Chánh Điện Tịnh Tâm",
-  "scripts": { "start": "node server.mjs", "check-assets": "node scripts/check-assets.mjs" },
+  "description": "TikTok LIVE overlay server for Chánh Điện Tịnh Tâm (VieNeu TTS + 2.5D Canvas Upgrade)",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "check-assets": "node scripts/check-assets.mjs"
+  },
   "dependencies": {
     "msedge-tts": "2.1.1",
     "tiktok-live-connector": "2.5.0",

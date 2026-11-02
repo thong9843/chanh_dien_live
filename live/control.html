@@ -19,11 +19,11 @@ header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:baseline;justify-co
 h1{font-family:var(--display);font-size:24px;margin:0;color:var(--gold)}
 .status{display:flex;gap:10px;flex-wrap:wrap}
 .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;font-variant-numeric:tabular-nums}
-.chip.ok{border-color:var(--green);color:#9fe0b4}.chip.bad{border-color:#a33;color:#f3a3a3}
+.chip.ok{border-color:var(--green);color:#9fe0b4}.chip.bad{border-color:#a33;color:#f3a3a3}.chip.warn{border-color:#b8862b;color:#ffd98a}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px;align-items:start}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:10px;min-width:0}
 .card h2{margin:0;font:600 15px var(--body);letter-spacing:.04em;text-transform:uppercase;color:var(--gold)}
-.hint{color:var(--muted);font-size:12px}
+.hint{color:var(--muted);font-size:12px;margin:0}
 label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
 input,select,textarea{font:inherit;color:var(--fg);background:#0f0805;border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%;min-width:0}
 textarea{resize:vertical;min-height:60px}
@@ -49,6 +49,7 @@ button.red{background:var(--red);border-color:#b84a33}
   <h1>Bảng điều khiển · Chánh Điện Tịnh Tâm</h1>
   <div class="status">
     <span class="chip" id="srv">Server: …</span>
+    <span class="chip" id="vn">VieNeu TTS: đang kiểm tra…</span>
     <span class="chip" id="tt">TikTok: chưa kết nối</span>
     <span class="chip" id="cnt">0 người</span>
   </div>
@@ -67,23 +68,27 @@ button.red{background:var(--red);border-color:#b84a33}
   </section>
 
   <section class="card">
-    <h2>2 · Thử tương tác</h2>
+    <h2>2 · Thử tương tác &amp; Tính năng mới</h2>
     <label for="simName">Tên người xem</label>
-    <input id="simName" value="Minh An">
-    <label for="simText">Bình luận / lời nguyện</label>
+    <input id="simName" value="Nguyễn Văn A">
+    <label for="simText">Bình luận / lời nguyện / xin quẻ</label>
     <input id="simText" value="Nam mô A Di Đà Phật, cầu gia đình bình an">
-    <div class="row"><button id="btnChat">Gửi bình luận</button></div>
+    <div class="row">
+      <button id="btnChat">💬 Gửi bình luận</button>
+      <button class="gold" id="btnOracle">📜 Rút Quẻ Cầu An (!xinquẻ)</button>
+    </div>
     <div class="row">
       <button data-gift="Hoa hồng" data-dia="1">Hoa hồng · 1</button>
-      <button data-gift="Đèn hoa sen" data-dia="30">Hoa sen · 30</button>
-      <button data-gift="Chuông vàng" data-dia="199">Chuông · 199</button>
+      <button data-gift="Hoa Sen" data-dia="30">🪷 Hoa Sen · 30</button>
+      <button data-gift="Chuông vàng" data-dia="199">🔔 Chuông · 199</button>
+      <button class="gold" data-gift="Rồng Vàng" data-dia="999">🐉 Rồng · 999</button>
     </div>
     <div class="row">
       <button id="btnFollow">Follow</button>
       <button id="btnShare">Share</button>
       <button id="btnLikes">+1000 tim</button>
     </div>
-    <p class="hint">Gõ <b>nam · nữ · sư · ni · tiểu · bà · cao tăng</b> làm bình luận để đổi hình.</p>
+    <p class="hint">Quà <b>Hoa Sen / Chuông / Rồng</b> sẽ kích hoạt <b>Khói Trầm Lư Hương + Sổ Vàng Thư Pháp 2.5D + Lạy 12 frames + Hào Quang Hoa Sen 5 phút</b>.</p>
     <h2>Đổ người mẫu</h2>
     <div class="row"><button data-fill="15">15</button><button data-fill="36">36</button><button data-fill="64">64</button><button data-fill="100">100</button></div>
     <button class="red" id="btnClear">Làm trống toàn bộ bồ đoàn</button>
@@ -93,18 +98,38 @@ button.red{background:var(--red);border-color:#b84a33}
       <label>Nhịp<select id="botPace"><option value="slow">Chậm</option><option value="mid" selected>Vừa</option><option value="fast">Nhanh</option></select></label>
       <button id="btnBots">Bật bot</button>
     </div>
-    <p class="hint">Bot chỉ chạy trên màn hình của anh, không phải người xem TikTok thật.</p>
   </section>
 
   <section class="card">
-    <h2>3 · Giọng đọc · Nhạc · Chuông mõ</h2>
+    <h2>3 · VieNeu TTS · Nhạc · Ánh sáng</h2>
     <div class="row">
-      <label>Giọng<select id="voice"><option value="vi-VN-NamMinhNeural">Nam Minh (nam)</option><option value="vi-VN-HoaiMyNeural">Hoài My (nữ)</option></select></label>
-      <label>Độ trầm (Hz)<input id="pitch" type="number" step="1" value="-18"></label>
-      <label>Tốc độ (%)<input id="rate" type="number" step="1" value="-20"></label>
+      <label>Nguồn giọng TTS
+        <select id="ttsEngine">
+          <option value="vieneu">VieNeu Sidecar (:5000 · Tự fallback Edge)</option>
+          <option value="edge">Microsoft Edge TTS trực tiếp</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <label>Giọng VieNeu (Miền Nam)
+        <select id="vieneuVoice">
+          <option value="nam_trang_nghiem">Thái Sơn · Nam miền Nam (Kể chuyện điềm đạm)</option>
+          <option value="duc_tri_nam">Đức Trí · Nam miền Nam (Đọc truyện nhẹ nhàng)</option>
+          <option value="adam_nam">Adam · Nam miền Nam (Tự nhiên)</option>
+          <option value="minh_triet_nam">Minh Triết · Nam miền Nam (Rõ ràng)</option>
+          <option value="nu_thanh_thoat">Thục Đoan · Nữ miền Nam (Kể chuyện dịu dàng)</option>
+          <option value="my_duyen_nu">Mỹ Duyên · Nữ miền Nam (Đọc truyện êm ái)</option>
+        </select>
+      </label>
+      <label>Tốc độ VieNeu<input id="vieneuSpeed" type="number" step="0.02" min="0.65" max="1.3" value="0.96"></label>
+    </div>
+    <div class="row">
+      <label>Giọng Edge (dự phòng)<select id="voice"><option value="vi-VN-NamMinhNeural">Nam Minh (nam)</option><option value="vi-VN-HoaiMyNeural">Hoài My (nữ)</option></select></label>
+      <label>Độ trầm (Hz)<input id="pitch" type="number" step="1" value="0"></label>
+      <label>Tốc độ (%)<input id="rate" type="number" step="1" value="-8"></label>
     </div>
     <label for="sayText">Đọc thử / phát thông báo</label>
-    <textarea id="sayText">Nam mô Bổn Sư Thích Ca Mâu Ni Phật. Nguyện cầu cho tất cả chư vị Phật tử thân tâm thường an lạc, vạn sự cát tường.</textarea>
+    <textarea id="sayText">Cảm ơn phật tử Nguyễn Văn A đã cúng dường Hoa Sen. Nguyện cầu bình an, phước báu vô lượng.</textarea>
     <div class="row"><button class="primary" id="btnSay">Phát lên live</button><button id="btnChant">Đọc kinh định kỳ ngay</button></div>
     <div class="row tight">
       <label class="check"><input type="checkbox" id="music" checked> Nhạc nền</label>
@@ -116,20 +141,28 @@ button.red{background:var(--red);border-color:#b84a33}
       <label>Đọc kinh mỗi (phút)<input id="chantEveryMin" type="number" min="1" max="60" value="3"></label>
     </div>
     <div class="row"><button id="btnBell">🔔 Thỉnh chuông</button><button id="btnMo">Gõ mõ</button></div>
-    <h2>Cảnh</h2>
-    <label>Tên thiền đường<input id="title" value="Chánh Điện Tịnh Tâm"></label>
-    <div class="hint">Đổi tạm thời, khởi động lại sẽ về giá trị trong content.json</div>
-    <label>Dòng phụ<input id="subtitle" value="Nam Mô A Di Đà Phật"></label>
+    <h2>Cảnh &amp; Ánh sáng Chánh Điện</h2>
     <div class="row">
-      <label>Số chỗ ngồi<select id="seatMode"><option value="auto">Tự mở rộng 24 → 100</option><option value="24">24</option><option value="36">36</option><option value="64">64</option><option value="100">100</option></select></label>
+      <label>Ánh sáng &amp; Thời tiết
+        <select id="lightingMode">
+          <option value="auto">Tự động theo giờ thực (06h–18h Ngày / Đêm)</option>
+          <option value="day">☀️ Ban ngày (Nắng chiếu cửa sổ)</option>
+          <option value="night">🕯️ Ban đêm (Nến lung linh &amp; Đèn dầu)</option>
+        </select>
+      </label>
+      <label>Số chỗ ngồi
+        <select id="seatMode"><option value="auto">Tự mở rộng 24 → 100</option><option value="24">24</option><option value="36">36</option><option value="64">64</option><option value="100">100</option></select>
+      </label>
     </div>
-    <h2>Đọc quà</h2>
+    <label>Tên thiền đường<input id="title" value="Chánh Điện Tịnh Tâm"></label>
+    <label>Dòng phụ<input id="subtitle" value="Nam Mô A Di Đà Phật"></label>
+    <h2>Đọc quà &amp; Chào khách</h2>
     <div class="row">
       <label class="check"><input type="checkbox" id="giftReadAll" checked> Đọc tên mọi quà</label>
       <label>Chỉ đọc quà từ (xu)<input id="giftMin" type="number" min="1" max="50000" value="1"></label>
     </div>
-    <div class="hint">Bỏ chọn “Đọc tên mọi quà” để chỉ đọc quà có giá trị từ mức xu này trở lên.</div>
     <label class="check"><input type="checkbox" id="joinOnEnter"> Người vào phòng cũng được ngồi (không cần bình luận)</label>
+    <label class="check"><input type="checkbox" id="readMemberJoin"> Xướng lời chào khi có Phật tử mới bước vào phòng</label>
   </section>
 </div>
 
@@ -137,18 +170,34 @@ button.red{background:var(--red);border-color:#b84a33}
   <h2>Nhật ký</h2>
   <div id="log" aria-live="polite"></div>
 </section>
-<footer class="hint" style="margin-top:14px;text-align:center">Chánh Điện Online · mã nguồn mở MIT · thực hiện bởi Kent Juno</footer>
+<footer class="hint" style="margin-top:14px;text-align:center">Chánh Điện Online v2.0 · VieNeu TTS &amp; 2.5D Canvas Upgrade · MIT License</footer>
 
 <script>
 const $ = id => document.getElementById(id);
 let ws = null;
 const send = (cmd, extra={}) => ws?.readyState===1 && ws.send(JSON.stringify({ t:'ctl', cmd, ...extra }));
 function logLine(s){ const el=$('log'); el.textContent += s + '\n'; el.scrollTop = el.scrollHeight; }
-const SETTING_IDS = ['voice','pitch','rate','music','mo','autoChant','moBpm','chantEveryMin','title','subtitle','seatMode','joinOnEnter'];
+const SETTING_IDS = [
+  'ttsEngine','vieneuVoice','vieneuSpeed','voice','pitch','rate',
+  'music','mo','autoChant','moBpm','chantEveryMin',
+  'lightingMode','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
+];
 function syncGiftUI(){ $('giftMin').disabled = $('giftReadAll').checked; }
 function fillSettings(s){
-  if (s.gifts){ $('giftReadAll').checked = !!s.gifts.readAll; $('giftMin').value = s.gifts.minDiamonds; syncGiftUI(); } for (const k of SETTING_IDS){ const el=$(k); if (!el || s[k]===undefined) continue; if (el.type==='checkbox') el.checked=!!s[k]; else el.value=s[k]; } }
-function readSettings(){ const o={ gifts:{ readAll: $('giftReadAll').checked, minDiamonds: +$('giftMin').value || 1 } }; for (const k of SETTING_IDS){ const el=$(k); o[k] = el.type==='checkbox' ? el.checked : el.type==='number' ? +el.value : el.value; } return o; }
+  if (s.gifts){ $('giftReadAll').checked = !!s.gifts.readAll; $('giftMin').value = s.gifts.minDiamonds; syncGiftUI(); }
+  for (const k of SETTING_IDS){
+    const el=$(k); if (!el || s[k]===undefined) continue;
+    if (el.type==='checkbox') el.checked=!!s[k]; else el.value=s[k];
+  }
+}
+function readSettings(){
+  const o={ gifts:{ readAll: $('giftReadAll').checked, minDiamonds: +$('giftMin').value || 1 } };
+  for (const k of SETTING_IDS){
+    const el=$(k);
+    o[k] = el.type==='checkbox' ? el.checked : el.type==='number' ? +el.value : el.value;
+  }
+  return o;
+}
 const people = new Map();
 function renderPeople(){
   const tb=$('peopleBody'); tb.innerHTML='';
@@ -161,13 +210,26 @@ function setTT(st){
   const el=$('tt'); el.className='chip ' + (st.status==='connected'?'ok':st.status==='error'?'bad':'');
   el.textContent = st.status==='connected' ? `TikTok: @${st.uniqueId} ✓` : st.status==='connecting' ? `TikTok: đang kết nối @${st.uniqueId}…` : st.status==='error' ? 'TikTok: lỗi kết nối' : 'TikTok: chưa kết nối';
 }
+function setVN(st){
+  if (!st) return;
+  const el=$('vn');
+  if (st.online){
+    el.className='chip ok';
+    const vLbl = st.presetVoice ? ` · ${st.presetVoice}` : '';
+    el.textContent=`VieNeu (:5000): sẵn sàng (${st.backend}${vLbl})`;
+  } else {
+    el.className='chip warn';
+    el.textContent='VieNeu (:5000): tắt · đang dự phòng Edge TTS';
+  }
+}
 function connect(){
   ws = new WebSocket(`ws://${location.host}/ws?role=control`);
   ws.onopen = () => { $('srv').textContent='Server: đang chạy'; $('srv').className='chip ok'; };
   ws.onclose = () => { $('srv').textContent='Server: mất kết nối'; $('srv').className='chip bad'; setTimeout(connect, 2000); };
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
-    if (m.t==='state'){ fillSettings(m.settings); setTT(m.tiktok); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
+    if (m.t==='state'){ fillSettings(m.settings); setTT(m.tiktok); setVN(m.vieneu); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
+    else if (m.t==='vieneu') setVN(m);
     else if (m.t==='logs'){ $('log').textContent=''; m.lines.forEach(logLine); }
     else if (m.t==='log') logLine(m.line);
     else if (m.t==='tiktok') setTT(m);
@@ -184,6 +246,7 @@ $('uid').onkeydown = e => { if (e.key==='Enter') send('connect', { uniqueId: $('
 $('btnDisconnect').onclick = () => send('disconnect');
 $('btnOverlay').onclick = () => window.open('/live/overlay.html', 'overlay916', 'width=540,height=960');
 $('btnChat').onclick = () => send('chat', { name: $('simName').value, text: $('simText').value });
+$('btnOracle').onclick = () => send('oracle', { name: $('simName').value });
 document.querySelectorAll('[data-gift]').forEach(b => b.onclick = () => send('gift', { name: $('simName').value, gift: b.dataset.gift, diamonds: +b.dataset.dia, count: 1 }));
 document.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => send('fill', { n: +b.dataset.fill }));
 $('btnFollow').onclick = () => send('follow', { name: $('simName').value });

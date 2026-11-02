@@ -13,18 +13,20 @@ export default {
     "connecting": "đang kết nối…",
     "lost": "mất kết nối server… đang thử lại",
     "anonymous": "ẩn danh",
-    "defaultGift": "quà"
+    "defaultGift": "Hoa Sen"
   },
   "guide": {
     "lines": [
-      "💬 **Bình luận bất kỳ** để vào thiền",
-      "Gõ **nam · nữ · sư · ni · tiểu · bà · cao tăng** để đổi hình",
-      "🎁 Tặng quà được **xướng tên hồi hướng**"
+      "💬 **Bình luận bất kỳ** để bước vào thiền",
+      "Gõ **nam · nữ · sư · ni · tiểu · bà · cao tăng** đổi hình",
+      "📜 Gõ **!xinquẻ · Cầu an · Tĩnh tâm** nhận lời Phật dạy",
+      "🎁 Cúng dường được **xướng tên & ghi Sổ Vàng**"
     ]
   },
   "prayers": [
+    "Nguyện cầu bình an, phước báu vô lượng",
     "Nguyện cầu gia đạo bình an, vạn sự cát tường",
-    "Nguyện cầu cha mẹ mạnh khỏe, sống lâu",
+    "Nguyện cầu cha mẹ mạnh khỏe, phước thọ tăng long",
     "Nguyện hồi hướng công đức cho khắp pháp giới chúng sinh",
     "Nguyện cầu thân tâm an lạc, phiền não tiêu trừ",
     "Nguyện cầu công việc hanh thông, gia đình hạnh phúc"
@@ -35,25 +37,91 @@ export default {
     "Nam mô Đại Bi Quán Thế Âm Bồ Tát. Nguyện cho tất cả chúng sinh thân tâm an lạc, tai qua nạn khỏi.",
     "Quán Tự Tại Bồ Tát hành thâm Bát Nhã Ba La Mật Đa thời, chiếu kiến ngũ uẩn giai không, độ nhất thiết khổ ách."
   ],
+  "oracles": [
+    {
+      "title": "Quẻ Thượng Cát · Tâm Bất Động",
+      "verse": "Tâm tịnh tức cõi Phật tịnh, lòng an vạn sự tự khắc bình yên.",
+      "advice": "Giữ hơi thở chậm rãi, buông nhẹ ưu phiền, phúc lành đang đến gần."
+    },
+    {
+      "title": "Quẻ Đại An · Hoa Sen Nở",
+      "verse": "Gần bùn mà chẳng hôi tanh, giữa đời biến động giữ mình thanh cao.",
+      "advice": "Kiên trì với thiện tâm hiện tại, mọi trắc trở sẽ hóa thành duyên lành."
+    },
+    {
+      "title": "Quẻ Cát Tường · Từ Bi Hỷ Xả",
+      "verse": "Một niệm từ bi khởi, ngàn điều oán kết tan.",
+      "advice": "Mỉm cười tha thứ cho chuyện đã qua, lòng nhẹ tênh đón vận may mới."
+    },
+    {
+      "title": "Quẻ Phước Huệ · Tri Túc Thường Lạc",
+      "verse": "Biết đủ là giàu sang bậc nhất, bình an là phước báu vô biên.",
+      "advice": "Trân quý những người thương quanh mình, gia đạo thêm ấm êm hòa thuận."
+    },
+    {
+      "title": "Quẻ Thanh Tịnh · Trăng Sáng Giữa Hồ",
+      "verse": "Nước lặng mới soi tỏ ánh trăng, tâm tĩnh mới thấu rõ con đường.",
+      "advice": "Đừng vội vàng quyết định lúc nóng giận; tĩnh lặng một nhịp sẽ thấy lối đi."
+    },
+    {
+      "title": "Quẻ Thiện Duyên · Gieo Nhân Lành",
+      "verse": "Gieo một hạt giống thiện, gặt cả mùa bình an.",
+      "advice": "Một lời nói ấm áp hôm nay sẽ kết thành quý nhân giúp đỡ mai sau."
+    },
+    {
+      "title": "Quẻ An Lạc · Quán Chiếu Hiện Tại",
+      "verse": "Quá khứ đã qua, tương lai chưa tới, an trú trọn vẹn từng phút giây này.",
+      "advice": "Thả lỏng đôi vai, hít sâu thanh khí, sức khỏe và tinh thần đều khởi sắc."
+    },
+    {
+      "title": "Quẻ Trí Tuệ · Đèn Tâm Chiếu Rọi",
+      "verse": "Ngàn năm bóng tối cũng tan khi một ngọn đèn trí tuệ thắp lên.",
+      "advice": "Học hỏi điều hay, giữ tâm sáng suốt, công việc sắp tới sẽ hanh thông."
+    },
+    {
+      "title": "Quẻ Hiếu Hạnh · cội Nguồn Phước Đức",
+      "verse": "Tâm hiếu là tâm Phật, hạnh hiếu là hạnh Phật.",
+      "advice": "Hãy dành một lời hỏi thăm đấng sinh thành, phước đức gia tiên luôn che chở."
+    },
+    {
+      "title": "Quẻ Vô Ưu · Mây Trắng Thong Dong",
+      "verse": "Việc đến thì ứng, việc qua không giữ, tự tại như mây trắng giữa trời.",
+      "advice": "Đừng ôm đồm lo âu chưa tới, cứ làm hết sức với tâm bình thản."
+    },
+    {
+      "title": "Quẻ Viên Mãn · Hương Đức Bay Xa",
+      "verse": "Hương các loài hoa không bay ngược gió, hương người đức hạnh tỏa khắp muôn phương.",
+      "advice": "Sống chân thành ngay thẳng, uy tín và tài lộc tự nhiên hội tụ."
+    },
+    {
+      "title": "Quẻ Tỉnh Thức · Tiếng Chuông Chùa",
+      "verse": "Nghe tiếng chuông phiền não nhẹ, trí huệ lớn, bồ đề sanh.",
+      "advice": "Tạm gác âu lo thường nhật, cho tâm hồn nghỉ ngơi để tái tạo năng lượng mới."
+    }
+  ],
   "gift": {
-    "line": "Nam mô A Di Đà Phật. Phật tử {name} thành tâm dâng {gift}{times}. {prayer}.",
+    "line": "Cảm ơn phật tử {name} đã cúng dường {gift}{times}. {prayer}.",
+    "defaultPrayer": "Nguyện cầu bình an, phước báu vô lượng",
     "timesSpoken": ", {count} lần",
-    "what": "thành tâm dâng {gift}{times} · công đức {total}",
+    "what": "thành tâm cúng dường {gift}{times} · công đức {total}",
     "timesShown": " ×{count}",
-    "merged": "Nam mô A Di Đà Phật. Xin tùy hỷ công đức của {names} và {more} Phật tử khác.",
-    "mergedAll": "Nam mô A Di Đà Phật. Xin tùy hỷ công đức của {names}."
+    "merged": "Nam mô A Di Đà Phật. Xin tùy hỷ công đức cúng dường của {names} và {more} Phật tử khác. Nguyện cầu bình an, phước báu vô lượng.",
+    "mergedAll": "Nam mô A Di Đà Phật. Xin tùy hỷ công đức cúng dường của {names}. Nguyện cầu bình an, phước báu vô lượng."
+  },
+  "member": {
+    "line": "Hoan hỷ chào đón phật tử {name} bước vào chánh điện tịnh tâm. Nguyện cầu thân tâm thường an lạc."
   },
   "follow": {
     "line": "Nam mô A Di Đà Phật. Cảm ơn Phật tử {name} đã theo dõi kênh. Nguyện cầu cho Phật tử thân tâm thường an lạc."
   },
   "share": {
-    "text": "🙏 {name} đã chia sẻ",
+    "text": "🙏 {name} đã chia sẻ duyên lành",
     "showSec": 4
   },
   "milestone": {
     "every": 1000,
-    "line": "Nam mô A Di Đà Phật. Cảm ơn mọi người đã thả {n} trái tim. Nguyện cầu cho tất cả thân tâm an lạc.",
-    "text": "♥ {n} trái tim ♥",
+    "line": "Nam mô A Di Đà Phật. Cảm ơn đại chúng đã thả {n} trái tim. Nguyện cầu cho tất cả thân tâm an lạc.",
+    "text": "♥ {n} trái tim tịnh tâm ♥",
     "showSec": 5
   },
   "demo": {
@@ -95,13 +163,15 @@ export default {
       "Nam mô A Di Đà Phật",
       "Nam mô Bổn Sư Thích Ca Mâu Ni Phật",
       "Cầu cho gia đình bình an",
+      "!xinquẻ",
+      "Cầu an cho cha mẹ",
+      "Tĩnh tâm",
       "Con xin thành tâm sám hối",
       "nữ",
       "nam",
       "bà",
       "Nguyện cầu cha mẹ mạnh khỏe",
       "Mô Phật, an lạc quá",
-      "Chúc mọi người một ngày bình an",
       "sư",
       "Cầu công việc hanh thông"
     ]
