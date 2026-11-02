@@ -24,6 +24,22 @@ for (const f of fs.readdirSync(TTS_DIR)) { try { fs.unlinkSync(path.join(TTS_DIR
 try { process.loadEnvFile(path.join(__dirname, '.env')); } catch {}
 const PORT = +process.env.PORT || 3000;
 
+/* ------------------------------------------------------------- không để sập
+   Lỗi không bắt được (thư viện TTS/TikTok phát sự kiện error không ai nghe, promise bị bỏ rơi…) được ghi log đầy đủ rồi server chạy tiếp.
+   Chỉ thoát khi không mở được cổng, hoặc lỗi lặp quá 20 lần trong 60 giây (tránh vòng lặp lỗi vô tận). */
+const crashTimes = [];
+function survive(kind, err){
+  console.error(`[${kind}]`, err?.stack || err);
+  try { addLog(`⚠ ${kind}: ${String(err?.message || err).replace(/\s+/g, ' ').slice(0, 200)} (server vẫn chạy)`); } catch {}
+  if (err?.code === 'EADDRINUSE' || err?.code === 'EACCES') { console.error('Không mở được cổng, thoát.'); process.exit(1); }
+  const now = Date.now(); crashTimes.push(now); while (crashTimes.length && now - crashTimes[0] > 60_000) crashTimes.shift();
+  if (crashTimes.length > 20) { console.error('Lỗi lặp quá nhiều (>20 lần/60 giây), thoát.'); process.exit(1); }
+}
+process.on('unhandledRejection', r => survive('unhandledRejection', r));
+process.on('uncaughtException', e => survive('uncaughtException', e));
+const bg = (label, p) => Promise.resolve(p).catch(e => { try { addLog(`${label}: ${String(e?.message || e).slice(0, 200)}`); } catch {} });   // promise chạy nền: luôn bắt lỗi
+const guard = (label, fn) => (...a) => { try { return fn(...a); } catch (e) { try { addLog(`${label}: ${String(e?.message || e).slice(0, 200)}`); } catch {} } };   // handler sự kiện: không ném lỗi ra ngoài
+
 /* ------------------------------------------------------------------ content
    Mọi chuỗi hiển thị / đọc nằm trong live/content.json. Thiếu file hoặc thiếu khóa thì dùng content.defaults.mjs.
    Chuỗi bị cắt độ dài, số bị kẹp khoảng, nên file sai cũng không làm hỏng server. */
@@ -706,21 +722,57 @@ function mergeSmallGifts(){
   addLog(`Gộp ${idx.length} câu quà nhỏ thành 1 (${names.length} người)`);
 }
 
-async function synthesizeViaEdge(text){
-  const tts = new MsEdgeTTS();
-  await tts.setMetadata(settings.voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-  const { audioStream } = tts.toStream(esc(text), {
-    pitch: `${settings.pitch >= 0 ? '+' : ''}${settings.pitch}Hz`,
-    rate: `${settings.rate >= 0 ? '+' : ''}${settings.rate}%`,
+// Một lần tạo giọng: có timeout, luôn đóng kết nối, listener 'error' giữ nguyên sau khi xong (không để sự kiện error muộn làm sập server).
+const TTS_TIMEOUT_MS = 20_000;
+function synthesizeOnce(text){
+  return new Promise((resolve, reject) => {
+    let tts = null, done = false, timer = null;
+    const finish = (err, buf) => {
+      if (done) return; done = true; clearTimeout(timer);
+      try { tts?.close(); } catch {}
+      if (err) reject(err); else if (!buf?.length) reject(new Error('Edge TTS không trả về âm thanh')); else resolve(buf);
+    };
+    timer = setTimeout(() => finish(new Error(`Hết thời gian chờ Edge TTS (${TTS_TIMEOUT_MS / 1000} giây)`)), TTS_TIMEOUT_MS);
+    (async () => {
+      tts = new MsEdgeTTS();
+      await tts.setMetadata(settings.voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
+      const { audioStream } = tts.toStream(esc(text), {
+        pitch: `${settings.pitch >= 0 ? '+' : ''}${settings.pitch}Hz`,
+        rate: `${settings.rate >= 0 ? '+' : ''}${settings.rate}%`,
+      });
+      const chunks = [];
+      audioStream.on('data', c => chunks.push(c));
+      audioStream.on('close', () => finish(null, Buffer.concat(chunks)));
+      audioStream.on('error', e => finish(e instanceof Error ? e : new Error(String(e))));
+    })().catch(e => finish(e instanceof Error ? e : new Error(String(e))));
   });
-  const chunks = [];
-  await new Promise((res, rej) => {
-    audioStream.on('data', c => chunks.push(c));
-    audioStream.on('close', res);
-    audioStream.on('error', rej);
-  });
-  try { tts.close(); } catch {}
-  return Buffer.concat(chunks);
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Lý do lỗi TTS ở dạng dễ hiểu cho bảng điều khiển.
+function explainTTSError(e){
+  const msg = String(e?.message || e);
+  if (/Hết thời gian/i.test(msg)) return 'Edge TTS phản hồi quá chậm (hết thời gian chờ).';
+  if (/Stream closed|turn\.end|truncated/i.test(msg)) return 'Dịch vụ giọng đọc Edge ngắt kết nối giữa chừng (mạng yếu hoặc dịch vụ quá tải).';
+  if (/ENOTFOUND|EAI_AGAIN|ECONN|ETIMEDOUT|network|socket|getaddrinfo/i.test(msg)) return 'Không kết nối được dịch vụ Edge TTS, kiểm tra Internet.';
+  if (/không trả về âm thanh/i.test(msg)) return 'Edge TTS không trả về âm thanh.';
+  return msg.replace(/\s+/g, ' ').slice(0, 200);
+}
+// Mọi yêu cầu tạo giọng (phát live lẫn nghe thử) xếp hàng một, không chạy song song; lỗi thì thử lại 1 lần.
+let edgeChain = Promise.resolve();
+function synthesizeViaEdge(text){
+  const run = async () => {
+    try { return await synthesizeOnce(text); }
+    catch (e1) { addLog('TTS lỗi, thử lại 1 lần: ' + explainTTSError(e1)); await sleep(600); return await synthesizeOnce(text); }
+  };
+  const p = edgeChain.then(run, run);
+  edgeChain = p.catch(() => {});
+  return p;
+}
+function reportTTSFail(e, what){
+  const reason = explainTTSError(e);
+  addLog(`${what}: ${reason}`);
+  try { broadcast({ t: 'tts_error', reason }, 'control'); } catch {}
+  return reason;
 }
 
 function pruneTtsFiles(){
@@ -741,7 +793,7 @@ async function pumpTTS(){
     broadcast({ t: 'tts', url: `/live/tts/${file}`, text, tag: meta.tag });
     pruneTtsFiles();
   } catch (e) {
-    addLog('TTS lỗi: ' + (e?.message || e));
+    reportTTSFail(e, 'Không tạo được giọng đọc, bỏ câu này');
   }
   ttsBusy = false;
   setTimeout(pumpTTS, 80);
@@ -770,9 +822,9 @@ async function previewNameTTS(rawName, ws){
       ws.send(JSON.stringify({ t: 'preview_tts', url: `/live/tts/${file}`, rawName: raw, spokenName, text }));
     }
   } catch (e) {
-    addLog('Nghe thử lỗi: ' + (e?.message || e));
+    const reason = reportTTSFail(e, 'Nghe thử lỗi');
     if (ws && ws.readyState === 1){
-      ws.send(JSON.stringify({ t: 'preview_tts', error: String(e?.message || e), rawName: raw, spokenName, text }));
+      ws.send(JSON.stringify({ t: 'preview_tts', error: reason, rawName: raw, spokenName, text }));
     }
   }
 }
@@ -815,22 +867,23 @@ async function connectTikTok(uniqueId){
     if (apiKey) SignConfig.apiKey = apiKey;
     tiktokState.key = !!apiKey;
     const conn = new TikTokLiveConnection(uniqueId, { enableExtendedGiftInfo: false, fetchRoomInfoOnConnect: false, processInitialData: false, ...(apiKey ? { signApiKey: apiKey } : {}) });
+    const on = (ev, fn) => conn.on(ev, guard('Sự kiện TikTok lỗi', fn));       // lỗi trong một sự kiện chỉ ghi log, không phá kết nối
     const av = u => u?.profilePicture?.url?.[0] || u?.profilePicture?.urlList?.[0] || u?.avatarThumb?.urlList?.[0] || u?.avatarThumb?.url?.[0] || '';
     const nm = u => u?.nickname || u?.uniqueId || CONTENT.labels.anonymous;
-    conn.on(WebcastEvent.CHAT, d => onChat(d.user?.uniqueId || d.user?.userId, nm(d.user), d.comment, av(d.user)));
-    conn.on(WebcastEvent.GIFT, d => {
+    on(WebcastEvent.CHAT, d => onChat(d.user?.uniqueId || d.user?.userId, nm(d.user), d.comment, av(d.user)));
+    on(WebcastEvent.GIFT, d => {
       const g = readGift(d, CONTENT.labels.defaultGift);
       if (g.streaking) return;                                      // streak still running
       if (!g.known) addLog('⚠ Sự kiện quà không có diamondCount, tính 1 xu');
       onGift(d.user?.uniqueId || d.user?.userId, nm(d.user), g.name, g.count, g.diamonds, av(d.user));
       addLog(`🎁 ${sanitizeDisplayName(nm(d.user))} cúng dường ${sanitizeGiftName(g.name)} x${g.count} (${g.diamonds} xu)`);
     });
-    conn.on(WebcastEvent.MEMBER, d => onMember(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
-    conn.on(WebcastEvent.LIKE, d => onLikes(d.user?.uniqueId, d.likeCount || 1, d.totalLikeCount));
-    conn.on(WebcastEvent.FOLLOW, d => onFollow(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
-    conn.on(WebcastEvent.SHARE, d => onShare(nm(d.user)));
-    conn.on(ControlEvent.DISCONNECTED, () => { tiktokState = { ...tiktokState, status: 'disconnected' }; broadcast({ t:'tiktok', ...tiktokState }); addLog('TikTok: mất kết nối'); });
-    conn.on(ControlEvent.ERROR, e => addLog('TikTok lỗi: ' + (e?.info || e?.message || e)));
+    on(WebcastEvent.MEMBER, d => onMember(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
+    on(WebcastEvent.LIKE, d => onLikes(d.user?.uniqueId, d.likeCount || 1, d.totalLikeCount));
+    on(WebcastEvent.FOLLOW, d => onFollow(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
+    on(WebcastEvent.SHARE, d => onShare(nm(d.user)));
+    on(ControlEvent.DISCONNECTED, () => { tiktokState = { ...tiktokState, status: 'disconnected' }; broadcast({ t:'tiktok', ...tiktokState }); addLog('TikTok: mất kết nối'); });
+    on(ControlEvent.ERROR, e => addLog('TikTok lỗi: ' + (e?.info || e?.message || e)));
     // 3 bước, log từng bước để biết bước nào bị từ chối
     step = 'tra phòng';
     const roomId = await conn.fetchRoomId();
@@ -873,8 +926,8 @@ function clearSeats(){ viewers.clear(); resetZoom(); resetCeremony(); broadcast(
 /* ------------------------------------------------------------- control */
 function onControl(m, ws){
   switch (m.cmd){
-    case 'connect': connectTikTok(m.uniqueId); break;
-    case 'disconnect': disconnectTikTok(); addLog('Đã ngắt kết nối TikTok'); break;
+    case 'connect': if (typeof m.uniqueId === 'string') bg('Kết nối TikTok lỗi', connectTikTok(m.uniqueId)); else addLog('Lệnh kết nối thiếu username'); break;
+    case 'disconnect': bg('Ngắt TikTok lỗi', disconnectTikTok()); addLog('Đã ngắt kết nối TikTok'); break;
     case 'chat': { const raw = String(m.name || 'Khách').slice(0, 80); onChat('sim_' + sanitizeDisplayName(raw), raw, String(m.text || 'Nam mô A Di Đà Phật').slice(0, 120)); break; }
     case 'oracle': { const raw = String(m.name || 'Khách').slice(0, 80); const { v } = seat('sim_' + sanitizeDisplayName(raw), raw); if (v) triggerOracle(v.id, v.name, v.avatar, true); break; }
     case 'ceremony': {
@@ -897,12 +950,12 @@ function onControl(m, ws){
     case 'mo': broadcast({ t:'mo1' }); break;
     case 'chant': chant(); break;
     case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }, 4); break;
-    case 'test_name': previewNameTTS(m.name, ws); break;
+    case 'test_name': bg('Nghe thử lỗi', previewNameTTS(m.name, ws)); break;
     case 'settings':
       applySettings(m.settings || {});
       if (!settings.zoomEnabled) resetZoom();
       scheduleChant(); broadcast({ t:'settings', settings, cap: capacity() }); break;
-    case 'bots': setBots(!!m.on, +m.n || 12, m.pace); break;
+    case 'bots': setBots(!!m.on, +m.n || 12, typeof m.pace === 'string' ? m.pace : 'mid'); break;
   }
 }
 
@@ -1019,14 +1072,26 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024,
     if (kind === 'lan' && new URL(req.url, 'http://x').searchParams.get('role') === 'control') return cb(false, 403, 'control chỉ từ localhost');
     req.kind = kind; cb(true);
   } });
-function broadcast(msg, only){ const s = JSON.stringify(msg); for (const c of wss.clients) if (c.readyState === 1 && (!only || c.role === only)) c.send(s); }
+function broadcast(msg, only){
+  const s = JSON.stringify(msg);
+  for (const c of wss.clients) if (c.readyState === 1 && (!only || c.role === only)) { try { c.send(s); } catch (e) { console.error('[broadcast] gửi lỗi:', e?.message); } }
+}
+wss.on('error', e => survive('wss error', e));
+server.on('error', e => survive('server error', e));
+server.on('clientError', (e, socket) => { try { socket.destroy(); } catch {} });
 wss.on('connection', (ws, req) => {
+  ws.on('error', e => console.error('[ws client] lỗi:', e?.message));            // không có listener thì lỗi socket làm sập tiến trình
   ws.role = req.kind === 'local' && new URL(req.url, 'http://x').searchParams.get('role') === 'control' ? 'control' : 'overlay';
-  ws.send(JSON.stringify(snapshot()));
-  if (ws.role === 'control') ws.send(JSON.stringify({ t:'logs', lines: log }));
+  try {
+    ws.send(JSON.stringify(snapshot()));
+    if (ws.role === 'control') ws.send(JSON.stringify({ t:'logs', lines: log }));
+  } catch (e) { console.error('[ws] gửi snapshot lỗi:', e?.message); }
   ws.on('message', buf => {
     if (ws.role !== 'control') return;                          // overlays only listen
-    try { const m = JSON.parse(buf); if (m && m.t === 'ctl') onControl(m, ws); } catch (e) { addLog('Lệnh lỗi: ' + e.message); }
+    try {
+      const m = JSON.parse(buf);
+      if (m && m.t === 'ctl') { const r = onControl(m, ws); if (r?.catch) r.catch(e => addLog('Lệnh lỗi: ' + (e?.message || e))); }
+    } catch (e) { addLog('Lệnh lỗi: ' + (e?.message || e)); }
   });
 });
 server.listen(PORT, HOST, () => {

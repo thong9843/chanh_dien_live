@@ -124,6 +124,7 @@ button.red{background:var(--red);border-color:#b84a33}
     <label for="sayText">Đọc thử / phát thông báo</label>
     <textarea id="sayText">Cảm ơn phật tử Nguyễn Văn A đã cúng dường Hoa Sen. Nguyện cầu bình an, phước báu vô lượng.</textarea>
     <div class="row"><button class="primary" id="btnSay">Phát lên live</button><button id="btnChant">Đọc kinh định kỳ ngay</button></div>
+    <p class="hint" id="ttsErr" role="alert" style="display:none;color:#f3a3a3"></p>
     <div class="row tight">
       <label class="check"><input type="checkbox" id="music" checked> Nhạc nền</label>
       <label class="check"><input type="checkbox" id="mo" checked> Tiếng mõ</label>
@@ -212,6 +213,11 @@ function setTT(st){
   if (st.key !== undefined) $('ttKey').textContent = st.key ? 'EulerStream: đã có API key (live/.env).' : 'EulerStream: chưa có API key — dùng mức miễn phí không key, dễ hết lượt. Thêm EULER_API_KEY vào live/.env.';
 }
 let previewAudio = null;
+let ttsErrTimer = null;
+function showTTSError(reason){
+  const el = $('ttsErr'); el.textContent = `Không tạo được giọng đọc: ${reason}`; el.style.display = '';
+  clearTimeout(ttsErrTimer); ttsErrTimer = setTimeout(() => { el.style.display = 'none'; }, 20000);
+}
 function onPreviewTTS(m){
   $('btnTestName').disabled = false;
   $('btnTestName').textContent = '🔊 Nghe thử';
@@ -248,6 +254,7 @@ function connect(){
     if (m.t==='state'){ fillSettings(m.settings); setTT(m.tiktok); silentUntil=m.silentUntil||0; updateSilentUI(); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
     else if (m.t==='silent'){ silentUntil=m.silentUntil||0; updateSilentUI(); }
     else if (m.t==='preview_tts') onPreviewTTS(m);
+    else if (m.t==='tts_error') showTTSError(m.reason);
     else if (m.t==='logs'){ $('log').textContent=''; m.lines.forEach(logLine); }
     else if (m.t==='log') logLine(m.line);
     else if (m.t==='tiktok') setTT(m);
