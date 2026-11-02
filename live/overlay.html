@@ -140,11 +140,14 @@ const {
   IncenseSmokeSystem,
   SilkMeritScroll,
   AmbientLightingSystem,
+  CameraZoomController,
 } = window.ChanhDienCanvas;
 
 const incenseFX = new IncenseSmokeSystem();
 const meritScroll = new SilkMeritScroll();
 const ambientFX = new AmbientLightingSystem();
+const cameraZoom = new CameraZoomController();
+let silentUntil = 0;
 
 /* ======================= assets ======================= */
 const A = {};
@@ -329,7 +332,7 @@ function pumpOracle(){
 }
 
 /* ======================= audio ======================= */
-let AC=null, master=null, musicGain=null, sfx=null, settings={ music:true, mo:true, moBpm:52, lightingMode:'auto' };
+let AC=null, master=null, musicGain=null, sfx=null, settings={ music:true, mo:true, moBpm:52, lightingMode:'auto', zoomEnabled:true };
 const TRACKS=['/assets/music/music1.mp3','/assets/music/music2.mp3','/assets/music/music3.mp3','/assets/music/music4.mp3','/assets/music/music5.mp3'];
 let trackIdx=Math.floor(Math.random()*TRACKS.length), musicEl=null;
 document.getElementById('unmute').onclick = e => { e.currentTarget.remove(); startAudio(); };
@@ -420,9 +423,11 @@ function connect(){
     switch(m.t){
       case 'state':
         applyContent(m.content);
-        Object.assign(settings,m.settings); applySettings(); startedAt=m.startedAt;
+        Object.assign(settings,m.settings); applySettings(); startedAt=m.startedAt; silentUntil=m.silentUntil||0;
         visitors.clear(); order=[]; layout(m.cap); for (const p of m.viewers) addVisitor(p,true); updateCount(); renderMerit(); break;
       case 'settings': Object.assign(settings,m.settings); applySettings(); if (m.cap!==cap){ layout(m.cap); updateCount(); } break;
+      case 'silent': silentUntil=m.silentUntil||0; break;
+      case 'zoom': { const v=visitors.get(m.id); if(v && !v.inCeremony && settings.zoomEnabled!==false && Date.now()>=silentUntil) cameraZoom.trigger(m, v); } break;
       case 'join': if (m.cap!==cap) layout(m.cap); addVisitor(m.v, m.v.demo && visitors.size>8); updateCount(); break;
       case 'leave': removeVisitor(m.id); updateCount(); renderMerit(); break;
       case 'skin': { const v=visitors.get(m.id); if(v){ v.skin=m.skin; v.glow=.85; v.triggerBow(1,0); } } break;
@@ -476,6 +481,12 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt=Math.min((now-last)/1000,.05); last=now; const t=now/1000;
   ctx.clearRect(0,0,1080,1920);
+
+  const cols = currentCols();
+  for (const v of visitors.values()) v.update(dt, now, FLOOR, cols);
+  cameraZoom.update(dt, visitors, settings.zoomEnabled !== false, Date.now() < silentUntil);
+
+  cameraZoom.applyTransform(ctx);
   if (A.hall.naturalWidth) ctx.drawImage(A.hall,0,0,1080,1920);
 
   // 1. Ánh Sáng & Thời Tiết Chánh Điện Realtime (Ban ngày: Nắng cửa sổ / Ban đêm: Nến & Đèn dầu)
@@ -497,16 +508,18 @@ function frame(now){
   }
 
   // 5. Phật tử ngồi thiền & hành lễ (cập nhật Lerp + Perspective Scaling + 12-Frame Bowing + Lotus Aura 5 phút)
-  const cols = currentCols();
-  for (const v of visitors.values()) v.update(dt, now, FLOOR, cols);
-
   const bubbles=[];
   const list=[...visitors.values()].sort((a,b)=>a.y-b.y);
   for (const v of list){
+    cameraZoom.drawCharacterAuraRing(ctx, v, t);
     const topY = v.draw(ctx, t, now, A);
     const ws = v.scale;
     const ty = v.y - topY - 14 * ws / .4;
-    tag(v.name, v.x, ty, ws, v.skin==='master'||v.coins>=99?'gold':'', avatar(v.avatar), v.state==='sit' ? v.seat?.gap : 0);
+    const avImg = avatar(v.avatar);
+    const zoomedHideNormalTag = cameraZoom.drawZoomedNameplate(ctx, v, topY, t, avImg);
+    if (!zoomedHideNormalTag){
+      tag(v.name, v.x, ty, ws, v.skin==='master'||v.coins>=99?'gold':'', avImg, v.state==='sit' ? v.seat?.gap : 0);
+    }
     if (v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws]); else v.bubble=null;
   }
   for (const b of bubbles) bubble(...b);
@@ -518,6 +531,7 @@ function frame(now){
     ctx.save(); ctx.globalAlpha=Math.min(1,p.life-p.t); ctx.translate(p.x,p.y);
     if (p.heart){ ctx.fillStyle='#ff5a7a'; ctx.font='34px serif'; ctx.textAlign='center'; ctx.fillText('♥',0,0); } else { ctx.rotate(Math.sin(p.t*2+i)*.6); sprite(A.petal,0,0,p.s,.5); }
     ctx.restore(); }
+  cameraZoom.restoreTransform(ctx);
 
   // 7. Sổ Vàng Công Đức Cuộn Thư Pháp 2.5D
   meritScroll.updateAndDraw(ctx, dt, t, A.lotus);

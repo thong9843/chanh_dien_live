@@ -124,6 +124,17 @@ export default {
     "text": "♥ {n} trái tim tịnh tâm ♥",
     "showSec": 5
   },
+  "zoom": {
+    "enabled": true,
+    "minCoins": 99,
+    "onFollow": true,
+    "scaleFrom": 1.0,
+    "scaleTo": 1.6,
+    "holdSec": 5,
+    "outSec": 1.5,
+    "cooldownSec": 20,
+    "maxQueue": 3
+  },
   "demo": {
     "names": [
       "Diệu Hạnh",

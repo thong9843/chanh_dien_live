@@ -1145,6 +1145,230 @@
     }
   }
 
+  /* =========================================================================
+   * 7. ĐIỀU KHIỂN CAMERA ZOOM VÀO PHẬT TỬ (SMOOTH LERP 1.0 → 1.6, TÊN TO + VIỀN SÁNG)
+   * ========================================================================= */
+
+  class CameraZoomController {
+    constructor() {
+      this.active = false;
+      this.phase = 'idle'; // 'idle' | 'hold' | 'out'
+      this.targetId = null;
+      this.scaleFrom = 1.0;
+      this.scaleTo = 1.6;
+      this.holdSec = 5.0;
+      this.outSec = 1.5;
+      this.elapsed = 0;
+
+      this.scale = 1.0;
+      this.focusX = 540;
+      this.focusY = 960;
+
+      this.outStartScale = 1.0;
+      this.outStartX = 540;
+      this.outStartY = 960;
+      this.highlightAlpha = 0;
+    }
+
+    trigger(opts, charObj) {
+      if (!charObj || charObj.inCeremony) return;
+      if (!this.active) {
+        this.scale = opts.scaleFrom || 1.0;
+        this.focusX = 540;
+        this.focusY = 960;
+      }
+      this.active = true;
+      this.phase = 'hold';
+      this.targetId = opts.id;
+      this.scaleFrom = opts.scaleFrom || 1.0;
+      this.scaleTo = opts.scaleTo || 1.6;
+      this.holdSec = opts.holdSec || 5.0;
+      this.outSec = opts.outSec || 1.5;
+      this.elapsed = 0;
+    }
+
+    beginReturn() {
+      if (!this.active || this.phase === 'out') return;
+      this.phase = 'out';
+      this.elapsed = 0;
+      this.outStartScale = this.scale;
+      this.outStartX = this.focusX;
+      this.outStartY = this.focusY;
+    }
+
+    update(dt, visitorsMap, zoomEnabled = true, silentActive = false) {
+      if (!this.active) {
+        this.scale = 1.0;
+        this.focusX = 540;
+        this.focusY = 960;
+        this.highlightAlpha = 0;
+        return;
+      }
+
+      if (this.phase === 'hold') {
+        const v = visitorsMap.get(this.targetId);
+        // Không zoom khi tắt zoom, trong 5 phút thiền im lặng, hoặc người đang ở điểm lễ altarSpot
+        if (!zoomEnabled || silentActive || !v || v.inCeremony) {
+          this.beginReturn();
+        } else {
+          this.elapsed += dt;
+          const halfW = 540 / this.scaleTo;
+          const halfH = 960 / this.scaleTo;
+          const desiredX = clamp(v.x, halfW, 1080 - halfW);
+          const desiredY = clamp(v.y - 125 * v.scale, halfH, 1920 - halfH);
+
+          this.scale = lerpDt(this.scale, this.scaleTo, 0.085, dt);
+          this.focusX = lerpDt(this.focusX, desiredX, 0.085, dt);
+          this.focusY = lerpDt(this.focusY, desiredY, 0.085, dt);
+          this.highlightAlpha = clamp(this.highlightAlpha + dt * 3.0, 0, 1);
+
+          if (this.elapsed >= this.holdSec) {
+            this.beginReturn();
+          }
+        }
+      }
+
+      if (this.phase === 'out') {
+        this.elapsed += dt;
+        const dur = Math.max(0.1, this.outSec);
+        const k = easeInOutSine(this.elapsed / dur);
+        this.scale = lerp(this.outStartScale, this.scaleFrom, k);
+        this.focusX = lerp(this.outStartX, 540, k);
+        this.focusY = lerp(this.outStartY, 960, k);
+        this.highlightAlpha = clamp(1 - k * 1.4, 0, 1);
+
+        if (this.elapsed >= dur) {
+          this.active = false;
+          this.phase = 'idle';
+          this.targetId = null;
+          this.scale = this.scaleFrom;
+          this.focusX = 540;
+          this.focusY = 960;
+          this.highlightAlpha = 0;
+        }
+      }
+    }
+
+    applyTransform(ctx) {
+      ctx.save();
+      if (!this.active || Math.abs(this.scale - 1.0) <= 0.001) return;
+      const s = this.scale;
+      const cx = clamp(this.focusX, 540 / s, 1080 - 540 / s);
+      const cy = clamp(this.focusY, 960 / s, 1920 - 960 / s);
+      ctx.translate(540, 960);
+      ctx.scale(s, s);
+      ctx.translate(-cx, -cy);
+    }
+
+    restoreTransform(ctx) {
+      ctx.restore();
+    }
+
+    isHighlighting(v) {
+      return this.active && this.highlightAlpha > 0.02 && v && v.id === this.targetId && !v.inCeremony;
+    }
+
+    drawCharacterAuraRing(ctx, v, t) {
+      if (!this.isHighlighting(v)) return;
+      const a = this.highlightAlpha;
+      const ws = v.scale;
+      const pulse = 1 + 0.04 * Math.sin(t * 4.2);
+
+      ctx.save();
+      // Hào quang viền sáng quanh thân nhân vật
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.55 * a;
+      const g = ctx.createRadialGradient(v.x, v.y - 115 * ws, 10 * ws, v.x, v.y - 115 * ws, 235 * ws * pulse);
+      g.addColorStop(0, 'rgba(255, 232, 160, 0.85)');
+      g.addColorStop(0.55, 'rgba(255, 192, 92, 0.35)');
+      g.addColorStop(1, 'rgba(255, 165, 60, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(v.x, v.y - 115 * ws, 235 * ws * pulse, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Vòng viền sáng hoàng kim dưới chân bồ đoàn
+      ctx.globalAlpha = 0.92 * a;
+      ctx.translate(v.x, v.y - 10 * ws);
+      ctx.scale(1, 0.42);
+      ctx.shadowColor = '#ffd875';
+      ctx.shadowBlur = 18;
+      ctx.strokeStyle = '#fff2be';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 132 * ws * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(226, 176, 79, 0.85)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, 152 * ws * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    drawZoomedNameplate(ctx, v, topY, t, avImg) {
+      if (!this.isHighlighting(v)) return false;
+      const a = this.highlightAlpha;
+      const ws = v.scale;
+      const fs = Math.max(26, Math.round(44 * ws / 0.4));
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.font = `700 ${fs}px "Noto Serif", Georgia, serif`;
+
+      const text = v.name || 'Phật tử';
+      const padX = fs * 0.72;
+      const aw = avImg ? fs * 1.2 : 0;
+      const textW = ctx.measureText(text).width;
+      const w = textW + padX * 2 + aw;
+      const h = fs * 1.68;
+      const x = v.x;
+      const y = v.y - topY - 24 * ws / 0.4 - h * 0.25;
+      const pulseGlow = 16 + 6 * Math.sin(t * 4.5);
+
+      // Nền sơn mài trầm ấm + viền sáng kép rực rỡ
+      ctx.shadowColor = 'rgba(255, 218, 120, 0.95)';
+      ctx.shadowBlur = pulseGlow;
+      const bg = ctx.createLinearGradient(x, y - h / 2, x, y + h / 2);
+      bg.addColorStop(0, 'rgba(92, 32, 12, 0.96)');
+      bg.addColorStop(1, 'rgba(38, 14, 6, 0.96)');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2);
+      else ctx.rect(x - w / 2, y - h / 2, w, h);
+      ctx.fill();
+
+      ctx.lineWidth = 3.4;
+      ctx.strokeStyle = '#fff0b5';
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = 'rgba(226, 176, 79, 0.9)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x - w / 2 + 4, y - h / 2 + 4, w - 8, h - 8, (h - 8) / 2);
+      else ctx.rect(x - w / 2 + 4, y - h / 2 + 4, w - 8, h - 8);
+      ctx.stroke();
+
+      if (avImg) {
+        const ax = x - w / 2 + padX * 0.65 + aw * 0.5;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ax, y, fs * 0.52, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(avImg, ax - fs * 0.52, y - fs * 0.52, fs * 1.04, fs * 1.04);
+        ctx.restore();
+      }
+
+      ctx.fillStyle = '#fff4d2';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + aw * 0.45, y + 1);
+      ctx.restore();
+      return a > 0.65;
+    }
+  }
+
   // Xuất module toàn cục cho overlay.html sử dụng
   global.ChanhDienCanvas = {
     lerp,
@@ -1154,6 +1378,7 @@
     IncenseSmokeSystem,
     SilkMeritScroll,
     AmbientLightingSystem,
+    CameraZoomController,
     BOW_KEYFRAMES_12,
   };
 })(window);

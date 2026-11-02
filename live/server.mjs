@@ -44,6 +44,7 @@ function loadContent(){
   });
   const cr = o('credit'), em = Array.isArray(cr.everyMin) && cr.everyMin.length === 2 ? cr.everyMin : D.credit.everyMin;
   const lo = cNum(em[0], .05, 600, 5), hi = cNum(em[1], .05, 600, 10);
+  const zm = o('zoom'), dz = D.zoom;
   return {
     channel: { title: cStr(o('channel').title, D.channel.title, 40), subtitle: cStr(o('channel').subtitle, D.channel.subtitle, 60) },
     labels, gift, oracles,
@@ -55,6 +56,17 @@ function loadContent(){
     share: { text: cStr(o('share').text, D.share.text, 80), showSec: cNum(o('share').showSec, 1, 30, D.share.showSec) },
     milestone: { every: Math.round(cNum(o('milestone').every, 100, 100000, D.milestone.every)), line: cStr(o('milestone').line, D.milestone.line, 240),
                  text: cStr(o('milestone').text, D.milestone.text, 80), showSec: cNum(o('milestone').showSec, 1, 30, D.milestone.showSec) },
+    zoom: {
+      enabled: typeof zm.enabled === 'boolean' ? zm.enabled : dz.enabled,
+      minCoins: Math.round(cNum(zm.minCoins, 1, 50000, dz.minCoins)),
+      onFollow: typeof zm.onFollow === 'boolean' ? zm.onFollow : dz.onFollow,
+      scaleFrom: cNum(zm.scaleFrom, 0.5, 2, dz.scaleFrom),
+      scaleTo: cNum(zm.scaleTo, 1.05, 3, dz.scaleTo),
+      holdSec: cNum(zm.holdSec, 1, 20, dz.holdSec),
+      outSec: cNum(zm.outSec, 0.3, 10, dz.outSec),
+      cooldownSec: cNum(zm.cooldownSec, 0, 300, dz.cooldownSec),
+      maxQueue: Math.round(cNum(zm.maxQueue, 0, 20, dz.maxQueue)),
+    },
     layout: (() => {
       const L = o('layout'), D = DEFAULT_CONTENT.layout, sub = k => (L[k] && typeof L[k] === 'object' && !Array.isArray(L[k])) ? L[k] : {};
       const n = (src, def, k, lo, hi) => cNum(src[k], lo, hi, def[k]);
@@ -83,6 +95,7 @@ const CLIENT_CONTENT = {
   labels: CONTENT.labels, guide: CONTENT.guide, layout: CONTENT.layout, share: CONTENT.share,
   milestone: { text: CONTENT.milestone.text, showSec: CONTENT.milestone.showSec },
   gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown },
+  zoom: CONTENT.zoom,
   credit: CONTENT.credit,
 };
 const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
@@ -98,12 +111,15 @@ const settings = {
   autoChant: true, chantEveryMin: 3,
   seatMode: 'auto',                  // auto | 24 | 36 | 64 | 100
   lightingMode: 'auto',              // auto (theo giờ thực) | day | night
+  zoomEnabled: CONTENT.zoom.enabled, // bật/tắt zoom vào Phật tử khi quà ≥99 xu hoặc follow
   joinOnEnter: false,                // also seat viewers who only enter the room
   readMemberJoin: false,             // xướng tên chào đón người mới vào phòng (khi bật joinOnEnter)
   gifts: { readAll: true, minDiamonds: 1 },
 };
 const viewers = new Map();           // id -> { id, rawName, name, skin, avatar, coins, joinedAt, lastAt, lastText, lastTextAt, demo }
 const startedAt = Date.now();
+let silentUntil = 0;                 // trạng thái chung toàn hệ thống (thiền im lặng)
+let silentEndTimer = null;
 let tiktok = null, tiktokState = { status: 'idle', uniqueId: '', error: '' };
 const log = [];
 function addLog(s){ const line = `[${new Date().toLocaleTimeString('vi-VN')}] ${s}`; log.push(line); if (log.length > 300) log.shift(); broadcast({ t:'log', line }, 'control'); console.log(line); }
@@ -209,7 +225,91 @@ function isHighTierGift(giftName, coins, tier){
 }
 
 function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo }; }
-function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, tiktok: tiktokState, content: CLIENT_CONTENT }; }
+function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, content: CLIENT_CONTENT }; }
+
+/* ------------------------------------------- Silent mode & Camera Zoom */
+const zoomQueue = [];
+let zoomNextAt = 0, zoomTimer = null;
+
+function isAtAltarSpot(_id){ return false; }
+
+function setSilentUntil(untilMs){
+  clearTimeout(silentEndTimer); silentEndTimer = null;
+  silentUntil = Math.max(0, Math.round(+untilMs || 0));
+  if (silentUntil > Date.now()){
+    resetZoom();
+    silentEndTimer = setTimeout(() => {
+      silentUntil = 0;
+      broadcast({ t:'silent', silentUntil: 0 });
+      addLog('🔔 Kết thúc 5 phút thiền im lặng');
+    }, silentUntil - Date.now());
+    silentEndTimer.unref?.();
+  } else {
+    silentUntil = 0;
+  }
+  broadcast({ t:'silent', silentUntil });
+}
+
+function resetZoom(){
+  zoomQueue.length = 0;
+  zoomNextAt = 0;
+  clearTimeout(zoomTimer);
+  zoomTimer = null;
+}
+
+function scheduleNextZoom(){
+  clearTimeout(zoomTimer); zoomTimer = null;
+  if (!zoomQueue.length) return;
+  const wait = Math.max(50, zoomNextAt - Date.now());
+  zoomTimer = setTimeout(pumpZoom, wait);
+  zoomTimer.unref?.();
+}
+
+function fireZoom(id, reason){
+  const v = viewers.get(id);
+  if (!v || isAtAltarSpot(id)) return;
+  const cycleMs = (CONTENT.zoom.holdSec + CONTENT.zoom.outSec + CONTENT.zoom.cooldownSec) * 1000;
+  zoomNextAt = Date.now() + cycleMs;
+  broadcast({
+    t: 'zoom',
+    id: v.id,
+    name: v.name,
+    reason,
+    scaleFrom: CONTENT.zoom.scaleFrom,
+    scaleTo: CONTENT.zoom.scaleTo,
+    holdSec: CONTENT.zoom.holdSec,
+    outSec: CONTENT.zoom.outSec,
+  });
+  if (zoomQueue.length) scheduleNextZoom();
+}
+
+function pumpZoom(){
+  zoomTimer = null;
+  if (!settings.zoomEnabled || Date.now() < silentUntil){ zoomQueue.length = 0; return; }
+  if (Date.now() < zoomNextAt){ scheduleNextZoom(); return; }
+  while (zoomQueue.length){
+    const item = zoomQueue.shift();
+    if (viewers.has(item.id) && !isAtAltarSpot(item.id)){
+      fireZoom(item.id, item.reason);
+      return;
+    }
+  }
+}
+
+function enqueueZoom(id, reason){
+  if (!settings.zoomEnabled) return;
+  if (Date.now() < silentUntil) return;              // không zoom trong 5 phút thiền im lặng
+  if (!viewers.has(id) || isAtAltarSpot(id)) return; // không zoom vào người đang ở điểm lễ
+  const now = Date.now();
+  if (now >= zoomNextAt && zoomQueue.length === 0){
+    fireZoom(id, reason);
+    return;
+  }
+  if (zoomQueue.some(q => q.id === id)) return;
+  if (zoomQueue.length >= CONTENT.zoom.maxQueue) return; // xếp hàng tối đa 3, quá thì bỏ
+  zoomQueue.push({ id, reason });
+  scheduleNextZoom();
+}
 
 function seat(id, name, opts = {}){
   let v = viewers.get(id);
@@ -285,6 +385,10 @@ function onGift(id, name, giftName, count, diamonds, avatar){
     scrollMerit,
   });
 
+  if (coins >= CONTENT.zoom.minCoins){
+    enqueueZoom(v.id, 'gift');
+  }
+
   if (settings.gifts.readAll || coins >= settings.gifts.minDiamonds){
     say(line, { tag: 'gift', small: tier < 3, names: [spokenName] }, tier >= 3 ? 3 : 1);
   }
@@ -305,7 +409,7 @@ function onMember(id, name, avatar){
 
 /* follow / share / mốc tim. "Buổi" = từ lúc chạy server đến lúc kết nối sang phòng khác. */
 const followed = new Set(); let likeTotal = 0, mileDone = null;
-function resetSession(){ followed.clear(); likeTotal = 0; mileDone = null; }
+function resetSession(){ followed.clear(); likeTotal = 0; mileDone = null; resetZoom(); }
 function onFollow(id, name, avatar){
   id = String(id || '').slice(0, 64); if (!id) return;
   if (followed.has(id)) return;
@@ -313,6 +417,7 @@ function onFollow(id, name, avatar){
   const { v } = seat(id, name, { avatar });
   const who = v ? v.name : sanitizeDisplayName(name);
   broadcast({ t:'follow', id, name: who });
+  if (v && CONTENT.zoom.onFollow) enqueueZoom(v.id, 'follow');
   say(fill(CONTENT.follow.line, { name: spoken(v?.rawName || name || who) }), { tag:'follow' }, 2);
 }
 function onShare(name){
@@ -493,7 +598,7 @@ function fillDemo(n){
     seat('demo_' + i, name, { demo: true, skin: ['man','woman','woman','man','granny','monk','nun','child'][i % 8] });
   }
 }
-function clearSeats(){ viewers.clear(); broadcast(snapshot()); addLog('Đã làm trống bồ đoàn'); }
+function clearSeats(){ viewers.clear(); resetZoom(); broadcast(snapshot()); addLog('Đã làm trống bồ đoàn'); }
 
 /* ------------------------------------------------------------- control */
 function onControl(m, ws){
@@ -504,6 +609,9 @@ function onControl(m, ws){
     case 'oracle': { const raw = String(m.name || 'Khách').slice(0, 80); const { v } = seat('sim_' + sanitizeDisplayName(raw), raw); if (v) triggerOracle(v.id, v.name, v.avatar, true); break; }
     case 'gift': { const raw = String(m.name || 'Khách').slice(0, 80); onGift('sim_' + sanitizeDisplayName(raw), raw, String(m.gift || 'Hoa Sen').slice(0, 30), clamp(m.count, 1, 99), clamp(m.diamonds, 1, 50000)); break; }
     case 'follow': { const raw = String(m.name || 'Khách').slice(0, 80); onFollow('sim_' + sanitizeDisplayName(raw), raw); break; }
+    case 'test_zoom': { const raw = String(m.name || 'Khách').slice(0, 80); const { v } = seat('sim_' + sanitizeDisplayName(raw), raw); if (v) enqueueZoom(v.id, 'test'); break; }
+    case 'silent_meditation': setSilentUntil(Date.now() + 5 * 60_000); addLog('🧘 Bắt đầu 5 phút thiền im lặng'); break;
+    case 'silent_cancel': setSilentUntil(0); addLog('🔔 Đã kết thúc sớm chế độ thiền im lặng'); break;
     case 'share': onShare(m.name || 'Khách'); break;
     case 'likes': onLikes('sim_' + sanitizeDisplayName(m.name || 'Khách'), clamp(m.n, 1, 5000)); break;
     case 'fill': fillDemo(clamp(m.n, 1, 100)); addLog(`Đổ người mẫu: ${viewers.size} người`); break;
@@ -515,6 +623,7 @@ function onControl(m, ws){
     case 'test_name': previewNameTTS(m.name, ws); break;
     case 'settings':
       applySettings(m.settings || {});
+      if (!settings.zoomEnabled) resetZoom();
       scheduleChant(); broadcast({ t:'settings', settings, cap: capacity() }); break;
     case 'bots': setBots(!!m.on, +m.n || 12, m.pace); break;
   }
@@ -525,7 +634,7 @@ const SETTING_RULES = {
   title: v => String(v).slice(0, 40), subtitle: v => String(v).slice(0, 60),
   voice: v => ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'].includes(v) ? v : settings.voice,
   pitch: v => clamp(v, -50, 50), rate: v => clamp(v, -50, 50), moBpm: v => clamp(v, 20, 120), chantEveryMin: v => clamp(v, 1, 60),
-  music: Boolean, mo: Boolean, autoChant: Boolean, joinOnEnter: Boolean, readMemberJoin: Boolean,
+  music: Boolean, mo: Boolean, autoChant: Boolean, zoomEnabled: Boolean, joinOnEnter: Boolean, readMemberJoin: Boolean,
   lightingMode: v => ['auto', 'day', 'night'].includes(v) ? v : 'auto',
   gifts: v => ({ readAll: !!(v && v.readAll), minDiamonds: clamp(v && v.minDiamonds, 1, 50000) }),
   seatMode: v => ['auto', '24', '36', '64', '100'].includes(String(v)) ? String(v) : 'auto',

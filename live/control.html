@@ -49,6 +49,7 @@ button.red{background:var(--red);border-color:#b84a33}
   <h1>Bảng điều khiển · Chánh Điện Tịnh Tâm</h1>
   <div class="status">
     <span class="chip" id="srv">Server: …</span>
+    <span class="chip warn" id="silentChip" hidden>🧘 Thiền im lặng: 05:00</span>
     <span class="chip" id="tt">TikTok: chưa kết nối</span>
     <span class="chip" id="cnt">0 người</span>
   </div>
@@ -86,6 +87,7 @@ button.red{background:var(--red);border-color:#b84a33}
       <button id="btnFollow">Follow</button>
       <button id="btnShare">Share</button>
       <button id="btnLikes">+1000 tim</button>
+      <button class="gold" id="btnTestZoom">🔍 Thử Zoom</button>
     </div>
     <p class="hint">Quà <b>Hoa Sen / Chuông / Rồng</b> sẽ kích hoạt <b>Khói Trầm Lư Hương + Sổ Vàng Thư Pháp 2.5D + Lạy 12 frames + Hào Quang Hoa Sen 5 phút</b>.</p>
     <h2>Đổ người mẫu</h2>
@@ -138,6 +140,11 @@ button.red{background:var(--red);border-color:#b84a33}
         <select id="seatMode"><option value="auto">Tự mở rộng 24 → 100</option><option value="24">24</option><option value="36">36</option><option value="64">64</option><option value="100">100</option></select>
       </label>
     </div>
+    <label class="check"><input type="checkbox" id="zoomEnabled" checked> Bật Zoom vào Phật tử (quà ≥99 xu hoặc follow, không zoom theo tim)</label>
+    <div class="row">
+      <button class="gold" id="btnSilent">🧘 Thiền im lặng 5 phút</button>
+      <button id="btnSilentCancel" hidden>Huỷ thiền im lặng</button>
+    </div>
     <label>Tên thiền đường<input id="title" value="Chánh Điện Tịnh Tâm"></label>
     <label>Dòng phụ<input id="subtitle" value="Nam Mô A Di Đà Phật"></label>
     <h2>Đọc quà &amp; Chào khách</h2>
@@ -164,7 +171,7 @@ function logLine(s){ const el=$('log'); el.textContent += s + '\n'; el.scrollTop
 const SETTING_IDS = [
   'voice','pitch','rate',
   'music','mo','autoChant','moBpm','chantEveryMin',
-  'lightingMode','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
+  'lightingMode','zoomEnabled','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
 ];
 function syncGiftUI(){ $('giftMin').disabled = $('giftReadAll').checked; }
 function fillSettings(s){
@@ -209,13 +216,27 @@ function onPreviewTTS(m){
     $('testNameInfo').textContent += ` (Trình duyệt chặn phát: ${err.message})`;
   });
 }
+let silentUntil = 0;
+function updateSilentUI(){
+  const rem = Math.max(0, Math.ceil((silentUntil - Date.now()) / 1000));
+  const active = rem > 0;
+  $('silentChip').hidden = !active;
+  $('btnSilentCancel').hidden = !active;
+  if (active){
+    const mm = String(Math.floor(rem / 60)).padStart(2, '0');
+    const ss = String(rem % 60).padStart(2, '0');
+    $('silentChip').textContent = `🧘 Thiền im lặng: ${mm}:${ss}`;
+  }
+}
+setInterval(updateSilentUI, 500);
 function connect(){
   ws = new WebSocket(`ws://${location.host}/ws?role=control`);
   ws.onopen = () => { $('srv').textContent='Server: đang chạy'; $('srv').className='chip ok'; };
   ws.onclose = () => { $('srv').textContent='Server: mất kết nối'; $('srv').className='chip bad'; setTimeout(connect, 2000); };
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
-    if (m.t==='state'){ fillSettings(m.settings); setTT(m.tiktok); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
+    if (m.t==='state'){ fillSettings(m.settings); setTT(m.tiktok); silentUntil=m.silentUntil||0; updateSilentUI(); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
+    else if (m.t==='silent'){ silentUntil=m.silentUntil||0; updateSilentUI(); }
     else if (m.t==='preview_tts') onPreviewTTS(m);
     else if (m.t==='logs'){ $('log').textContent=''; m.lines.forEach(logLine); }
     else if (m.t==='log') logLine(m.line);
@@ -239,6 +260,9 @@ document.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => send('fi
 $('btnFollow').onclick = () => send('follow', { name: $('simName').value });
 $('btnShare').onclick = () => send('share', { name: $('simName').value });
 $('btnLikes').onclick = () => send('likes', { name: $('simName').value, n: 1000 });
+$('btnTestZoom').onclick = () => send('test_zoom', { name: $('simName').value });
+$('btnSilent').onclick = () => send('silent_meditation');
+$('btnSilentCancel').onclick = () => send('silent_cancel');
 $('btnClear').onclick = () => send('clear');
 $('btnBots').onclick = () => send('bots', { on: $('btnBots').textContent.includes('Bật'), n: +$('botN').value, pace: $('botPace').value });
 function triggerTestName(){
