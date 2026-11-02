@@ -67,7 +67,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   <canvas id="c" width="1080" height="1920"></canvas>
   <div id="plaque" class="ui"><div id="title">Chánh Điện Tịnh Tâm</div><div id="subtitle">Nam Mô A Di Đà Phật</div></div>
   <div id="pills" class="ui">
-    <div class="pill"><span class="dot"></span><span id="count">0/24</span><small>đang<br>thiền</small></div>
+    <div class="pill"><span class="dot"></span><span id="count">0/24</span><small id="watchLbl">đang<br>thiền</small></div>
     <div class="pill">⏱ <span id="timer">00:00:00</span></div>
   </div>
   <div id="guide" class="card ui">
@@ -75,8 +75,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
     <div>Gõ <b>nam · nữ · sư · ni · tiểu · bà · cao tăng</b> để đổi hình</div>
     <div>🎁 Tặng quà được <b>xướng tên hồi hướng</b></div>
   </div>
-  <div id="merit" class="card ui"><h3>✦ Công Đức ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
-  <div id="chant" class="ui"><h4>✦ TỤNG KINH ĐỊNH KỲ ✦</h4><p id="chantText"></p></div>
+  <div id="merit" class="card ui"><h3 id="meritTitle">✦ Công Đức ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
+  <div id="chant" class="ui"><h4 id="chantTitle">✦ TỤNG KINH ĐỊNH KỲ ✦</h4><p id="chantText"></p></div>
   <div id="gift" class="ui"><div class="who" id="giftWho"></div><div class="what" id="giftWhat"></div><div class="pray" id="giftPray"></div></div>
   <button id="unmute">🔔 Bấm để bật âm thanh</button>
   <div id="conn">đang kết nối…</div>
@@ -140,20 +140,40 @@ function addVisitor(p, instant){
 }
 function removeVisitor(id){ visitors.delete(id); reseat(); }
 
+/* ======================= nội dung (từ live/content.json, server gửi kèm snapshot) ======================= */
+let CONTENT = null;
+const L = (k, d) => CONTENT?.labels?.[k] ?? d;
+const fillTpl = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
+function applyContent(c){
+  CONTENT = c; if (!c) return;
+  document.getElementById('meritTitle').textContent = L('merit');
+  document.getElementById('chantTitle').textContent = L('chant');
+  document.getElementById('unmute')?.replaceChildren(document.createTextNode(L('unmute')));
+  const w = document.getElementById('watchLbl'); w.replaceChildren(); L('watching','').split('|').forEach((p,i)=>{ if(i) w.append(document.createElement('br')); w.append(p); });
+  const g = document.getElementById('guide'); g.replaceChildren();
+  for (const line of (c.guide?.lines || [])){                          // **đậm** → <b>, mọi thứ khác là textContent
+    const d = document.createElement('div');
+    line.split('**').forEach((p,i)=>{ if (!p) return; if (i%2){ const b=document.createElement('b'); b.textContent=p; d.append(b); } else d.append(p); });
+    g.append(d);
+  }
+  Object.assign(credit, c.credit || {});
+  renderMerit();
+}
+
 /* ======================= HUD ======================= */
 let startedAt = Date.now();
 function updateCount(){ document.getElementById('count').textContent = `${visitors.size}/${cap}`; }
 function renderMerit(){
   const top = [...visitors.values()].filter(v=>v.coins>0).sort((a,b)=>b.coins-a.coins).slice(0,5);
   const ol = document.getElementById('meritList'); ol.innerHTML='';
-  if (!top.length){ ol.innerHTML='<li class="empty">Chưa có</li>'; return; }
+  if (!top.length){ { const li=document.createElement('li'); li.className='empty'; li.textContent=L('empty','Chưa có'); ol.append(li); } return; }
   top.forEach((v,i)=>{ const li=document.createElement('li'); const a=document.createElement('span'); a.textContent=`${i+1}. ${v.name}`; const b=document.createElement('span'); b.textContent=v.coins; li.append(a,b); ol.append(li); });
 }
 setInterval(()=>{ const s=Math.floor((Date.now()-startedAt)/1000); document.getElementById('timer').textContent=[s/3600,s/60%60,s%60].map(x=>String(Math.floor(x)).padStart(2,'0')).join(':'); },1000);
 let giftHide=null;
 function showGift(m){
   document.getElementById('giftWho').textContent = m.name;
-  document.getElementById('giftWhat').textContent = `thành tâm dâng ${m.giftName}${m.count>1?' ×'+m.count:''} · công đức ${m.total}`;
+  document.getElementById('giftWhat').textContent = fillTpl(CONTENT?.gift?.what ?? 'thành tâm dâng {gift}{times} · công đức {total}', { gift:m.giftName, total:m.total, count:m.count, times: m.count>1 ? fillTpl(CONTENT?.gift?.timesShown ?? ' ×{count}', {count:m.count}) : '' });
   document.getElementById('giftPray').textContent = '“' + m.prayer + '”';
   document.getElementById('chant').classList.remove('show');
   const el=document.getElementById('gift'); el.classList.add('show'); clearTimeout(giftHide); giftHide=setTimeout(()=>el.classList.remove('show'), m.tier>=3?9000:6500);
@@ -218,11 +238,12 @@ function connect(){
   ws = new WebSocket(`ws://${location.host}/ws?role=overlay`);
   const st=document.getElementById('conn');
   ws.onopen=()=>{ st.textContent=''; };
-  ws.onclose=()=>{ st.textContent='mất kết nối server… đang thử lại'; setTimeout(connect,2000); };
+  ws.onclose=()=>{ st.textContent=L('lost','mất kết nối server… đang thử lại'); setTimeout(connect,2000); };
   ws.onmessage=e=>{
     const m=JSON.parse(e.data);
     switch(m.t){
       case 'state':
+        applyContent(m.content);
         Object.assign(settings,m.settings); applySettings(); startedAt=m.startedAt;
         visitors.clear(); order=[]; layout(m.cap); for (const p of m.viewers) addVisitor(p,true); updateCount(); renderMerit(); break;
       case 'settings': Object.assign(settings,m.settings); applySettings(); if (m.cap!==cap){ layout(m.cap); updateCount(); } break;
@@ -319,13 +340,6 @@ function frame(now){
 }
 /* Credit: định kỳ hiện dòng ghi công tác giả gốc ở dải đáy màn hình. Cấu hình trong live/content.json (credit.y = tâm dải chữ). */
 const credit = { enabled:true, text:'✦ Mã nguồn được chia sẻ bởi Kent Juno ✦', everyMin:[5,10], showSec:7, y:1890, fontPx:22 };
-fetch('/live/content.json', {cache:'no-cache'}).then(r => r.json()).then(j => {
-  const c = j && j.credit || {}, n = (v, lo, hi, d) => Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d;
-  if (typeof c.enabled === 'boolean') credit.enabled = c.enabled;
-  if (typeof c.text === 'string') credit.text = c.text.slice(0, 120);
-  if (Array.isArray(c.everyMin) && c.everyMin.length === 2){ const a = n(c.everyMin[0], .05, 600, 5), b = n(c.everyMin[1], .05, 600, 10); credit.everyMin = [Math.min(a,b), Math.max(a,b)]; }
-  credit.showSec = n(c.showSec, 1, 60, 7); credit.y = n(c.y, 0, 1920, 1890); credit.fontPx = n(c.fontPx, 10, 60, 22);
-}).catch(() => {});
 let creditNext = 0, creditStart = -1e9;
 function drawCredit(now){
   if (!credit.enabled || !credit.text) return;

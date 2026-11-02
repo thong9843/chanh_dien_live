@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+import DEFAULT_CONTENT from './content.defaults.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');            // repo root: serves /assets, /live
@@ -19,10 +20,40 @@ fs.mkdirSync(TTS_DIR, { recursive: true });
 for (const f of fs.readdirSync(TTS_DIR)) { try { fs.unlinkSync(path.join(TTS_DIR, f)); } catch {} }
 const PORT = +process.env.PORT || 3000;
 
+/* ------------------------------------------------------------------ content
+   Mọi chuỗi hiển thị / đọc nằm trong live/content.json. Thiếu file hoặc thiếu khóa thì dùng content.defaults.mjs.
+   Chuỗi bị cắt độ dài, số bị kẹp khoảng, nên file sai cũng không làm hỏng server. */
+const cStr = (v, d, n) => (typeof v === 'string' && v.trim()) ? v.slice(0, n) : d;
+const cArr = (v, d, n, max) => { const a = Array.isArray(v) ? v.filter(x => typeof x === 'string' && x.trim()).slice(0, max).map(x => x.slice(0, n)) : []; return a.length ? a : d; };
+const cNum = (v, lo, hi, d) => Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d;
+function loadContent(){
+  let r = {};
+  try { r = JSON.parse(fs.readFileSync(path.join(__dirname, 'content.json'), 'utf8')) || {}; }
+  catch (e) { console.warn('content.json lỗi hoặc thiếu, dùng giá trị mặc định:', e.message); }
+  const D = DEFAULT_CONTENT, o = k => (r[k] && typeof r[k] === 'object' && !Array.isArray(r[k])) ? r[k] : {};
+  const labels = {}; for (const k of Object.keys(D.labels)) labels[k] = cStr(o('labels')[k], D.labels[k], 60);
+  const gift = {}; for (const k of Object.keys(D.gift)) gift[k] = cStr(o('gift')[k], D.gift[k], 240);
+  const cr = o('credit'), em = Array.isArray(cr.everyMin) && cr.everyMin.length === 2 ? cr.everyMin : D.credit.everyMin;
+  const lo = cNum(em[0], .05, 600, 5), hi = cNum(em[1], .05, 600, 10);
+  return {
+    channel: { title: cStr(o('channel').title, D.channel.title, 40), subtitle: cStr(o('channel').subtitle, D.channel.subtitle, 60) },
+    labels, gift,
+    guide: { lines: cArr(o('guide').lines, D.guide.lines, 160, 6) },
+    prayers: cArr(r.prayers, D.prayers, 300, 100), chants: cArr(r.chants, D.chants, 400, 100),
+    demo: { names: cArr(o('demo').names, D.demo.names, 18, 200), botLines: cArr(o('demo').botLines, D.demo.botLines, 120, 100) },
+    credit: { enabled: typeof cr.enabled === 'boolean' ? cr.enabled : D.credit.enabled, text: cStr(cr.text, D.credit.text, 120),
+              everyMin: [Math.min(lo, hi), Math.max(lo, hi)], showSec: cNum(cr.showSec, 1, 60, 7), y: cNum(cr.y, 0, 1920, 1890), fontPx: cNum(cr.fontPx, 10, 60, 22) },
+  };
+}
+const CONTENT = loadContent();
+// phần overlay cần để vẽ chữ (lời nguyện, câu tụng, tên demo chỉ dùng ở server)
+const CLIENT_CONTENT = { labels: CONTENT.labels, guide: CONTENT.guide, gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown }, credit: CONTENT.credit };
+const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
+
 /* ------------------------------------------------------------------ state */
 const settings = {
-  title: 'Chánh Điện Tịnh Tâm',
-  subtitle: 'Nam Mô A Di Đà Phật',
+  title: CONTENT.channel.title,
+  subtitle: CONTENT.channel.subtitle,
   voice: 'vi-VN-NamMinhNeural',      // or vi-VN-HoaiMyNeural
   pitch: -18,                        // Hz
   rate: -20,                         // %
@@ -57,7 +88,7 @@ function skinFromText(t){
 const DEFAULT_SKINS = ['man', 'woman', 'woman', 'man', 'granny'];
 
 function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo }; }
-function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, tiktok: tiktokState }; }
+function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, tiktok: tiktokState, content: CLIENT_CONTENT }; }
 
 function seat(id, name, opts = {}){
   let v = viewers.get(id);
@@ -86,24 +117,24 @@ function onChat(id, name, text, avatar){
 }
 
 function onGift(id, name, giftName, count, diamonds, avatar){
-  giftName = String(giftName || 'quà').slice(0, 30); count = Math.max(1, Math.min(9999, +count || 1));
+  giftName = String(giftName || CONTENT.labels.defaultGift).slice(0, 30); count = Math.max(1, Math.min(9999, +count || 1));
   const { v } = seat(id, name, { avatar });
   if (!v) return;
   const coins = Math.max(1, (diamonds || 1) * (count || 1));
   v.coins += coins;
   const prayer = (v.lastText && Date.now() - v.lastTextAt < 90_000 && v.lastText.length > 6) ? v.lastText : pickPrayer();
   const tier = coins >= 99 ? 3 : coins >= 10 ? 2 : 1;
-  const line = `Nam mô A Di Đà Phật. Phật tử ${spoken(v.name)} thành tâm dâng ${giftName}${count > 1 ? ', ' + count + ' lần' : ''}. ${prayer}.`;
+  const line = fill(CONTENT.gift.line, { name: spoken(v.name), gift: giftName, count, total: v.coins, prayer,
+    times: count > 1 ? fill(CONTENT.gift.timesSpoken, { count }) : '' });
   broadcast({ t:'gift', id, name: v.name, giftName, count, coins, total: v.coins, tier, prayer });
   if (settings.gifts.readAll || coins >= settings.gifts.minDiamonds) say(line, { tag:'gift', id });
 }
 
 function pickPrayer(){
-  const P = ['Nguyện cầu gia đạo bình an, vạn sự cát tường', 'Nguyện cầu cha mẹ mạnh khỏe, sống lâu', 'Nguyện hồi hướng công đức cho khắp pháp giới chúng sinh',
-             'Nguyện cầu thân tâm an lạc, phiền não tiêu trừ', 'Nguyện cầu công việc hanh thông, gia đình hạnh phúc'];
+  const P = CONTENT.prayers;
   return P[Math.floor(Math.random() * P.length)];
 }
-const spoken = s => String(s).replace(/[_@.]+/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, '').trim() || 'ẩn danh';
+const spoken = s => String(s).replace(/[_@.]+/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, '').trim() || CONTENT.labels.anonymous;
 
 /* ------------------------------------------------------------------ TTS */
 const ttsQueue = []; let ttsBusy = false, ttsSeq = 0;
@@ -127,14 +158,8 @@ async function pumpTTS(){
   ttsBusy = false; setTimeout(pumpTTS, 50);
 }
 
-const CHANTS = [
-  'Nam mô Bổn Sư Thích Ca Mâu Ni Phật. Nguyện đem công đức này, hướng về khắp tất cả, đệ tử và chúng sinh, đều trọn thành Phật đạo.',
-  'Nam mô A Di Đà Phật. Nguyện sanh Tây Phương Tịnh Độ trung, cửu phẩm liên hoa vi phụ mẫu.',
-  'Nam mô Đại Bi Quán Thế Âm Bồ Tát. Nguyện cho tất cả chúng sinh thân tâm an lạc, tai qua nạn khỏi.',
-  'Quán Tự Tại Bồ Tát hành thâm Bát Nhã Ba La Mật Đa thời, chiếu kiến ngũ uẩn giai không, độ nhất thiết khổ ách.',
-];
 let chantIdx = 0, chantTimer = null;
-function chant(){ const text = CHANTS[chantIdx++ % CHANTS.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant' }); }
+function chant(){ const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant' }); }
 function scheduleChant(){ clearInterval(chantTimer); if (settings.autoChant) chantTimer = setInterval(chant, Math.max(1, settings.chantEveryMin) * 60_000); }
 scheduleChant();
 
@@ -150,12 +175,12 @@ async function connectTikTok(uniqueId){
     const { TikTokLiveConnection, WebcastEvent, ControlEvent } = TikTokLib;
     const conn = new TikTokLiveConnection(uniqueId, { enableExtendedGiftInfo: true, processInitialData: false });
     const av = u => u?.profilePicture?.url?.[0] || u?.profilePicture?.urlList?.[0] || u?.avatarThumb?.urlList?.[0] || u?.avatarThumb?.url?.[0] || '';
-    const nm = u => u?.nickname || u?.uniqueId || 'ẩn danh';
+    const nm = u => u?.nickname || u?.uniqueId || CONTENT.labels.anonymous;
     conn.on(WebcastEvent.CHAT, d => onChat(d.user?.uniqueId || d.user?.userId, nm(d.user), d.comment, av(d.user)));
     conn.on(WebcastEvent.GIFT, d => {
       const type = d.giftDetails?.giftType ?? d.extendedGiftInfo?.type;
       if (type === 1 && !d.repeatEnd) return;                       // streak still running
-      const gname = d.giftDetails?.giftName || d.extendedGiftInfo?.name || 'quà';
+      const gname = d.giftDetails?.giftName || d.extendedGiftInfo?.name || CONTENT.labels.defaultGift;
       const dia = d.giftDetails?.diamondCount ?? d.extendedGiftInfo?.diamond_count ?? 1;
       onGift(d.user?.uniqueId || d.user?.userId, nm(d.user), gname, d.repeatCount || 1, dia, av(d.user));
       addLog(`🎁 ${nm(d.user)} tặng ${gname} x${d.repeatCount || 1}`);
@@ -177,7 +202,7 @@ async function connectTikTok(uniqueId){
 async function disconnectTikTok(){ if (tiktok){ try { await tiktok.disconnect(); } catch {} tiktok = null; } tiktokState = { status:'idle', uniqueId:'', error:'' }; broadcast({ t:'tiktok', ...tiktokState }); }
 
 /* ------------------------------------------------------------- test data */
-const DEMO_NAMES = ['Diệu Hạnh','Minh Tâm','Thiện Đức','Huệ An','Tịnh Nhã','Quảng Trí','Chơn Như','Pháp Hỷ','Nguyên Thanh','Tâm Đăng','Diệu Liên','Trí Hải','Phước Lộc','Hạnh Nguyện','Như Ý','Bảo Châu','Thanh Lương','Từ Tâm','An Lạc','Giác Hoa','Tuệ Minh','Liên Hương','Thu Hà','Ngọc Lan','Đức Anh','Hải Đăng','Mai Anh','Phương Thảo','Trung Kiên','Quang Huy','Bảo Ngọc','Diệu Linh'];
+const DEMO_NAMES = CONTENT.demo.names;
 function fillDemo(n){
   const have = [...viewers.values()].filter(v => v.demo).length;
   for (let i = have; i < n && viewers.size < 100; i++){
@@ -213,6 +238,7 @@ const SETTING_RULES = {
   voice: v => ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'].includes(v) ? v : settings.voice,
   pitch: v => clamp(v, -50, 50), rate: v => clamp(v, -50, 50), moBpm: v => clamp(v, 20, 120), chantEveryMin: v => clamp(v, 1, 60),
   music: Boolean, mo: Boolean, autoChant: Boolean, joinOnEnter: Boolean,
+  gifts: v => ({ readAll: !!(v && v.readAll), minDiamonds: clamp(v && v.minDiamonds, 1, 50000) }),
   seatMode: v => ['auto', '24', '36', '64', '100'].includes(String(v)) ? String(v) : 'auto',
 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, Math.round(+v || 0)));
@@ -220,8 +246,7 @@ function applySettings(o){ for (const [k, fn] of Object.entries(SETTING_RULES)) 
 
 /* ----------------------------------------------------------------- bots */
 let botTimer = null;
-const BOT_LINES = ['Nam mô A Di Đà Phật', 'Nam mô Bổn Sư Thích Ca Mâu Ni Phật', 'Cầu cho gia đình bình an', 'Con xin thành tâm sám hối', 'nữ', 'nam', 'bà',
-  'Nguyện cầu cha mẹ mạnh khỏe', 'Mô Phật, an lạc quá', 'Chúc mọi người một ngày bình an', 'sư', 'Cầu công việc hanh thông'];
+const BOT_LINES = CONTENT.demo.botLines;
 function setBots(on, n, pace){
   clearInterval(botTimer); botTimer = null;
   if (on){
@@ -262,7 +287,7 @@ function resolveStatic(urlPath){
   let p = urlPath === '/' ? '/live/control.html' : urlPath;
   if (!/^\/(assets|live)\//.test(p)) return null;
   if (p.split('/').some(seg => seg.startsWith('.') || seg === 'node_modules')) return null;
-  if (/\.(mjs|json|md|log)$/i.test(p) && !p.startsWith('/assets/') && p !== '/live/content.json') return null;      // never serve server code / package files
+  if (/\.(mjs|json|md|log)$/i.test(p) && !p.startsWith('/assets/')) return null;      // never serve server code / package files
   const file = path.normalize(path.join(ROOT, p));
   if (!file.startsWith(ROOT + SEP)) return null;
   return file;

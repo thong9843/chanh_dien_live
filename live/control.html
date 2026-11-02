@@ -112,10 +112,17 @@ button.red{background:var(--red);border-color:#b84a33}
     <div class="row"><button id="btnBell">🔔 Thỉnh chuông</button><button id="btnMo">Gõ mõ</button></div>
     <h2>Cảnh</h2>
     <label>Tên thiền đường<input id="title" value="Chánh Điện Tịnh Tâm"></label>
+    <div class="hint">Đổi tạm thời, khởi động lại sẽ về giá trị trong content.json</div>
     <label>Dòng phụ<input id="subtitle" value="Nam Mô A Di Đà Phật"></label>
     <div class="row">
       <label>Số chỗ ngồi<select id="seatMode"><option value="auto">Tự mở rộng 24 → 100</option><option value="24">24</option><option value="36">36</option><option value="64">64</option><option value="100">100</option></select></label>
     </div>
+    <h2>Đọc quà</h2>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="giftReadAll" checked> Đọc tên mọi quà</label>
+      <label>Chỉ đọc quà từ (xu)<input id="giftMin" type="number" min="1" max="50000" value="1"></label>
+    </div>
+    <div class="hint">Bỏ chọn “Đọc tên mọi quà” để chỉ đọc quà có giá trị từ mức xu này trở lên.</div>
     <label class="check"><input type="checkbox" id="joinOnEnter"> Người vào phòng cũng được ngồi (không cần bình luận)</label>
   </section>
 </div>
@@ -132,8 +139,10 @@ let ws = null;
 const send = (cmd, extra={}) => ws?.readyState===1 && ws.send(JSON.stringify({ t:'ctl', cmd, ...extra }));
 function logLine(s){ const el=$('log'); el.textContent += s + '\n'; el.scrollTop = el.scrollHeight; }
 const SETTING_IDS = ['voice','pitch','rate','music','mo','autoChant','moBpm','chantEveryMin','title','subtitle','seatMode','joinOnEnter'];
-function fillSettings(s){ for (const k of SETTING_IDS){ const el=$(k); if (!el || s[k]===undefined) continue; if (el.type==='checkbox') el.checked=!!s[k]; else el.value=s[k]; } }
-function readSettings(){ const o={}; for (const k of SETTING_IDS){ const el=$(k); o[k] = el.type==='checkbox' ? el.checked : el.type==='number' ? +el.value : el.value; } return o; }
+function syncGiftUI(){ $('giftMin').disabled = $('giftReadAll').checked; }
+function fillSettings(s){
+  if (s.gifts){ $('giftReadAll').checked = !!s.gifts.readAll; $('giftMin').value = s.gifts.minDiamonds; syncGiftUI(); } for (const k of SETTING_IDS){ const el=$(k); if (!el || s[k]===undefined) continue; if (el.type==='checkbox') el.checked=!!s[k]; else el.value=s[k]; } }
+function readSettings(){ const o={ gifts:{ readAll: $('giftReadAll').checked, minDiamonds: +$('giftMin').value || 1 } }; for (const k of SETTING_IDS){ const el=$(k); o[k] = el.type==='checkbox' ? el.checked : el.type==='number' ? +el.value : el.value; } return o; }
 const people = new Map();
 function renderPeople(){
   const tb=$('peopleBody'); tb.innerHTML='';
@@ -177,7 +186,7 @@ $('btnSay').onclick = () => send('say', { text: $('sayText').value });
 $('btnChant').onclick = () => send('chant');
 $('btnBell').onclick = () => send('bell');
 $('btnMo').onclick = () => send('mo');
-for (const k of SETTING_IDS) $(k).addEventListener('change', () => send('settings', { settings: readSettings() }));
+for (const k of [...SETTING_IDS, 'giftReadAll', 'giftMin']) $(k).addEventListener('change', () => { syncGiftUI(); send('settings', { settings: readSettings() }); });
 </script>
 </body>
 </html>
