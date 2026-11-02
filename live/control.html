@@ -61,6 +61,8 @@ button.red{background:var(--red);border-color:#b84a33}
     <label for="uid">Username kênh đang live</label>
     <div class="row"><input id="uid" placeholder="@tenkenhcuaban" autocomplete="off"><button class="primary" id="btnConnect">Kết nối</button><button id="btnDisconnect">Ngắt</button></div>
     <p class="hint">Chỉ đọc sự kiện công khai của phòng live (bình luận, quà, tim). Không cần mật khẩu hay cookie TikTok. Phải bật LIVE trước rồi mới kết nối.</p>
+    <p class="hint" id="ttErr" role="status" style="display:none;color:#f3a3a3"></p>
+    <p class="hint" id="ttKey"></p>
     <button class="gold" id="btnOverlay">Mở màn hình overlay 9:16</button>
     <p class="hint">Trong TikTok LIVE Studio: Add source → Window capture → chọn cửa sổ overlay. Bấm "bật âm thanh" một lần trong cửa sổ đó.</p>
     <h2>Trong sân chùa</h2>
@@ -205,6 +207,9 @@ function renderPeople(){
 function setTT(st){
   const el=$('tt'); el.className='chip ' + (st.status==='connected'?'ok':st.status==='error'?'bad':'');
   el.textContent = st.status==='connected' ? `TikTok: @${st.uniqueId} ✓` : st.status==='connecting' ? `TikTok: đang kết nối @${st.uniqueId}…` : st.status==='error' ? 'TikTok: lỗi kết nối' : 'TikTok: chưa kết nối';
+  const er=$('ttErr'); const bad = st.status==='error' && st.error;
+  er.style.display = bad ? '' : 'none'; er.textContent = bad ? `Lỗi${st.step ? ' ở bước "'+st.step+'"' : ''}: ${st.error}` : '';
+  if (st.key !== undefined) $('ttKey').textContent = st.key ? 'EulerStream: đã có API key (live/.env).' : 'EulerStream: chưa có API key — dùng mức miễn phí không key, dễ hết lượt. Thêm EULER_API_KEY vào live/.env.';
 }
 let previewAudio = null;
 function onPreviewTTS(m){

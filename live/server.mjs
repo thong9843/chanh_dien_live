@@ -13,12 +13,15 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import DEFAULT_CONTENT from './content.defaults.mjs';
+import { readGift } from './gift-event.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');            // repo root: serves /assets, /live
 const TTS_DIR = path.join(__dirname, 'tts');
 fs.mkdirSync(TTS_DIR, { recursive: true });
 for (const f of fs.readdirSync(TTS_DIR)) { try { fs.unlinkSync(path.join(TTS_DIR, f)); } catch {} }
+// live/.env (đã nằm trong .gitignore, không bao giờ commit): EULER_API_KEY=... — đọc bằng loadEnvFile có sẵn của Node 20.12+, không thêm dependency.
+try { process.loadEnvFile(path.join(__dirname, '.env')); } catch {}
 const PORT = +process.env.PORT || 3000;
 
 /* ------------------------------------------------------------------ content
@@ -781,25 +784,46 @@ scheduleChant();
 
 /* --------------------------------------------------------------- TikTok */
 let TikTokLib = null;
+// Dịch lỗi của thư viện/EulerStream ra nguyên nhân dễ hiểu cho bảng điều khiển (không bao giờ chứa key).
+function explainTikTokError(e, step, hasKey){
+  const name = e?.constructor?.name || e?.name || '', msg = String(e?.message || e);
+  if (name === 'UserOfflineError' || /isn't online|not online/i.test(msg)) return 'Kênh chưa bật LIVE (hoặc phòng đã kết thúc).';
+  if (/Business plan/i.test(msg)) return `Bước "${step}" cần gói EulerStream Business, gói Community không dùng được bước này.`;
+  if (name === 'SignatureRateLimitError' || /rate.?limit|too many|\b429\b/i.test(msg)) {
+    const wait = Number.isFinite(+e?.retryAfter) && +e.retryAfter > 0 ? ` Thử lại sau khoảng ${Math.ceil(+e.retryAfter)} giây.` : '';
+    return `Hết lượt hoặc quá tần suất của EulerStream (giới hạn gói).${wait}${hasKey ? '' : ' Thêm EULER_API_KEY vào live/.env để có hạn mức riêng.'}`;
+  }
+  if (name === 'PremiumFeatureError' || /premium|\b402\b|payment|upgrade/i.test(msg)) return `Bước "${step}" cần gói EulerStream trả phí (vượt giới hạn gói hiện tại).`;
+  if (/\b401\b|\b403\b|unauthor|forbidden|invalid.*key|api key/i.test(msg)) return hasKey ? 'EulerStream từ chối API key (sai key, hết hạn hoặc không đủ quyền).' : 'Thiếu EULER_API_KEY: tạo live/.env với dòng EULER_API_KEY=... rồi chạy lại server.';
+  if (/Failed to retrieve Room ID|Room ID/i.test(msg)) return 'Không tra được phòng: sai username, kênh không live, hoặc TikTok chặn tạm thời.';
+  return msg.slice(0, 300);
+}
 async function connectTikTok(uniqueId){
   uniqueId = String(uniqueId || '').trim().replace(/^.*tiktok\.com\/@?/i, '').replace(/^@/, '').replace(/\/.*$/, '');
   if (!uniqueId) return;
   await disconnectTikTok(); resetSession();
   tiktokState = { status: 'connecting', uniqueId, error: '' }; broadcast({ t:'tiktok', ...tiktokState });
+  let step = 'khởi tạo';
   try {
     TikTokLib ||= await import('tiktok-live-connector');
     const { TikTokLiveConnection, WebcastEvent, ControlEvent } = TikTokLib;
-    const conn = new TikTokLiveConnection(uniqueId, { enableExtendedGiftInfo: true, processInitialData: false });
+    // enableExtendedGiftInfo = false: bật lên thì thư viện tải danh sách quà (gift/list/), request này Euler chỉ ký cho gói Business.
+    // Tên quà + kim cương lấy thẳng từ sự kiện GIFT (d.gift), xem gift-event.mjs.
+    const { SignConfig, RoomIdRouteConfig } = TikTokLib;
+    RoomIdRouteConfig.skipFetchRoomIdFromEulerRoute = true;       // tra phòng bằng trang/API TikTok, không tốn lượt Euler
+    const apiKey = process.env.EULER_API_KEY || '';
+    if (apiKey) SignConfig.apiKey = apiKey;
+    tiktokState.key = !!apiKey;
+    const conn = new TikTokLiveConnection(uniqueId, { enableExtendedGiftInfo: false, fetchRoomInfoOnConnect: false, processInitialData: false, ...(apiKey ? { signApiKey: apiKey } : {}) });
     const av = u => u?.profilePicture?.url?.[0] || u?.profilePicture?.urlList?.[0] || u?.avatarThumb?.urlList?.[0] || u?.avatarThumb?.url?.[0] || '';
     const nm = u => u?.nickname || u?.uniqueId || CONTENT.labels.anonymous;
     conn.on(WebcastEvent.CHAT, d => onChat(d.user?.uniqueId || d.user?.userId, nm(d.user), d.comment, av(d.user)));
     conn.on(WebcastEvent.GIFT, d => {
-      const type = d.giftDetails?.giftType ?? d.extendedGiftInfo?.type;
-      if (type === 1 && !d.repeatEnd) return;                       // streak still running
-      const gname = d.giftDetails?.giftName || d.extendedGiftInfo?.name || CONTENT.labels.defaultGift;
-      const dia = d.giftDetails?.diamondCount ?? d.extendedGiftInfo?.diamond_count ?? 1;
-      onGift(d.user?.uniqueId || d.user?.userId, nm(d.user), gname, d.repeatCount || 1, dia, av(d.user));
-      addLog(`🎁 ${sanitizeDisplayName(nm(d.user))} cúng dường ${sanitizeGiftName(gname)} x${d.repeatCount || 1}`);
+      const g = readGift(d, CONTENT.labels.defaultGift);
+      if (g.streaking) return;                                      // streak still running
+      if (!g.known) addLog('⚠ Sự kiện quà không có diamondCount, tính 1 xu');
+      onGift(d.user?.uniqueId || d.user?.userId, nm(d.user), g.name, g.count, g.diamonds, av(d.user));
+      addLog(`🎁 ${sanitizeDisplayName(nm(d.user))} cúng dường ${sanitizeGiftName(g.name)} x${g.count} (${g.diamonds} xu)`);
     });
     conn.on(WebcastEvent.MEMBER, d => onMember(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
     conn.on(WebcastEvent.LIKE, d => onLikes(d.user?.uniqueId, d.likeCount || 1, d.totalLikeCount));
@@ -807,13 +831,29 @@ async function connectTikTok(uniqueId){
     conn.on(WebcastEvent.SHARE, d => onShare(nm(d.user)));
     conn.on(ControlEvent.DISCONNECTED, () => { tiktokState = { ...tiktokState, status: 'disconnected' }; broadcast({ t:'tiktok', ...tiktokState }); addLog('TikTok: mất kết nối'); });
     conn.on(ControlEvent.ERROR, e => addLog('TikTok lỗi: ' + (e?.info || e?.message || e)));
-    const st = await conn.connect();
+    // 3 bước, log từng bước để biết bước nào bị từ chối
+    step = 'tra phòng';
+    const roomId = await conn.fetchRoomId();
+    addLog(`🔎 [1/3] Tra phòng xong (roomId ${String(roomId).slice(0, 6)}…)`);
+    step = 'thông tin phòng';
+    try {
+      const info = await conn.fetchRoomInfo(roomId);
+      if (info?.data?.status === 4) throw Object.assign(new Error('The requested user isn\'t online :('), { name: 'UserOfflineError' });
+      addLog('🔎 [2/3] Thông tin phòng: đang live');
+    } catch (e) {
+      if (e?.name === 'UserOfflineError' || /isn't online/i.test(String(e?.message))) throw e;
+      addLog(`⚠ [2/3] Bỏ qua thông tin phòng (${String(e?.message || e).slice(0, 160)}), vẫn thử mở WebSocket`);
+    }
+    step = 'mở WebSocket';
+    const st = await conn.connect(roomId);
     tiktok = conn;
-    tiktokState = { status: 'connected', uniqueId, error: '', roomId: st?.roomId || '' };
-    addLog(`✅ Đã kết nối live @${uniqueId}`);
+    tiktokState = { status: 'connected', uniqueId, error: '', roomId: st?.roomId || roomId || '', key: tiktokState.key };
+    addLog(`✅ [3/3] Đã kết nối live @${uniqueId}`);
   } catch (e) {
-    tiktokState = { status: 'error', uniqueId, error: String(e?.message || e) };
-    addLog(`❌ Không kết nối được @${uniqueId}: ${tiktokState.error}`);
+    const hasKey = !!process.env.EULER_API_KEY;
+    tiktokState = { status: 'error', uniqueId, error: explainTikTokError(e, step, hasKey), step, key: hasKey };
+    addLog(`❌ Không kết nối được @${uniqueId} (bước: ${step}): ${tiktokState.error}`);
+    if (e?.message && tiktokState.error !== String(e.message).slice(0, 300)) addLog(`   chi tiết gốc: ${String(e.message).replace(/\s+/g, ' ').slice(0, 200)}`);
   }
   broadcast({ t:'tiktok', ...tiktokState });
 }
