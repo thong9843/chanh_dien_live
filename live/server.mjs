@@ -92,12 +92,12 @@ const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in var
 const settings = {
   title: CONTENT.channel.title,
   subtitle: CONTENT.channel.subtitle,
-  ttsEngine: 'vieneu',               // 'vieneu' (VieNeu Sidecar :5000, auto-fallback Edge) | 'edge'
-  vieneuVoice: 'nam_trang_nghiem',   // Mặc định: Thái Sơn (Nam miền Nam kể chuyện điềm đạm)
-  vieneuSpeed: 0.96,                 // Nhịp đọc điềm đạm, nhẹ nhàng tự nhiên như giọng gốc
-  voice: 'vi-VN-NamMinhNeural',      // Edge fallback voice: vi-VN-NamMinhNeural | vi-VN-HoaiMyNeural
-  pitch: 0,                          // Hz (0Hz = giữ nguyên giọng gốc tự nhiên, không trầm quá mức)
-  rate: -8,                          // % (nhẹ nhàng, điềm đạm)
+  ttsEngine: 'edge',                 // Mặc định: 'edge' (bản gốc Nam Minh) | 'vieneu' (chỉ gọi :5000 khi bật)
+  voice: 'vi-VN-NamMinhNeural',      // vi-VN-NamMinhNeural | vi-VN-HoaiMyNeural
+  pitch: -18,                        // Hz — đúng cấu hình gốc kentjuno/chanh-dien-online
+  rate: -20,                         // %  — đúng cấu hình gốc kentjuno/chanh-dien-online
+  vieneuVoice: 'nam_trang_nghiem',   // Chỉ dùng khi bật ttsEngine = 'vieneu'
+  vieneuSpeed: 1.0,
   music: true, mo: true, moBpm: 52,
   autoChant: true, chantEveryMin: 3,
   seatMode: 'auto',                  // auto | 24 | 36 | 64 | 100
@@ -109,7 +109,7 @@ const settings = {
 const viewers = new Map();           // id -> { id, name, skin, avatar, coins, joinedAt, lastAt, lastText, lastTextAt, demo }
 const startedAt = Date.now();
 let tiktok = null, tiktokState = { status: 'idle', uniqueId: '', error: '' };
-let vieneuState = { online: false, backend: 'checking', url: VIENEU_BASE };
+let vieneuState = { enabled: false, online: false, backend: 'disabled', presetVoice: '', url: VIENEU_BASE };
 const log = [];
 function addLog(s){ const line = `[${new Date().toLocaleTimeString('vi-VN')}] ${s}`; log.push(line); if (log.length > 300) log.shift(); broadcast({ t:'log', line }, 'control'); console.log(line); }
 
@@ -128,18 +128,20 @@ function sanitizeDisplayName(raw){
     .trim();
   return (clean || CONTENT.labels.anonymous).slice(0, 20);
 }
+// Chuẩn hóa tên đọc trong câu: bỏ emoji, ký tự đặc biệt, gạch dưới, số đứng riêng;
+// giữ nguyên tên chữ Latin không dấu; tên dài quá 3 từ cắt còn 3 từ đầu.
 function spoken(raw){
-  const clean = String(raw || '')
+  const words = String(raw || '')
     .normalize('NFC')
-    .replace(/·bot\b/gi, '')
+    .replace(/·bot\b/gi, ' ')
     .replace(/[_@.·-]+/g, ' ')
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\b\d{5,}\b/g, '')               // bỏ dãy số ID dài ở đuôi tên TikTok
-    .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 26)
-    .trim();
-  return clean || CONTENT.labels.anonymous;
+    .split(/\s+/)
+    .filter(w => w && !/^\d+$/.test(w))
+    .slice(0, 3);
+  const result = words.join(' ').slice(0, 48).trim();
+  return result || CONTENT.labels.anonymous;
 }
 function sanitizeGiftName(raw){
   const clean = String(raw || '')
@@ -216,13 +218,14 @@ function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()]
 
 function seat(id, name, opts = {}){
   let v = viewers.get(id);
-  if (v){ v.lastAt = Date.now(); if (opts.avatar) v.avatar = opts.avatar; return { v, isNew:false }; }
+  if (v){ v.lastAt = Date.now(); if (name) v.rawName = String(name).slice(0, 80); if (opts.avatar) v.avatar = opts.avatar; return { v, isNew:false }; }
   if (viewers.size >= 100){                     // full: the longest-quiet non-donor stands up
     const quiet = [...viewers.values()].filter(x => x.coins === 0).sort((a,b) => a.lastAt - b.lastAt)[0];
     if (!quiet) return { v:null, isNew:false };
     viewers.delete(quiet.id); broadcast({ t:'leave', id: quiet.id });
   }
-  v = { id, name: sanitizeDisplayName(name || id), skin: opts.skin || DEFAULT_SKINS[viewers.size % DEFAULT_SKINS.length],
+  const rawName = String(name || id).slice(0, 80);
+  v = { id, rawName, name: sanitizeDisplayName(rawName), skin: opts.skin || DEFAULT_SKINS[viewers.size % DEFAULT_SKINS.length],
         avatar: opts.avatar || '', coins: 0, joinedAt: Date.now(), lastAt: Date.now(), demo: !!opts.demo };
   viewers.set(id, v);
   broadcast({ t:'join', v: pub(v), cap: capacity() });
@@ -263,7 +266,7 @@ function onGift(id, name, giftName, count, diamonds, avatar){
   const highGift = isHighTierGift(cleanGift, coins, tier);
   const scrollMerit = tier >= 2 || coins >= 25 || highGift;
 
-  const spokenName = spoken(v.name);
+  const spokenName = spoken(v.rawName || name || v.name);
   const line = fill(CONTENT.gift.line, {
     name: spokenName,
     gift: cleanGift,
@@ -299,7 +302,7 @@ function onMember(id, name, avatar){
   if (!v || !isNew) return;
   if (settings.readMemberJoin && ttsQueue.length < 3 && Date.now() - lastMemberTtsAt > 12_000){
     lastMemberTtsAt = Date.now();
-    const spokenName = spoken(v.name);
+    const spokenName = spoken(v.rawName || name || v.name);
     const line = fill(CONTENT.member.line, { name: spokenName });
     say(line, { tag: 'member', voice_id: settings.vieneuVoice }, 0);
   }
@@ -315,7 +318,7 @@ function onFollow(id, name, avatar){
   const { v } = seat(id, name, { avatar });
   const who = v ? v.name : sanitizeDisplayName(name);
   broadcast({ t:'follow', id, name: who });
-  say(fill(CONTENT.follow.line, { name: spoken(who) }), { tag:'follow' }, 2);
+  say(fill(CONTENT.follow.line, { name: spoken(v?.rawName || name || who) }), { tag:'follow' }, 2);
 }
 function onShare(name){
   const who = sanitizeDisplayName(name);
@@ -341,32 +344,33 @@ function esc(s){ return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt
 const MAX_Q = 15, MERGE_OVER = 8;
 
 async function checkVieNeuHealth(){
+  if (settings.ttsEngine !== 'vieneu'){
+    if (vieneuState.enabled || vieneuState.online || vieneuState.backend !== 'disabled'){
+      vieneuState = { enabled: false, online: false, backend: 'disabled', presetVoice: '', url: VIENEU_BASE };
+      broadcast({ t: 'vieneu', ...vieneuState }, 'control');
+    }
+    return false;
+  }
   try {
     const res = await fetch(`${VIENEU_BASE}/health`, { signal: AbortSignal.timeout(2200) });
     if (res.ok){
       const data = await res.json();
-      const next = {
+      vieneuState = {
+        enabled: true,
         online: !!data.ok,
         backend: String(data.backend || 'vieneu'),
         presetVoice: String(data.preset_voice || ''),
         url: VIENEU_BASE,
       };
-      if (next.online !== vieneuState.online || next.backend !== vieneuState.backend || next.presetVoice !== vieneuState.presetVoice){
-        vieneuState = next;
-        warnedVieNeuOffline = false;
-        broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-      }
+      warnedVieNeuOffline = false;
+      broadcast({ t: 'vieneu', ...vieneuState }, 'control');
       return true;
     }
   } catch {}
-  if (vieneuState.online || vieneuState.backend === 'checking'){
-    vieneuState = { online: false, backend: 'offline', presetVoice: '', url: VIENEU_BASE };
-    broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-  }
+  vieneuState = { enabled: true, online: false, backend: 'offline', presetVoice: '', url: VIENEU_BASE };
+  broadcast({ t: 'vieneu', ...vieneuState }, 'control');
   return false;
 }
-checkVieNeuHealth();
-setInterval(checkVieNeuHealth, 15_000).unref?.();
 
 // Thang ưu tiên: 4 say thủ công > 3 quà lớn > 2 follow / mốc tim > 1 quà nhỏ > 0 tụng định kỳ / member.
 function say(text, meta = {}, prio = 1){
@@ -448,34 +452,39 @@ function pruneTtsFiles(){
   }
 }
 
+async function synthesizeCurrentEngine(text, voiceId){
+  let result = null;
+  if (settings.ttsEngine === 'vieneu'){
+    try {
+      result = await synthesizeViaVieNeu(text, voiceId);
+      if (!vieneuState.online){
+        vieneuState = { enabled: true, online: true, backend: result.engine, presetVoice: vieneuState.presetVoice || '', url: VIENEU_BASE };
+        broadcast({ t: 'vieneu', ...vieneuState }, 'control');
+      }
+      warnedVieNeuOffline = false;
+    } catch (err) {
+      if (!warnedVieNeuOffline){
+        warnedVieNeuOffline = true;
+        addLog(`ℹ️ VieNeu Sidecar (${VIENEU_BASE}) không phản hồi (${err.message}) → tạm dùng Edge TTS.`);
+      }
+      if (vieneuState.online){
+        vieneuState = { enabled: true, online: false, backend: 'offline', presetVoice: '', url: VIENEU_BASE };
+        broadcast({ t: 'vieneu', ...vieneuState }, 'control');
+      }
+    }
+  }
+  if (!result){
+    result = await synthesizeViaEdge(text);
+  }
+  return result;
+}
+
 async function pumpTTS(){
   if (ttsBusy || !ttsQueue.length) return;
   ttsBusy = true;
   const { text, meta } = ttsQueue.shift();
   try {
-    let result = null;
-    if (settings.ttsEngine === 'vieneu'){
-      try {
-        result = await synthesizeViaVieNeu(text, meta?.voice_id);
-        if (!vieneuState.online){
-          vieneuState = { online: true, backend: result.engine, url: VIENEU_BASE };
-          broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-        }
-        warnedVieNeuOffline = false;
-      } catch (err) {
-        if (!warnedVieNeuOffline){
-          warnedVieNeuOffline = true;
-          addLog(`ℹ️ VieNeu Sidecar (${VIENEU_BASE}) chưa bật (${err.message}) → tự động dùng giọng trầm Edge TTS dự phòng.`);
-        }
-        if (vieneuState.online){
-          vieneuState = { online: false, backend: 'offline', url: VIENEU_BASE };
-          broadcast({ t: 'vieneu', ...vieneuState }, 'control');
-        }
-      }
-    }
-    if (!result){
-      result = await synthesizeViaEdge(text);
-    }
+    const result = await synthesizeCurrentEngine(text, meta?.voice_id);
     const file = `tts_${Date.now()}_${++ttsSeq}.${result.ext}`;
     fs.writeFileSync(path.join(TTS_DIR, file), result.buf);
     broadcast({ t: 'tts', url: `/live/tts/${file}`, text, tag: meta.tag, engine: result.engine });
@@ -485,6 +494,36 @@ async function pumpTTS(){
   }
   ttsBusy = false;
   setTimeout(pumpTTS, 80);
+}
+
+// Tạo file nghe thử cách đọc tên khó riêng trên bảng điều khiển (đọc nguyên câu quà từ content.json, không phát lên overlay)
+async function previewNameTTS(rawName, ws){
+  const raw = String(rawName || '').slice(0, 80);
+  const spokenName = spoken(raw);
+  const giftName = sanitizeGiftName(CONTENT.labels.defaultGift || 'Hoa Sen');
+  const prayer = CONTENT.gift.defaultPrayer || CONTENT.prayers[0] || '';
+  const text = fill(CONTENT.gift.line, {
+    name: spokenName,
+    gift: giftName,
+    count: 1,
+    total: 1,
+    prayer,
+    times: '',
+  }).slice(0, 500);
+  try {
+    const result = await synthesizeCurrentEngine(text, settings.vieneuVoice);
+    const file = `tts_preview_${Date.now()}_${++ttsSeq}.${result.ext}`;
+    fs.writeFileSync(path.join(TTS_DIR, file), result.buf);
+    pruneTtsFiles();
+    if (ws && ws.readyState === 1){
+      ws.send(JSON.stringify({ t: 'preview_tts', url: `/live/tts/${file}`, rawName: raw, spokenName, text }));
+    }
+  } catch (e) {
+    addLog('Nghe thử lỗi: ' + (e?.message || e));
+    if (ws && ws.readyState === 1){
+      ws.send(JSON.stringify({ t: 'preview_tts', error: String(e?.message || e), rawName: raw, spokenName, text }));
+    }
+  }
 }
 
 let chantIdx = 0, chantTimer = null;
@@ -544,14 +583,14 @@ function fillDemo(n){
 function clearSeats(){ viewers.clear(); broadcast(snapshot()); addLog('Đã làm trống bồ đoàn'); }
 
 /* ------------------------------------------------------------- control */
-function onControl(m){
+function onControl(m, ws){
   switch (m.cmd){
     case 'connect': connectTikTok(m.uniqueId); break;
     case 'disconnect': disconnectTikTok(); addLog('Đã ngắt kết nối TikTok'); break;
-    case 'chat': { const n = sanitizeDisplayName(m.name || 'Khách'); onChat('sim_' + n, n, String(m.text || 'Nam mô A Di Đà Phật').slice(0, 120)); break; }
-    case 'oracle': { const n = sanitizeDisplayName(m.name || 'Khách'); const { v } = seat('sim_' + n, n); if (v) triggerOracle(v.id, v.name, v.avatar, true); break; }
-    case 'gift': { const n = sanitizeDisplayName(m.name || 'Khách'); onGift('sim_' + n, n, String(m.gift || 'Hoa Sen').slice(0, 30), clamp(m.count, 1, 99), clamp(m.diamonds, 1, 50000)); break; }
-    case 'follow': { const n = sanitizeDisplayName(m.name || 'Khách'); onFollow('sim_' + n, n); break; }
+    case 'chat': { const raw = String(m.name || 'Khách').slice(0, 80); onChat('sim_' + sanitizeDisplayName(raw), raw, String(m.text || 'Nam mô A Di Đà Phật').slice(0, 120)); break; }
+    case 'oracle': { const raw = String(m.name || 'Khách').slice(0, 80); const { v } = seat('sim_' + sanitizeDisplayName(raw), raw); if (v) triggerOracle(v.id, v.name, v.avatar, true); break; }
+    case 'gift': { const raw = String(m.name || 'Khách').slice(0, 80); onGift('sim_' + sanitizeDisplayName(raw), raw, String(m.gift || 'Hoa Sen').slice(0, 30), clamp(m.count, 1, 99), clamp(m.diamonds, 1, 50000)); break; }
+    case 'follow': { const raw = String(m.name || 'Khách').slice(0, 80); onFollow('sim_' + sanitizeDisplayName(raw), raw); break; }
     case 'share': onShare(m.name || 'Khách'); break;
     case 'likes': onLikes('sim_' + sanitizeDisplayName(m.name || 'Khách'), clamp(m.n, 1, 5000)); break;
     case 'fill': fillDemo(clamp(m.n, 1, 100)); addLog(`Đổ người mẫu: ${viewers.size} người`); break;
@@ -560,9 +599,13 @@ function onControl(m){
     case 'mo': broadcast({ t:'mo1' }); break;
     case 'chant': chant(); break;
     case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say', voice_id: settings.vieneuVoice }, 4); break;
-    case 'settings':
+    case 'test_name': previewNameTTS(m.name, ws); break;
+    case 'settings': {
+      const prevEngine = settings.ttsEngine;
       applySettings(m.settings || {});
+      if (settings.ttsEngine !== prevEngine) checkVieNeuHealth();
       scheduleChant(); broadcast({ t:'settings', settings, cap: capacity() }); break;
+    }
     case 'bots': setBots(!!m.on, +m.n || 12, m.pace); break;
   }
 }
@@ -570,9 +613,9 @@ function onControl(m){
 // Only known keys, right types, sane ranges: the panel is local, but nothing from the socket is trusted blindly.
 const SETTING_RULES = {
   title: v => String(v).slice(0, 40), subtitle: v => String(v).slice(0, 60),
-  ttsEngine: v => ['vieneu', 'edge'].includes(v) ? v : settings.ttsEngine,
+  ttsEngine: v => ['edge', 'vieneu'].includes(v) ? v : settings.ttsEngine,
   vieneuVoice: v => ['nam_trang_nghiem', 'duc_tri_nam', 'adam_nam', 'minh_triet_nam', 'nu_thanh_thoat', 'my_duyen_nu'].includes(v) ? v : settings.vieneuVoice,
-  vieneuSpeed: v => Number.isFinite(+v) ? Math.min(1.3, Math.max(0.65, +(+v).toFixed(2))) : 0.96,
+  vieneuSpeed: v => Number.isFinite(+v) ? Math.min(1.3, Math.max(0.65, +(+v).toFixed(2))) : 1.0,
   voice: v => ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'].includes(v) ? v : settings.voice,
   pitch: v => clamp(v, -50, 50), rate: v => clamp(v, -50, 50), moBpm: v => clamp(v, 20, 120), chantEveryMin: v => clamp(v, 1, 60),
   music: Boolean, mo: Boolean, autoChant: Boolean, joinOnEnter: Boolean, readMemberJoin: Boolean,
@@ -654,7 +697,7 @@ wss.on('connection', (ws, req) => {
   if (ws.role === 'control') ws.send(JSON.stringify({ t:'logs', lines: log }));
   ws.on('message', buf => {
     if (ws.role !== 'control') return;                          // overlays only listen
-    try { const m = JSON.parse(buf); if (m && m.t === 'ctl') onControl(m); } catch (e) { addLog('Lệnh lỗi: ' + e.message); }
+    try { const m = JSON.parse(buf); if (m && m.t === 'ctl') onControl(m, ws); } catch (e) { addLog('Lệnh lỗi: ' + e.message); }
   });
 });
 server.listen(PORT, HOST, () => addLog(`Server chạy tại http://localhost:${PORT}  ·  Bảng điều khiển: http://localhost:${PORT}/live/control.html  ·  Overlay: http://localhost:${PORT}/live/overlay.html`));

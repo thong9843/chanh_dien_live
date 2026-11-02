@@ -377,7 +377,7 @@ function playTTS(){
   const {url,onStart}=ttsQ.shift();
   const el=new Audio(url);
   const src=AC.createMediaElementSource(el);
-  const g=AC.createGain(); g.gain.value=1.28;
+  const g=AC.createGain(); g.gain.value=1.25;
   src.connect(g); g.connect(master);
   el.onplay=()=>{ duck(true); onStart&&onStart(); };
   el.onended=el.onerror=()=>{ duck(false); ttsPlaying=false; setTimeout(playTTS,380); };

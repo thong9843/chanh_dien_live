@@ -154,113 +154,12 @@ def sanitize_vietnamese_text(text: str) -> str:
     return cleaned or "Nam mô A Di Đà Phật."
 
 
-def wsola_time_stretch(wav: np.ndarray, sample_rate: int, speed: float) -> np.ndarray:
-    """
-    Điều chỉnh tốc độ đọc bằng thuật toán WSOLA (Waveform Similarity Overlap-Add)
-    giúp GIỮ NGUYÊN 100% CAO ĐỘ (PITCH) VÀ ÂM SẮC TỰ NHIÊN của giọng gốc,
-    tuyệt đối không làm trầm giọng hay méo tiếng.
-    """
-    speed = float(np.clip(speed, 0.65, 1.35))
-    if abs(speed - 1.0) <= 0.025 or len(wav) < sample_rate // 10:
-        return wav
-
-    win_len = int(round(0.032 * sample_rate))  # cửa sổ 32ms
-    if win_len % 2 == 1:
-        win_len += 1
-    hop_s = win_len // 2                       # bước tổng hợp 16ms (50% Hann overlap)
-    hop_a = max(1, int(round(hop_s * speed)))  # bước phân tích theo tốc độ
-    tol = int(round(0.010 * sample_rate))      # vùng tìm kiếm tương quan pha ±10ms
-
-    window = np.hanning(win_len).astype(np.float32)
-    n_in = len(wav)
-    est_out = int(round(n_in / speed)) + win_len * 2
-    out = np.zeros(est_out, dtype=np.float32)
-    norm = np.zeros(est_out, dtype=np.float32)
-
-    in_pos = 0
-    out_pos = 0
-    out[:win_len] += wav[:win_len] * window
-    norm[:win_len] += window
-    natural_next = hop_s
-
-    while in_pos + hop_a + win_len + tol < n_in and out_pos + hop_s + win_len < est_out:
-        in_pos += hop_a
-        out_pos += hop_s
-
-        # Tìm vị trí khớp pha tốt nhất quanh in_pos để nối chu kỳ thanh quản mượt mà
-        best_offset = 0
-        if natural_next + hop_s <= n_in:
-            ref_tail = wav[natural_next : natural_next + hop_s]
-            ref_energy = float(np.dot(ref_tail, ref_tail))
-            if ref_energy > 1e-6:
-                lo = max(0, in_pos - tol)
-                hi = min(n_in - win_len, in_pos + tol)
-                if hi > lo:
-                    # Lấy mẫu bước nhảy 4 để tối ưu tốc độ trên 48kHz
-                    step = 4 if sample_rate >= 40000 else 2
-                    candidates = range(lo, hi, step)
-                    best_score = -1e18
-                    r_sub = ref_tail[::2]
-                    for c_pos in candidates:
-                        cand_sub = wav[c_pos : c_pos + hop_s : 2]
-                        score = float(np.dot(r_sub, cand_sub))
-                        if score > best_score:
-                            best_score = score
-                            best_offset = c_pos - in_pos
-
-        actual_pos = in_pos + best_offset
-        frame = wav[actual_pos : actual_pos + win_len]
-        out[out_pos : out_pos + win_len] += frame * window
-        norm[out_pos : out_pos + win_len] += window
-        natural_next = actual_pos + hop_s
-
-    valid_len = out_pos + win_len
-    out = out[:valid_len]
-    norm = norm[:valid_len]
-    mask = norm > 1e-4
-    out[mask] /= norm[mask]
-    return out
-
-
-def finalize_natural_audio(
-    samples: np.ndarray,
-    sample_rate: int,
-    speed: float = 0.96,
-) -> tuple[np.ndarray, int]:
-    """
-    Hậu kỳ tối giản, tinh sạch:
-    - Giữ nguyên dải tần 48kHz & cao độ tự nhiên của giọng gốc (không hạ pitch, không lọc bí).
-    - Nếu speed != 1.0 thì co giãn thời gian bằng WSOLA không đổi tông.
-    - Chuẩn hóa âm lượng dịu nhẹ (-2.0 dBFS) + fade mượt 12ms đầu/cuối.
-    """
+def encode_wav_bytes(samples: np.ndarray, sample_rate: int) -> bytes:
+    """Xuất trực tiếp mảng float32 [-1, 1] gốc của TTS ra RIFF WAV PCM 16-bit mono (không qua xử lý hậu kỳ)."""
     wav = np.asarray(samples, dtype=np.float32)
     if wav.ndim > 1:
         wav = wav.mean(axis=-1)
-    if wav.size == 0:
-        return np.zeros(int(sample_rate * 0.15), dtype=np.float32), sample_rate
-
-    if abs(speed - 1.0) > 0.025:
-        wav = wsola_time_stretch(wav, sample_rate, speed)
-
-    fade_n = min(int(sample_rate * 0.012), len(wav) // 4)
-    if fade_n > 1:
-        ramp = np.linspace(0.0, 1.0, fade_n, dtype=np.float32)
-        wav[:fade_n] *= ramp
-        wav[-fade_n:] *= ramp[::-1]
-
-    peak = float(np.max(np.abs(wav)))
-    if peak > 1e-5:
-        # Âm lượng vừa phải, êm dịu (-2 dBFS ~ 0.79) không gắt tiếng
-        wav = wav * (0.79 / peak)
-
-    tail_silence = np.zeros(int(sample_rate * 0.10), dtype=np.float32)
-    wav = np.concatenate([wav, tail_silence])
-    return wav, sample_rate
-
-
-def encode_wav_bytes(samples: np.ndarray, sample_rate: int) -> bytes:
-    """Đóng gói mảng float32 [-1, 1] thành bytes định dạng RIFF WAV PCM 16-bit mono."""
-    pcm16 = np.clip(samples * 32767.0, -32768, 32767).astype(np.int16)
+    pcm16 = np.clip(wav * 32767.0, -32768, 32767).astype(np.int16)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)
@@ -435,8 +334,7 @@ class VieNeuEngineManager:
         if audio_arr is None:
             raise RuntimeError("VieNeu không trả về dữ liệu âm thanh")
 
-        processed, out_sr = finalize_natural_audio(audio_arr, sr, speed=speed)
-        return encode_wav_bytes(processed, out_sr)
+        return encode_wav_bytes(audio_arr, sr)
 
     async def _infer_edge_fallback(self, text: str, profile: dict, speed: float) -> tuple[bytes, str]:
         import edge_tts  # type: ignore
