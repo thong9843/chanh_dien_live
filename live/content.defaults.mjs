@@ -146,6 +146,12 @@ export default {
       "yBot": 1870,
       "halfTop": 330,
       "halfBot": 470
+    },
+    "gift": {
+      "top": 1110
+    },
+    "chant": {
+      "top": 1210
     }
   }
 };
