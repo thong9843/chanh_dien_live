@@ -78,6 +78,11 @@ button.red{background:var(--red);border-color:#b84a33}
       <button class="gold" id="btnOracle">📜 Rút Quẻ Cầu An (!xinquẻ)</button>
     </div>
     <div class="row">
+      <button class="gold" data-ceremony="incense">🕯️ !thắp nhang</button>
+      <button class="gold" data-ceremony="worship">🙇 !cúng bái</button>
+      <button class="gold" data-ceremony="prostrate">🪷 !quỳ lạy</button>
+    </div>
+    <div class="row">
       <button data-gift="Hoa hồng" data-dia="1">Hoa hồng · 1</button>
       <button data-gift="Hoa Sen" data-dia="30">🪷 Hoa Sen · 30</button>
       <button data-gift="Chuông vàng" data-dia="199">🔔 Chuông · 199</button>
@@ -255,6 +260,7 @@ $('btnDisconnect').onclick = () => send('disconnect');
 $('btnOverlay').onclick = () => window.open('/live/overlay.html', 'overlay916', 'width=540,height=960');
 $('btnChat').onclick = () => send('chat', { name: $('simName').value, text: $('simText').value });
 $('btnOracle').onclick = () => send('oracle', { name: $('simName').value });
+document.querySelectorAll('[data-ceremony]').forEach(b => b.onclick = () => send('ceremony', { name: $('simName').value, kind: b.dataset.ceremony }));
 document.querySelectorAll('[data-gift]').forEach(b => b.onclick = () => send('gift', { name: $('simName').value, gift: b.dataset.gift, diamonds: +b.dataset.dia, count: 1 }));
 document.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => send('fill', { n: +b.dataset.fill }));
 $('btnFollow').onclick = () => send('follow', { name: $('simName').value });

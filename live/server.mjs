@@ -45,6 +45,7 @@ function loadContent(){
   const cr = o('credit'), em = Array.isArray(cr.everyMin) && cr.everyMin.length === 2 ? cr.everyMin : D.credit.everyMin;
   const lo = cNum(em[0], .05, 600, 5), hi = cNum(em[1], .05, 600, 10);
   const zm = o('zoom'), dz = D.zoom;
+  const ce = o('ceremony'), dce = D.ceremony;
   return {
     channel: { title: cStr(o('channel').title, D.channel.title, 40), subtitle: cStr(o('channel').subtitle, D.channel.subtitle, 60) },
     labels, gift, oracles,
@@ -67,12 +68,35 @@ function loadContent(){
       cooldownSec: cNum(zm.cooldownSec, 0, 300, dz.cooldownSec),
       maxQueue: Math.round(cNum(zm.maxQueue, 0, 20, dz.maxQueue)),
     },
+    ceremony: {
+      inviteText: cStr(ce.inviteText, dce.inviteText, 120),
+      fadeSec: cNum(ce.fadeSec, 0.2, 3, dce.fadeSec),
+      incenseBoostSec: cNum(ce.incenseBoostSec, 1, 30, dce.incenseBoostSec),
+      inviteSec: cNum(ce.inviteSec, 1, 10, dce.inviteSec),
+      gapSec: cNum(ce.gapSec, 0, 10, dce.gapSec),
+      incenseHoldSec: cNum(ce.incenseHoldSec, 0.5, 10, dce.incenseHoldSec),
+      tailSec: cNum(ce.tailSec, 0, 3, dce.tailSec),
+      bow: (() => {
+        const b = (ce.bow && typeof ce.bow === 'object' && !Array.isArray(ce.bow)) ? ce.bow : {}, db = dce.bow;
+        return {
+          dropPct: cNum(b.dropPct, 0, 0.12, db.dropPct), squashPct: cNum(b.squashPct, 0, 0.15, db.squashPct),
+          leanPx: cNum(b.leanPx, 0, 12, db.leanPx),
+          downSec: cNum(b.downSec, 0.2, 5, db.downSec), holdSec: cNum(b.holdSec, 0, 6, db.holdSec),
+          upSec: cNum(b.upSec, 0.2, 5, db.upSec), prostrateHoldSec: cNum(b.prostrateHoldSec, 0, 8, db.prostrateHoldSec),
+          pauseSec: cNum(b.pauseSec, 0, 3, db.pauseSec),
+        };
+      })(),
+      maxQueue: Math.round(cNum(ce.maxQueue, 1, 20, dce.maxQueue)),
+      cooldownSec: cNum(ce.cooldownSec, 0, 3600, dce.cooldownSec),
+      bannerTop: cNum(ce.bannerTop, 0, 1850, dce.bannerTop),
+    },
     layout: (() => {
       const L = o('layout'), D = DEFAULT_CONTENT.layout, sub = k => (L[k] && typeof L[k] === 'object' && !Array.isArray(L[k])) ? L[k] : {};
       const n = (src, def, k, lo, hi) => cNum(src[k], lo, hi, def[k]);
       const fl = sub('floor'), df = D.floor;
       let yTop = n(fl, df, 'yTop', 0, 1920), yBot = n(fl, df, 'yBot', 0, 1920); if (yTop >= yBot){ yTop = df.yTop; yBot = df.yBot; }
       const g = sub('candleGlow'), dg = D.candleGlow, h = sub('halo'), dh = D.halo;
+      const as = sub('altarSpot'), das = D.altarSpot;
       const tl = Array.isArray(L.teachers) && L.teachers.length ? L.teachers.slice(0, 8) : D.teachers;
       return {
         halo: { y: n(h, dh, 'y', -500, 2500), scale: n(h, dh, 'scale', .05, 5), alpha: n(h, dh, 'alpha', 0, 1) },
@@ -84,6 +108,12 @@ function loadContent(){
         toast: { top: cNum(sub('toast').top, 0, 1800, D.toast.top) },
         gift: { top: cNum(sub('gift').top, 0, 1800, D.gift.top) }, chant: { top: cNum(sub('chant').top, 0, 1800, D.chant.top) },
         floor: { yTop, yBot, halfTop: n(fl, df, 'halfTop', 50, 540), halfBot: n(fl, df, 'halfBot', 50, 540) },
+        altarSpot: {
+          x: n(as, das, 'x', 120, 960),
+          y: n(as, das, 'y', 900, 1850),
+          scale: n(as, das, 'scale', 0.15, 1.5),
+          masterShiftX: n(as, das, 'masterShiftX', -400, 400),
+        },
       };
     })(),
     credit: { enabled: typeof cr.enabled === 'boolean' ? cr.enabled : D.credit.enabled, text: cStr(cr.text, D.credit.text, 120),
@@ -96,6 +126,7 @@ const CLIENT_CONTENT = {
   milestone: { text: CONTENT.milestone.text, showSec: CONTENT.milestone.showSec },
   gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown },
   zoom: CONTENT.zoom,
+  ceremony: CONTENT.ceremony,
   credit: CONTENT.credit,
 };
 const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
@@ -227,11 +258,137 @@ function isHighTierGift(giftName, coins, tier){
 function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo }; }
 function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, content: CLIENT_CONTENT }; }
 
-/* ------------------------------------------- Silent mode & Camera Zoom */
+/* ------------------------------------------- Silent mode, Altar Ceremony & Camera Zoom */
 const zoomQueue = [];
 let zoomNextAt = 0, zoomTimer = null;
 
-function isAtAltarSpot(_id){ return false; }
+// Trạng thái Lên lễ Phật (!thắp nhang, !cúng bái, !quỳ lạy): mỗi lúc 1 người, hàng chờ tối đa 5,
+// cooldown 5 phút/người (chỉ tính từ lúc người đó BẮT ĐẦU hành lễ), nghỉ gapSec giữa 2 người.
+// Server là nguồn thời gian duy nhất: overlay chỉ chạy theo bản tin 'ceremony', không gửi lệnh ngược.
+let ceremonyActive = null; // { id, name, kind, endsAt }
+const ceremonyQueue = [];  // [{ id, kind }]
+const ceremonyCooldowns = new Map();
+let ceremonyTimer = null, ceremonyGapTimer = null, ceremonyNextAt = 0;
+
+function isAtAltarSpot(id){
+  return !!(ceremonyActive && ceremonyActive.id === id);
+}
+
+// Giữ chỗ ngồi của người đang lên lễ (và trong hàng chờ lễ), không nhường cho người mới
+function isProtectedCeremonyViewer(id){
+  return isAtAltarSpot(id) || ceremonyQueue.some(q => q.id === id);
+}
+
+function stripAccents(str){
+  return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, 'd');
+}
+
+function parseCeremonyCommand(text){
+  const norm = stripAccents(text).toLowerCase().replace(/\s+/g, ' ').trim();
+  if (/(?:^|\s)!\s*thap\s*nhang(?:\b|$)/.test(norm)) return 'incense';
+  if (/(?:^|\s)!\s*cung\s*bai(?:\b|$)/.test(norm)) return 'worship';
+  if (/(?:^|\s)!\s*quy\s*lay(?:\b|$)/.test(norm)) return 'prostrate';
+  return null;
+}
+
+// Tổng thời gian 1 lượt lễ (giây) = 4 lần mờ + thời gian hành lễ, tính từ cùng số liệu content.json mà overlay dùng
+function computeCeremonyDurationSec(kind){
+  const c = CONTENT.ceremony, b = c.bow;
+  const bowSec = hold => b.downSec + hold + b.upSec;
+  let perform;
+  if (kind === 'incense') perform = c.incenseHoldSec + bowSec(b.holdSec);
+  else if (kind === 'worship') perform = bowSec(b.holdSec) * 3 + b.pauseSec * 2;
+  else perform = bowSec(b.prostrateHoldSec);
+  return c.fadeSec * 4 + perform + c.tailSec;
+}
+
+function resetCeremony(){
+  ceremonyActive = null;
+  ceremonyQueue.length = 0;
+  ceremonyCooldowns.clear();
+  ceremonyNextAt = 0;
+  clearTimeout(ceremonyTimer); ceremonyTimer = null;
+  clearTimeout(ceremonyGapTimer); ceremonyGapTimer = null;
+}
+
+function startCeremony(v, kind){
+  // Xoá mọi mục zoom đang chờ của người này (không zoom vào người đang ở điểm lễ)
+  for (let i = zoomQueue.length - 1; i >= 0; i--){
+    if (zoomQueue[i].id === v.id) zoomQueue.splice(i, 1);
+  }
+  const c = CONTENT.ceremony;
+  const totalSec = computeCeremonyDurationSec(kind);
+  const now = Date.now();
+  ceremonyActive = { id: v.id, name: v.name, kind, endsAt: now + totalSec * 1000 };
+  ceremonyCooldowns.set(v.id, now); // cooldown chỉ tính khi bắt đầu hành lễ
+
+  const labelMap = { incense: '!thắp nhang', worship: '!cúng bái', prostrate: '!quỳ lạy' };
+  addLog(`🙏 Mời Phật tử ${v.name} lên lễ Phật (${labelMap[kind] || kind})`);
+
+  broadcast({
+    t: 'ceremony',
+    id: v.id,
+    name: v.name,
+    kind,
+    inviteText: fill(c.inviteText, { name: v.name }),
+    inviteSec: c.inviteSec,
+    fadeSec: c.fadeSec,
+    incenseBoostSec: c.incenseBoostSec,
+    incenseHoldSec: c.incenseHoldSec,
+    tailSec: c.tailSec,
+    bow: c.bow,
+    totalSec,
+  });
+
+  clearTimeout(ceremonyTimer);
+  ceremonyTimer = setTimeout(finishCeremony, Math.round(totalSec * 1000));
+  ceremonyTimer.unref?.();
+}
+
+function finishCeremony(){
+  ceremonyTimer = null;
+  ceremonyActive = null;
+  ceremonyNextAt = Date.now() + CONTENT.ceremony.gapSec * 1000; // nghỉ giữa 2 người lên lễ
+  scheduleNextCeremony();
+}
+
+function scheduleNextCeremony(){
+  clearTimeout(ceremonyGapTimer); ceremonyGapTimer = null;
+  if (ceremonyActive || !ceremonyQueue.length) return;
+  const wait = Math.max(0, ceremonyNextAt - Date.now());
+  ceremonyGapTimer = setTimeout(() => {
+    ceremonyGapTimer = null;
+    while (ceremonyQueue.length){
+      const next = ceremonyQueue.shift();
+      const v = viewers.get(next.id);
+      if (v){ startCeremony(v, next.kind); return; } // người đã rời phòng thì bỏ qua, không tính cooldown
+    }
+  }, wait);
+  ceremonyGapTimer.unref?.();
+}
+
+function requestCeremony(id, kind, bypassUserCooldown = false){
+  const v = viewers.get(id);
+  if (!v || !['incense', 'worship', 'prostrate'].includes(kind)) return false;
+  if (isProtectedCeremonyViewer(id)) return false;
+
+  const now = Date.now();
+  if (!bypassUserCooldown){
+    const last = ceremonyCooldowns.get(id) || 0;
+    if (now - last < CONTENT.ceremony.cooldownSec * 1000) return false;
+  }
+
+  if (!ceremonyActive && !ceremonyQueue.length && now >= ceremonyNextAt){
+    startCeremony(v, kind);
+    return true;
+  }
+
+  if (ceremonyQueue.length >= CONTENT.ceremony.maxQueue) return false;
+  ceremonyQueue.push({ id, kind });
+  addLog(`🙏 ${v.name} vào hàng chờ lễ Phật (${ceremonyQueue.length}/${CONTENT.ceremony.maxQueue})`);
+  scheduleNextCeremony();
+  return true;
+}
 
 function setSilentUntil(untilMs){
   clearTimeout(silentEndTimer); silentEndTimer = null;
@@ -314,8 +471,8 @@ function enqueueZoom(id, reason){
 function seat(id, name, opts = {}){
   let v = viewers.get(id);
   if (v){ v.lastAt = Date.now(); if (name) v.rawName = String(name).slice(0, 80); if (opts.avatar) v.avatar = opts.avatar; return { v, isNew:false }; }
-  if (viewers.size >= 100){                     // full: the longest-quiet non-donor stands up
-    const quiet = [...viewers.values()].filter(x => x.coins === 0).sort((a,b) => a.lastAt - b.lastAt)[0];
+  if (viewers.size >= 100){                     // full: the longest-quiet non-donor (not in ceremony) stands up
+    const quiet = [...viewers.values()].filter(x => x.coins === 0 && !isProtectedCeremonyViewer(x.id)).sort((a,b) => a.lastAt - b.lastAt)[0];
     if (!quiet) return { v:null, isNew:false };
     viewers.delete(quiet.id); broadcast({ t:'leave', id: quiet.id });
   }
@@ -336,13 +493,16 @@ function onChat(id, name, text, avatar){
   if (!v) return;
   if (!isNew && want && want !== v.skin){ v.skin = want; broadcast({ t:'skin', id, skin: want }); }
 
-  const askOracle = isOracleRequest(text);
-  if (!askOracle && !want){
+  const ceremonyKind = parseCeremonyCommand(text);
+  const askOracle = !ceremonyKind && isOracleRequest(text);
+  if (!ceremonyKind && !askOracle && !want){
     v.lastText = text;
     v.lastTextAt = Date.now();
   }
   broadcast({ t:'chat', id, name: v.name, text });
-  if (askOracle){
+  if (ceremonyKind){
+    requestCeremony(v.id, ceremonyKind, false);
+  } else if (askOracle){
     triggerOracle(v.id, v.name, v.avatar, String(id).startsWith('sim_'));
   }
 }
@@ -409,7 +569,7 @@ function onMember(id, name, avatar){
 
 /* follow / share / mốc tim. "Buổi" = từ lúc chạy server đến lúc kết nối sang phòng khác. */
 const followed = new Set(); let likeTotal = 0, mileDone = null;
-function resetSession(){ followed.clear(); likeTotal = 0; mileDone = null; resetZoom(); }
+function resetSession(){ followed.clear(); likeTotal = 0; mileDone = null; resetZoom(); resetCeremony(); }
 function onFollow(id, name, avatar){
   id = String(id || '').slice(0, 64); if (!id) return;
   if (followed.has(id)) return;
@@ -598,7 +758,7 @@ function fillDemo(n){
     seat('demo_' + i, name, { demo: true, skin: ['man','woman','woman','man','granny','monk','nun','child'][i % 8] });
   }
 }
-function clearSeats(){ viewers.clear(); resetZoom(); broadcast(snapshot()); addLog('Đã làm trống bồ đoàn'); }
+function clearSeats(){ viewers.clear(); resetZoom(); resetCeremony(); broadcast(snapshot()); addLog('Đã làm trống bồ đoàn'); }
 
 /* ------------------------------------------------------------- control */
 function onControl(m, ws){
@@ -607,6 +767,13 @@ function onControl(m, ws){
     case 'disconnect': disconnectTikTok(); addLog('Đã ngắt kết nối TikTok'); break;
     case 'chat': { const raw = String(m.name || 'Khách').slice(0, 80); onChat('sim_' + sanitizeDisplayName(raw), raw, String(m.text || 'Nam mô A Di Đà Phật').slice(0, 120)); break; }
     case 'oracle': { const raw = String(m.name || 'Khách').slice(0, 80); const { v } = seat('sim_' + sanitizeDisplayName(raw), raw); if (v) triggerOracle(v.id, v.name, v.avatar, true); break; }
+    case 'ceremony': {
+      const raw = String(m.name || 'Khách').slice(0, 80);
+      const kind = ['incense', 'worship', 'prostrate'].includes(m.kind) ? m.kind : 'incense';
+      const { v } = seat('sim_' + sanitizeDisplayName(raw), raw);
+      if (v) requestCeremony(v.id, kind, true);
+      break;
+    }
     case 'gift': { const raw = String(m.name || 'Khách').slice(0, 80); onGift('sim_' + sanitizeDisplayName(raw), raw, String(m.gift || 'Hoa Sen').slice(0, 30), clamp(m.count, 1, 99), clamp(m.diamonds, 1, 50000)); break; }
     case 'follow': { const raw = String(m.name || 'Khách').slice(0, 80); onFollow('sim_' + sanitizeDisplayName(raw), raw); break; }
     case 'test_zoom': { const raw = String(m.name || 'Khách').slice(0, 80); const { v } = seat('sim_' + sanitizeDisplayName(raw), raw); if (v) enqueueZoom(v.id, 'test'); break; }
@@ -661,7 +828,7 @@ function setBots(on, n, pace){
     }, every);
     addLog(`🤖 Bật ${n} bot, nhịp ${pace}`);
   } else {
-    for (const id of [...viewers.keys()]) if (id.startsWith('bot_')) { viewers.delete(id); broadcast({ t:'leave', id }); }
+    for (const id of [...viewers.keys()]) if (id.startsWith('bot_') && !isProtectedCeremonyViewer(id)) { viewers.delete(id); broadcast({ t:'leave', id }); }
     addLog('🤖 Tắt bot');
   }
   broadcast({ t:'bots', on }, 'control');

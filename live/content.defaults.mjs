@@ -19,6 +19,7 @@ export default {
     "lines": [
       "💬 **Bình luận bất kỳ** để bước vào thiền",
       "Gõ **nam · nữ · sư · ni · tiểu · bà · cao tăng** đổi hình",
+      "🙏 Gõ **!thắp nhang · !cúng bái · !quỳ lạy** lên lễ Phật",
       "📜 Gõ **!xinquẻ · Cầu an · Tĩnh tâm** nhận lời Phật dạy",
       "🎁 Cúng dường được **xướng tên & ghi Sổ Vàng**"
     ]
@@ -135,6 +136,28 @@ export default {
     "cooldownSec": 20,
     "maxQueue": 3
   },
+  "ceremony": {
+    "inviteText": "🙏 Mời Phật tử {name} lên lễ Phật",
+    "fadeSec": 0.6,
+    "incenseBoostSec": 6,
+    "inviteSec": 3,
+    "gapSec": 0.8,
+    "incenseHoldSec": 2.2,
+    "tailSec": 0.35,
+    "maxQueue": 5,
+    "cooldownSec": 300,
+    "bannerTop": 1700,
+    "bow": {
+      "dropPct": 0.11,
+      "squashPct": 0.10,
+      "leanPx": 2,
+      "downSec": 0.9,
+      "holdSec": 0.6,
+      "upSec": 0.9,
+      "prostrateHoldSec": 1.5,
+      "pauseSec": 0.3
+    }
+  },
   "demo": {
     "names": [
       "Diệu Hạnh",
@@ -231,6 +254,12 @@ export default {
       "yBot": 1870,
       "halfTop": 330,
       "halfBot": 470
+    },
+    "altarSpot": {
+      "x": 540,
+      "y": 1415,
+      "scale": 0.52,
+      "masterShiftX": -120
     },
     "gift": {
       "top": 940

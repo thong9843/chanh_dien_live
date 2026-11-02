@@ -87,202 +87,96 @@
   }
 
   /* =========================================================================
-   * 2. BỘ TỔNG HỢP SPRITE SHEET QUỲ LẠY 12 FRAMES (12-FRAME BOWING SEQUENCE)
-   *    - Frames 0..2  (1-3):  Chắp tay trước ngực, từ từ quỳ xuống
-   *    - Frames 3..5  (4-6):  Cúi gập người, hai tay chạm chiếu/bồ đoàn
-   *    - Frames 6..8  (7-9):  Trụ gối, trán chạm thảm lạy sâu
-   *    - Frames 9..11 (10-12): Từ từ nâng người dậy, trở về tư thế chắp tay
+   * 2. CÚI LẠY ĐƠN GIẢN (3 thao tác nhẹ trên nguyên ảnh nhân vật, KHÔNG warp)
+   *    - Hạ cả người xuống tối đa dropPct chiều cao ảnh (bồ đoàn giữ nguyên chỗ).
+   *    - Nén dọc phần thân (từ thắt lưng đến vai) tối đa squashPct; vùng đầu KHÔNG nén,
+   *      chỉ dịch xuống theo vai nên đầu luôn nhìn thấy đủ.
+   *    - Ngả nhẹ về phía bàn thờ: nửa trên dịch lên leanPx (xa camera).
+   *    Mọi biên độ & thời gian lấy từ content.json → ceremony.bow (setBowConfig).
    * ========================================================================= */
 
-  // Thông số tư thế cho từng frame trong chuỗi 12 frames:
-  // bend: độ gập thân trên (0 = thẳng lưng, 1 = trán chạm thảm lạy sâu)
-  // kneel: độ hạ trọng tâm gối xuống bồ đoàn
-  // clasp: mức chắp tay trước ngực (1 = chắp tay búp sen, 0 = hai tay trải chạm chiếu)
-  // matHands: độ vươn hai bàn tay chạm chiếu phía trước
-  // reverenceGlow: ánh sáng thành tâm ở trán khi lạy sát đất
-  const BOW_KEYFRAMES_12 = [
-    // Frames 1-3: Chắp tay trước ngực, từ từ quỳ xuống
-    { bend: 0.02, kneel: 0.10, clasp: 0.85, matHands: 0.00, reverenceGlow: 0.00, dur: 0.14 },
-    { bend: 0.06, kneel: 0.35, clasp: 1.00, matHands: 0.00, reverenceGlow: 0.00, dur: 0.14 },
-    { bend: 0.14, kneel: 0.65, clasp: 0.90, matHands: 0.08, reverenceGlow: 0.00, dur: 0.14 },
-    // Frames 4-6: Cúi gập người, hai tay chạm chiếu/bồ đoàn
-    { bend: 0.34, kneel: 0.85, clasp: 0.40, matHands: 0.42, reverenceGlow: 0.00, dur: 0.13 },
-    { bend: 0.58, kneel: 0.95, clasp: 0.05, matHands: 0.78, reverenceGlow: 0.10, dur: 0.13 },
-    { bend: 0.80, kneel: 1.00, clasp: 0.00, matHands: 0.96, reverenceGlow: 0.25, dur: 0.14 },
-    // Frames 7-9: Trụ gối, trán chạm thảm lạy sâu
-    { bend: 0.95, kneel: 1.00, clasp: 0.00, matHands: 1.00, reverenceGlow: 0.65, dur: 0.18 },
-    { bend: 1.00, kneel: 1.00, clasp: 0.00, matHands: 1.00, reverenceGlow: 1.00, dur: 0.28 },
-    { bend: 0.94, kneel: 1.00, clasp: 0.00, matHands: 1.00, reverenceGlow: 0.60, dur: 0.17 },
-    // Frames 10-12: Từ từ nâng người dậy, trở về tư thế chắp tay
-    { bend: 0.66, kneel: 0.90, clasp: 0.20, matHands: 0.65, reverenceGlow: 0.15, dur: 0.14 },
-    { bend: 0.32, kneel: 0.55, clasp: 0.75, matHands: 0.18, reverenceGlow: 0.00, dur: 0.14 },
-    { bend: 0.05, kneel: 0.15, clasp: 1.00, matHands: 0.00, reverenceGlow: 0.00, dur: 0.15 },
-  ];
+  const BOW_DEFAULT = {
+    dropPct: 0.11, squashPct: 0.10, leanPx: 2,
+    downSec: 0.9, holdSec: 0.6, upSec: 0.9, prostrateHoldSec: 1.5, pauseSec: 0.3,
+  };
+  const BOW_LIMITS = {
+    dropPct: [0, 0.12], squashPct: [0, 0.15], leanPx: [0, 12],
+    downSec: [0.2, 5], holdSec: [0, 6], upSec: [0.2, 5], prostrateHoldSec: [0, 8], pauseSec: [0, 3],
+  };
+  const BOW_CFG = Object.assign({}, BOW_DEFAULT);
 
-  const bowSheetCache = new Map();
-
-  function getOrBuildBowSheet(skinKey, img) {
-    if (!img || !img.naturalWidth) return null;
-    const cached = bowSheetCache.get(skinKey);
-    if (cached && cached.srcW === img.naturalWidth) return cached;
-
-    const sw = img.naturalWidth;
-    const sh = img.naturalHeight;
-    // Mở rộng khung vẽ nhẹ để tay chạm chiếu & ánh hào quang lễ lạy không bị cắt
-    const padX = Math.round(sw * 0.24);
-    const padY = Math.round(sh * 0.10);
-    const fw = sw + padX * 2;
-    const fh = sh + padY;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = fw * 12;
-    canvas.height = fh;
-    const c = canvas.getContext('2d');
-
-    // Chia phần thân trên (đầu + lưng: 0..68% chiều cao) thành các lát ngang mượt,
-    // giữ nguyên phần chân/bồ đoàn (68%..100%) cố định trên mặt sàn.
-    const hipRatio = 0.68;
-    const hipY = Math.floor(sh * hipRatio);
-    const baseH = sh - hipY;
-    const slices = 22;
-
-    for (let f = 0; f < 12; f++) {
-      const kf = BOW_KEYFRAMES_12[f];
-      const ox = f * fw + padX;
-      const oy = padY;
-
-      c.save();
-
-      // 1. Vẽ phần bồ đoàn + hai gối trụ vững dưới sàn
-      const baseCompressY = 1 - kf.kneel * 0.06;
-      const baseWidenX = 1 + kf.kneel * 0.04;
-      const dstBaseW = sw * baseWidenX;
-      const dstBaseH = baseH * baseCompressY;
-      const dstBaseX = ox + (sw - dstBaseW) * 0.5;
-      const dstBaseY = oy + sh - dstBaseH;
-      c.drawImage(img, 0, hipY, sw, baseH, dstBaseX, dstBaseY, dstBaseW, dstBaseH);
-
-      // 2. Vẽ hai bàn tay trải ra chạm chiếu phía trước khi cúi lạy (Frames 4-10)
-      if (kf.matHands > 0.02) {
-        const handAlpha = clamp(kf.matHands, 0, 1);
-        const reachY = oy + sh - baseH * 0.24 + kf.bend * (sh * 0.055);
-        const spreadX = sw * (0.19 - kf.bend * 0.04);
-        const cx = ox + sw * 0.5;
-
-        c.save();
-        c.globalAlpha = 0.92 * handAlpha;
-        // Bóng tay nhẹ trên chiếu
-        c.fillStyle = 'rgba(28, 12, 4, 0.36)';
-        c.beginPath();
-        c.ellipse(cx - spreadX, reachY + 4, sw * 0.075, sh * 0.026, -0.25, 0, Math.PI * 2);
-        c.ellipse(cx + spreadX, reachY + 4, sw * 0.075, sh * 0.026, 0.25, 0, Math.PI * 2);
-        c.fill();
-
-        // Hai bàn tay úp trang nghiêm trên thảm
-        const palmGrad = c.createRadialGradient(cx, reachY, 2, cx, reachY, sw * 0.3);
-        palmGrad.addColorStop(0, '#f6cfa6');
-        palmGrad.addColorStop(1, '#d9a477');
-        c.fillStyle = palmGrad;
-        c.strokeStyle = 'rgba(70, 32, 12, 0.55)';
-        c.lineWidth = 1.5;
-        c.beginPath();
-        c.ellipse(cx - spreadX, reachY, sw * 0.062, sh * 0.023, -0.28, 0, Math.PI * 2);
-        c.fill();
-        c.stroke();
-        c.beginPath();
-        c.ellipse(cx + spreadX, reachY, sw * 0.062, sh * 0.023, 0.28, 0, Math.PI * 2);
-        c.fill();
-        c.stroke();
-        c.restore();
-      }
-
-      // 3. Nội suy đa lát (Multi-slice Mesh Deformation) cho thân trên + đầu khi cúi gập lạy sâu
-      const sliceSrcH = hipY / slices;
-      // Khi bend = 1 (lạy sát thảm): đỉnh đầu hạ thấp xuống gần mặt thảm (khoảng 76% chiều cao ảnh)
-      const hipAnchorY = dstBaseY + 2;
-      const torsoScaleY = 1.0 - kf.bend * 0.62; // foreshortening khi gập người về phía trước/camera
-      const kneelDrop = kf.kneel * (sh * 0.035);
-
-      for (let s = slices - 1; s >= 0; s--) {
-        const u0 = s / slices; // 0 = đỉnh đầu, 1 = ngang hông
-        const distFromHip = 1 - u0;
-        const srcY = s * sliceSrcH;
-        const srcH = Math.ceil(sliceSrcH) + 1;
-
-        // Độ cong lưng tự nhiên khi lạy (phần vai & đầu gập sâu hơn phần thắt lưng)
-        const archCurve = Math.pow(distFromHip, 1.35) * kf.bend * (sh * 0.15);
-        const dstY = hipAnchorY - (hipY - srcY) * torsoScaleY + archCurve + kneelDrop;
-        const dstH = Math.max(1.5, srcH * torsoScaleY + 0.9);
-
-        // Hiệu ứng phối cảnh nhẹ: vai hơi mở nhẹ khi gập người xuống mặt bồ đoàn
-        const perspW = 1 + Math.sin(distFromHip * Math.PI) * kf.bend * 0.09 - Math.pow(distFromHip, 2) * kf.bend * 0.06;
-        const dstW = sw * perspW;
-        const dstX = ox + (sw - dstW) * 0.5;
-
-        c.drawImage(img, 0, srcY, sw, Math.min(sh - srcY, srcH), dstX, dstY, dstW, dstH);
-      }
-
-      // Đổ bóng chiều sâu nhẹ lên lưng/đầu khi cúi sát đất để tạo khối 2.5D chân thực
-      if (kf.bend > 0.25) {
-        c.save();
-        c.globalCompositeOperation = 'source-atop';
-        c.fillStyle = `rgba(25, 10, 4, ${(kf.bend * 0.16).toFixed(3)})`;
-        c.fillRect(ox - padX, oy, fw, hipAnchorY);
-        c.restore();
-      }
-
-      // 4. Hiệu ứng hai bàn tay chắp búp sen trước ngực (Frames 1-3 & 10-12)
-      if (kf.clasp > 0.1) {
-        const chestX = ox + sw * 0.5;
-        const chestY = hipAnchorY - hipY * torsoScaleY * 0.44 + kneelDrop;
-        c.save();
-        c.globalAlpha = clamp(kf.clasp, 0, 1) * 0.92;
-        const glow = c.createRadialGradient(chestX, chestY, 1, chestX, chestY, sw * 0.14);
-        glow.addColorStop(0, 'rgba(255, 232, 175, 0.75)');
-        glow.addColorStop(1, 'rgba(255, 200, 110, 0)');
-        c.fillStyle = glow;
-        c.beginPath();
-        c.arc(chestX, chestY, sw * 0.14, 0, Math.PI * 2);
-        c.fill();
-
-        // Búp tay chắp trang nghiêm
-        c.fillStyle = '#f5cca2';
-        c.strokeStyle = 'rgba(90, 42, 14, 0.65)';
-        c.lineWidth = 1.4;
-        c.beginPath();
-        c.moveTo(chestX, chestY - sh * 0.042);
-        c.quadraticCurveTo(chestX + sw * 0.045, chestY, chestX + sw * 0.015, chestY + sh * 0.032);
-        c.lineTo(chestX - sw * 0.015, chestY + sh * 0.032);
-        c.quadraticCurveTo(chestX - sw * 0.045, chestY, chestX, chestY - sh * 0.042);
-        c.closePath();
-        c.fill();
-        c.stroke();
-        c.restore();
-      }
-
-      // 5. Ánh kim quang thành kính chạm thảm ở Frames 7-9
-      if (kf.reverenceGlow > 0.05) {
-        const glowX = ox + sw * 0.5;
-        const glowY = oy + sh - baseH * 0.22;
-        c.save();
-        c.globalCompositeOperation = 'lighter';
-        const rg = c.createRadialGradient(glowX, glowY, 2, glowX, glowY, sw * 0.28);
-        rg.addColorStop(0, `rgba(255, 226, 148, ${(0.55 * kf.reverenceGlow).toFixed(3)})`);
-        rg.addColorStop(1, 'rgba(255, 180, 70, 0)');
-        c.fillStyle = rg;
-        c.beginPath();
-        c.ellipse(glowX, glowY, sw * 0.28, sh * 0.07, 0, 0, Math.PI * 2);
-        c.fill();
-        c.restore();
-      }
-
-      c.restore();
+  function setBowConfig(c) {
+    if (!c || typeof c !== 'object') return;
+    for (const k of Object.keys(BOW_DEFAULT)) {
+      const v = +c[k];
+      if (Number.isFinite(v)) BOW_CFG[k] = clamp(v, BOW_LIMITS[k][0], BOW_LIMITS[k][1]);
     }
-
-    const record = { canvas, fw, fh, padX, padY, srcW: sw, srcH: sh };
-    bowSheetCache.set(skinKey, record);
-    return record;
   }
+
+  const HEAD_RATIO = 0.27; // phần đầu + vai trên (từ đỉnh ảnh xuống), không bị nén
+  const HIP_RATIO = 0.70;  // từ đây xuống: chân xếp bằng + bồ đoàn, giữ nguyên chỗ
+  const BOW_PAD = 24;
+  let bowScratch = null;
+
+  // Vẽ các mảnh ảnh theo toạ độ ảnh gốc: gốc (0,0) = góc trên trái ảnh. Trả về cao độ đỉnh đầu (đơn vị ảnh).
+  function paintBowed(c, img, pose, leanSrc) {
+    const sw = img.naturalWidth, sh = img.naturalHeight;
+    const headY = Math.round(sh * HEAD_RATIO), hipY = Math.round(sh * HIP_RATIO);
+    const drop = sh * BOW_CFG.dropPct * pose;
+    const squash = (hipY - headY) * BOW_CFG.squashPct * pose;
+    const lean = leanSrc * pose;
+    // thân: từ vai tới thắt lưng, nén dọc `squash`, vai hạ xuống `drop`
+    const torsoTop = headY + drop - lean;
+    // đáy thân luôn chạm tới thắt lưng (+1px chồng dưới bồ đoàn) để không hở khe khi ngả lên
+    const torsoBottom = Math.max(hipY + 1, torsoTop + (hipY - headY) - squash);
+    c.drawImage(img, 0, headY - 0.5, sw, hipY - headY + 0.5, 0, torsoTop, sw, torsoBottom - torsoTop);
+    // đầu: giữ nguyên kích thước, chỉ dịch xuống theo vai
+    c.drawImage(img, 0, 0, sw, headY + 1, 0, drop - lean, sw, headY + 1);
+    // bồ đoàn + chân: giữ nguyên chỗ, vẽ sau để che mép thân
+    c.drawImage(img, 0, hipY, sw, sh - hipY, 0, hipY, sw, sh - hipY);
+    return drop - lean;
+  }
+
+  /**
+   * Vẽ nhân vật đang cúi (pose 0..1). ctx đã translate tới chân nhân vật.
+   * Trả về chiều cao đỉnh đầu tính theo ws (để đặt thẻ tên).
+   */
+  function drawBowedCharacter(ctx, img, drawScale, ws, pose, alpha) {
+    const sw = img.naturalWidth, sh = img.naturalHeight;
+    const leanSrc = BOW_CFG.leanPx / drawScale; // leanPx tính theo pixel màn hình
+    let headTop;
+    if (alpha >= 0.98) {
+      ctx.save();
+      ctx.scale(drawScale, drawScale);
+      ctx.translate(-sw / 2, -sh);
+      headTop = paintBowed(ctx, img, pose, leanSrc);
+      ctx.restore();
+    } else {
+      // đang mờ dần: gộp các mảnh ở alpha 1 rồi mới vẽ mờ, tránh vệt chồng mép
+      if (!bowScratch) bowScratch = document.createElement('canvas');
+      if (bowScratch.width < sw || bowScratch.height < sh + BOW_PAD) {
+        bowScratch.width = Math.max(bowScratch.width, sw);
+        bowScratch.height = Math.max(bowScratch.height, sh + BOW_PAD);
+      }
+      const sc = bowScratch.getContext('2d');
+      sc.clearRect(0, 0, bowScratch.width, bowScratch.height);
+      sc.save();
+      sc.translate(0, BOW_PAD);
+      headTop = paintBowed(sc, img, pose, leanSrc);
+      sc.restore();
+      ctx.drawImage(bowScratch, 0, 0, sw, sh + BOW_PAD, -sw * drawScale / 2, -(sh + BOW_PAD) * drawScale, sw * drawScale, (sh + BOW_PAD) * drawScale);
+    }
+    return (sh - headTop) * ws;
+  }
+
+  // Tiến trình cúi (0 → 1 → 0) theo thời gian của một lần lạy
+  function bowPoseAt(t, holdSec) {
+    const { downSec, upSec } = BOW_CFG;
+    if (t < downSec) return easeInOutSine(clamp(t / downSec, 0, 1));
+    if (t < downSec + holdSec) return 1;
+    return 1 - easeInOutSine(clamp((t - downSec - holdSec) / upSec, 0, 1));
+  }
+  function bowTotalSec(holdSec) { return BOW_CFG.downSec + holdSec + BOW_CFG.upSec; }
 
   /* =========================================================================
    * 3. LỚP NHÂN VẬT CHÁNH ĐIỆN (CHARACTER CLASS — LERP + PERSPECTIVE + BOWING)
@@ -309,7 +203,7 @@
       this.scale = 0.4;
       this.targetScale = 0.4;
 
-      // Trạng thái di chuyển & hành lễ 12 frames
+      // Trạng thái di chuyển & hành lễ
       this.state = 'walk'; // 'walk' | 'sit'
       this.seat = null;
       this.walkBob = Math.random() * Math.PI * 2;
@@ -318,12 +212,26 @@
       this.glow = 0;
       this.bubble = null;
 
-      // 12-Frame Bowing Sequence
-      this.bowFrame = 0;
-      this.bowTimer = 0;
+      // Trạng thái lên lễ Phật trước bàn thờ (altarSpot)
+      this.inCeremony = false;
+      this.atAltarSpot = false;
+      this.ceremonyAlpha = 1;
+      this.ceremonyScale = 0.52;
+      this.ceremonyX = 540;
+      this.ceremonyY = 1415;
+      this.ceremonyHoldPose = null; // mức cúi 0..1 giữ nguyên khi chắp tay dâng hương
+
+      // Một lần lạy = cúi xuống → giữ → ngẩng lên (thời gian lấy từ ceremony.bow)
+      this.bowT = 0;
       this.isBowing = false;
       this.bowQueue = 0;
+      this.bowHoldSec = BOW_CFG.holdSec;
+      this.bowPauseSec = 0;
+      this.bowPauseRemain = 0;
+      this.onFinalDeepBow = null;
+      this.firedFinalDeepBow = false;
       this.pendingLotusTier = 0;
+      this.bowPose = 0; // mức cúi hiện tại 0..1
 
       // Hào quang hoa sen 5 phút dưới chân bồ đoàn
       this.lotusAuraUntil = 0;
@@ -331,12 +239,18 @@
       this.lotusAuraTier = 1;
     }
 
+    getEffectiveAlpha() {
+      return clamp(this.fade * this.ceremonyAlpha, 0, 1);
+    }
+
     assignSeat(seat, instant = false, floor = { yTop: 1430, yBot: 1870 }, gridCols = 6) {
       this.seat = seat;
       if (!seat) return;
-      this.targetX = seat.x;
-      this.targetY = seat.y;
-      if (instant) {
+      if (!this.atAltarSpot) {
+        this.targetX = seat.x;
+        this.targetY = seat.y;
+      }
+      if (instant && !this.atAltarSpot) {
         this.x = seat.x;
         this.y = seat.y;
         this.state = 'sit';
@@ -347,21 +261,36 @@
     }
 
     triggerBow(count = 1, giftTierForLotus = 0) {
-      this.bowQueue = Math.min(6, Math.max(this.bowQueue, count));
       if (giftTierForLotus > 0) {
         this.pendingLotusTier = Math.max(this.pendingLotusTier, giftTierForLotus);
       }
+      // Khi đang hành lễ trên bàn thờ, CeremonyDirector điều khiển riêng nhịp lạy
+      if (this.inCeremony) return;
+      this.bowHoldSec = BOW_CFG.holdSec;
+      this.bowPauseSec = 0;
+      this.onFinalDeepBow = null;
+      this.bowQueue = Math.min(6, Math.max(this.bowQueue, count));
       if (this.state === 'sit' && !this.isBowing && this.bowQueue > 0) {
         this.startNextBow();
       }
+    }
+
+    startCeremonyBows(count = 1, opts = {}) {
+      this.bowQueue = Math.max(1, count);
+      this.bowHoldSec = Number.isFinite(opts.holdSec) ? Math.max(0, opts.holdSec) : BOW_CFG.holdSec;
+      this.bowPauseSec = Math.max(0, opts.pauseBetweenSec || 0);
+      this.bowPauseRemain = 0;
+      this.onFinalDeepBow = typeof opts.onFinalDeepBow === 'function' ? opts.onFinalDeepBow : null;
+      this.firedFinalDeepBow = false;
+      this.startNextBow();
     }
 
     startNextBow() {
       if (this.bowQueue <= 0) return;
       this.bowQueue--;
       this.isBowing = true;
-      this.bowFrame = 0;
-      this.bowTimer = 0;
+      this.bowT = 0;
+      this.firedFinalDeepBow = false;
     }
 
     activateLotusAura(nowMs, tier = 1) {
@@ -373,8 +302,6 @@
     }
 
     computePerspectiveScale(floor, gridCols) {
-      // Áp dụng công thức Perspective Scaling theo chiều sâu Y (perspectiveFactor = 0.0005)
-      // đồng thời chuẩn hóa theo mật độ lưới bồ đoàn trên khung 1080x1920
       const perspectiveFactor = 0.0005;
       const rawPerspective = 1.0 + (this.y - 500) * perspectiveFactor;
       const span = Math.max(1, floor.yBot - floor.yTop);
@@ -387,9 +314,16 @@
       this.fade = Math.min(1, this.fade + dt * 2.2);
       this.glow = Math.max(0, this.glow - dt * 0.42);
 
-      if (this.seat) {
+      if (this.atAltarSpot) {
+        this.x = this.ceremonyX;
+        this.y = this.ceremonyY;
+        this.targetX = this.ceremonyX;
+        this.targetY = this.ceremonyY;
+        this.scale = this.ceremonyScale;
+        this.targetScale = this.ceremonyScale;
+        this.state = 'sit';
+      } else if (this.seat) {
         if (this.state === 'walk') {
-          // Bước dọc lối đi chính giữa (x = 540) đến hàng ghế rồi mới rẽ vào bồ đoàn
           const dyToRow = Math.abs(this.y - this.seat.y);
           if (dyToRow > 36) {
             this.targetX = lerp(this.seat.x, 540, 0.72);
@@ -399,7 +333,6 @@
             this.targetY = this.seat.y;
           }
 
-          // Lerp vị trí với hệ số t = 0.08 chuẩn hóa theo deltaTime để bước đi từ tốn, khoan thai
           this.x = lerpDt(this.x, this.targetX, 0.08, dt);
           this.y = lerpDt(this.y, this.targetY, 0.08, dt);
           this.walkBob += dt * 7.5;
@@ -408,61 +341,74 @@
             this.x = this.seat.x;
             this.y = this.seat.y;
             this.state = 'sit';
-            // Khi vừa an tọa lên bồ đoàn, tự động chắp tay lạy Phật 1 lễ trang nghiêm
-            if (!this.demo && this.bowQueue === 0) {
+            if (!this.demo && !this.inCeremony && this.bowQueue === 0) {
               this.triggerBow(1, 0);
             } else if (this.bowQueue > 0) {
               this.startNextBow();
             }
           }
         } else {
-          // Đang ngồi thiền: nếu lưới chỗ ngồi mở rộng (24 -> 36 -> 64 -> 100), trượt mượt sang vị trí mới bằng Lerp t=0.08
           this.targetX = this.seat.x;
           this.targetY = this.seat.y;
           this.x = lerpDt(this.x, this.targetX, 0.08, dt);
           this.y = lerpDt(this.y, this.targetY, 0.08, dt);
         }
+
+        this.targetScale = this.computePerspectiveScale(floor, gridCols);
+        this.scale = lerpDt(this.scale, this.targetScale, 0.08, dt);
       }
 
-      // Tự động Scale kích thước theo độ sâu chiều Y (Perspective Scaling)
-      this.targetScale = this.computePerspectiveScale(floor, gridCols);
-      this.scale = lerpDt(this.scale, this.targetScale, 0.08, dt);
-
-      // Cập nhật chuỗi 12-Frame Bowing bằng deltaTime (60fps đồng nhất trên mọi máy)
+      // Tiến trình lạy: cúi xuống → giữ → ngẩng lên, tính trực tiếp từ thời gian (không lerp trễ)
+      let holdTarget = null;
       if (this.state === 'sit') {
-        if (!this.isBowing && this.bowQueue > 0) {
+        if (this.bowPauseRemain > 0) {
+          this.bowPauseRemain = Math.max(0, this.bowPauseRemain - dt);
+          if (this.bowPauseRemain === 0 && this.bowQueue > 0) this.startNextBow();
+        } else if (!this.isBowing && this.bowQueue > 0) {
           this.startNextBow();
         }
+
         if (this.isBowing) {
-          this.bowTimer += dt;
-          const frameDur = BOW_KEYFRAMES_12[this.bowFrame]?.dur || 0.15;
-          if (this.bowTimer >= frameDur) {
-            this.bowTimer -= frameDur;
-            this.bowFrame++;
-            if (this.bowFrame >= 12) {
-              if (this.bowQueue > 0) {
-                this.bowQueue--;
-                this.bowFrame = 0;
-              } else {
-                this.isBowing = false;
-                this.bowFrame = 0;
-                // Sau khi lễ lạy cúng dường xong và trở về bồ đoàn -> Bật Vòng Hào Quang Hoa Sen 5 phút!
-                if (this.pendingLotusTier > 0) {
-                  this.activateLotusAura(nowMs, this.pendingLotusTier);
-                  this.pendingLotusTier = 0;
-                }
-              }
-            }
+          this.bowT += dt;
+          // Chuông nhỏ khi chạm đỉnh cúi sâu của lần lạy cuối (!cúng bái)
+          if (this.bowQueue === 0 && this.bowT >= BOW_CFG.downSec && !this.firedFinalDeepBow && this.onFinalDeepBow) {
+            this.firedFinalDeepBow = true;
+            const cb = this.onFinalDeepBow;
+            this.onFinalDeepBow = null;
+            cb();
           }
+          if (this.bowT >= bowTotalSec(this.bowHoldSec)) {
+            this.isBowing = false;
+            this.bowT = 0;
+            this.bowPose = 0;
+            if (this.bowQueue > 0) {
+              if (this.bowPauseSec > 0) this.bowPauseRemain = this.bowPauseSec;
+              else this.startNextBow();
+            } else if (this.pendingLotusTier > 0) {
+              this.activateLotusAura(nowMs, this.pendingLotusTier);
+              this.pendingLotusTier = 0;
+            }
+          } else {
+            this.bowPose = bowPoseAt(this.bowT, this.bowHoldSec);
+          }
+        } else if (this.ceremonyHoldPose != null) {
+          holdTarget = clamp(+this.ceremonyHoldPose || 0, 0, 1);
         }
+      } else if (this.isBowing) {
+        this.isBowing = false;
+      }
+
+      if (!this.isBowing) {
+        this.bowPose = lerpDt(this.bowPose, holdTarget || 0, 0.2, dt);
+        if (!holdTarget && this.bowPose < 0.003) this.bowPose = 0;
       }
     }
 
-    drawLotusAuraUnderMat(ctx, t, nowMs, lotusImg) {
+    drawLotusAuraUnderMat(ctx, t, nowMs) {
       if (nowMs >= this.lotusAuraUntil) return;
       const elapsed = (nowMs - this.lotusAuraStart) / 1000;
       const remain = (this.lotusAuraUntil - nowMs) / 1000;
-      const fade = clamp(Math.min(elapsed * 1.2, remain / 3.0), 0, 1);
+      const fade = clamp(Math.min(elapsed * 1.2, remain / 3.0), 0, 1) * this.getEffectiveAlpha();
       if (fade <= 0.01) return;
 
       const s = this.scale;
@@ -471,10 +417,9 @@
 
       ctx.save();
       ctx.translate(this.x, this.y - 12 * s);
-      ctx.scale(1, 0.42); // Phối cảnh mặt sàn 2.5D dưới chân bồ đoàn
+      ctx.scale(1, 0.42);
       ctx.globalCompositeOperation = 'lighter';
 
-      // Hào quang tỏa tròn ấm áp
       const grad = ctx.createRadialGradient(0, 0, rx * 0.1, 0, 0, rx * 1.25 * breath);
       grad.addColorStop(0, `rgba(255, 224, 140, ${(0.52 * fade).toFixed(3)})`);
       grad.addColorStop(0.55, `rgba(255, 165, 195, ${(0.28 * fade).toFixed(3)})`);
@@ -484,7 +429,6 @@
       ctx.arc(0, 0, rx * 1.25 * breath, 0, Math.PI * 2);
       ctx.fill();
 
-      // Vòng cánh sen vàng ngoài xoay chậm thuận chiều kim đồng hồ
       const petalsCount = 12;
       ctx.save();
       ctx.rotate(t * 0.42 + this.phase);
@@ -507,7 +451,6 @@
       }
       ctx.restore();
 
-      // Vòng cánh sen trong xoay nhẹ ngược chiều tạo chiều sâu mandala
       ctx.save();
       ctx.rotate(-t * 0.28);
       ctx.strokeStyle = `rgba(255, 232, 165, ${(0.5 * fade).toFixed(3)})`;
@@ -522,14 +465,18 @@
 
     draw(ctx, t, nowMs, assets) {
       const ws = this.scale;
-      // 1. Vẽ Vòng Hào Quang Hoa Sen dưới chân bồ đoàn (nếu đang trong 5 phút tri ân)
-      this.drawLotusAuraUnderMat(ctx, t, nowMs, assets.lotus);
+      const effAlpha = this.getEffectiveAlpha();
+      if (effAlpha <= 0.004) return 260 * ws;
 
-      // 2. Vẽ hào quang thân tâm (khi vừa tặng quà hoặc skin cao tăng)
+      // 1. Vẽ Vòng Hào Quang Hoa Sen dưới chân bồ đoàn (nếu đang trong 5 phút tri ân hoặc !quỳ lạy)
+      this.drawLotusAuraUnderMat(ctx, t, nowMs);
+
+      // 2. Vẽ hào quang thân tâm (khi vừa tặng quà, lên lễ Phật, hoặc skin cao tăng)
       if (this.glow > 0 || this.skin === 'master') {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = Math.max(this.glow * 0.75, this.skin === 'master' ? 0.35 + 0.1 * Math.sin(t * 1.6) : 0);
+        const baseGlow = Math.max(this.glow * 0.75, this.skin === 'master' ? 0.35 + 0.1 * Math.sin(t * 1.6) : 0);
+        ctx.globalAlpha = baseGlow * effAlpha;
         const g = ctx.createRadialGradient(this.x, this.y - 110 * ws, 8, this.x, this.y - 110 * ws, 200 * ws);
         g.addColorStop(0, 'rgba(255, 205, 120, 0.95)');
         g.addColorStop(1, 'rgba(255, 160, 60, 0)');
@@ -538,14 +485,15 @@
         ctx.restore();
       }
 
-      // 3. Vẽ nhân vật (Hỗ trợ 12-frame bowing sprite sheet hoặc nhịp thở thiền định)
+      // 3. Vẽ nhân vật (biến đổi mượt ảnh gốc khi cúi lạy hoặc nhịp thở thiền định khi ngồi tĩnh)
       const skinImgKey = this.skin === 'master' ? 'monk' : this.skin;
       const baseImg = assets[skinImgKey] || assets.man;
       const walkStepY = this.state === 'walk' ? -Math.abs(Math.sin(this.walkBob)) * 6 * ws : 0;
-      const breatheY = (this.state === 'sit' && !this.isBowing) ? Math.sin(t * 1.15 + this.phase) * 2.2 * ws : 0;
+      const isDeforming = this.bowPose > 0.004;
+      const breatheY = (this.state === 'sit' && !isDeforming) ? Math.sin(t * 1.15 + this.phase) * 2.2 * ws : 0;
 
       ctx.save();
-      ctx.globalAlpha = this.fade;
+      ctx.globalAlpha = effAlpha;
       ctx.translate(this.x, this.y + walkStepY);
       if (this.state === 'walk') {
         ctx.rotate(Math.sin(this.walkBob) * 0.025);
@@ -554,33 +502,8 @@
       let topY = 260 * ws;
       const drawScale = ws * 1.05;
 
-      // Ưu tiên sprite sheet 12-frame ngoại vi nếu người dùng đặt `bow_<skin>` trong assets,
-      // nếu không dùng 12-frame sheet sinh tự động trên offscreen canvas
-      const extBow = assets['bow_' + skinImgKey];
-      if (this.isBowing && extBow && extBow.naturalWidth > 0) {
-        const fw = extBow.naturalWidth / 12;
-        const fh = extBow.naturalHeight;
-        ctx.drawImage(
-          extBow,
-          this.bowFrame * fw, 0, fw, fh,
-          -fw * drawScale * 0.5, -fh * drawScale,
-          fw * drawScale, fh * drawScale
-        );
-        topY = fh * drawScale * (1 - BOW_KEYFRAMES_12[this.bowFrame].bend * 0.35);
-      } else if (this.isBowing && baseImg && baseImg.naturalWidth > 0) {
-        const sheet = getOrBuildBowSheet(skinImgKey, baseImg);
-        if (sheet) {
-          const w = sheet.fw * drawScale;
-          const h = sheet.fh * drawScale;
-          ctx.drawImage(
-            sheet.canvas,
-            this.bowFrame * sheet.fw, 0, sheet.fw, sheet.fh,
-            -w * 0.5, -h,
-            w, h
-          );
-          const bend = BOW_KEYFRAMES_12[this.bowFrame]?.bend || 0;
-          topY = sheet.srcH * ws * (1 - bend * 0.36);
-        }
+      if (isDeforming && baseImg && baseImg.naturalWidth > 0) {
+        topY = drawBowedCharacter(ctx, baseImg, drawScale, ws, this.bowPose, effAlpha);
       } else if (baseImg && baseImg.naturalWidth > 0) {
         const w = baseImg.naturalWidth * drawScale;
         const h = baseImg.naturalHeight * drawScale;
@@ -597,48 +520,57 @@
    * 4. LƯ HƯƠNG LỬA & KHÓI TRẦM TƯƠNG TÁC (INCENSE PARTICLE SYSTEM — 3.1)
    * ========================================================================= */
 
+  const SMOKE_TOP_Y = 880; // khói nhang tan hết trước toạ độ y này
+
   class IncenseSmokeSystem {
     constructor() {
       this.particles = [];
       this.embers = [];
       this.boostUntil = 0;
+      this.boostPeak = 0.85;
       this.boostIntensity = 0;
       this.spawnAcc = 0;
       this.emberAcc = 0;
     }
 
-    triggerSacredOffering(tier = 2) {
+    boostForSeconds(sec = 6, intensity = 0.94) {
       const now = performance.now();
-      const extraMs = tier >= 3 ? 22000 : 14000;
-      this.boostUntil = Math.max(this.boostUntil, now + extraMs);
-      this.boostIntensity = Math.max(this.boostIntensity, tier >= 3 ? 1.0 : 0.72);
+      const durMs = Math.max(1, +sec || 6) * 1000;
+      this.boostUntil = Math.max(this.boostUntil, now + durMs);
+      this.boostPeak = Math.max(this.boostPeak, intensity);
+      this.boostIntensity = Math.max(this.boostIntensity, intensity * 0.65);
 
-      // Tạo chùm tàn lửa trầm hương bừng sáng tức thì tại lư hương
-      for (let i = 0; i < (tier >= 3 ? 22 : 12); i++) {
+      for (let i = 0; i < 7; i++) {
         this.embers.push({
           ox: (Math.random() - 0.5) * 44,
           oy: (Math.random() - 0.5) * 10,
-          vx: (Math.random() - 0.5) * 28,
-          vy: -(35 + Math.random() * 65),
+          vx: (Math.random() - 0.5) * 26,
+          vy: -(38 + Math.random() * 68),
           age: 0,
-          life: 1.1 + Math.random() * 1.3,
-          r: 1.8 + Math.random() * 2.6,
+          life: 1.1 + Math.random() * 1.4,
+          r: 1.8 + Math.random() * 2.5,
         });
       }
     }
 
+    triggerSacredOffering(tier = 2) {
+      const extraSec = tier >= 3 ? 22 : 14;
+      this.boostForSeconds(extraSec, tier >= 3 ? 1.0 : 0.76);
+    }
+
     updateAndDraw(ctx, dt, t, burnerX, burnerY) {
       const now = performance.now();
-      const targetBoost = now < this.boostUntil ? (this.boostIntensity || 0.8) : 0;
-      this.boostIntensity = lerpDt(this.boostIntensity, targetBoost, 0.04, dt);
+      const targetBoost = now < this.boostUntil ? (this.boostPeak || 0.85) : 0;
+      if (now >= this.boostUntil && this.boostIntensity < 0.02) this.boostPeak = 0.85;
+      this.boostIntensity = lerpDt(this.boostIntensity, targetBoost, now < this.boostUntil ? 0.09 : 0.04, dt);
       const boost = this.boostIntensity;
 
       // Tốc độ sinh hạt khói: chế độ tĩnh lặng (5 hạt/s) vs chế độ Cúng dường quà lớn (26 hạt/s)
-      const rate = 5.5 + boost * 22;
+      const rate = 5.5 + boost * 8.8; // boost chỉ tăng ~40% so với trước, tránh tụ thành mảng
       this.spawnAcc += dt * rate;
       while (this.spawnAcc >= 1) {
         this.spawnAcc -= 1;
-        if (this.particles.length < 180) {
+        if (this.particles.length < 90) {
           const stickIdx = (Math.floor(Math.random() * 3) - 1); // 3 nén hương tại lư hương
           this.particles.push({
             x: burnerX + stickIdx * (8 + boost * 4) + (Math.random() - 0.5) * 8,
@@ -646,8 +578,8 @@
             vy: -(36 + Math.random() * 26 + boost * 24),
             age: 0,
             life: 4.6 + Math.random() * 2.8 + boost * 1.6,
-            r0: 4 + Math.random() * 4,
-            r1: 28 + Math.random() * 24 + boost * 22,
+            r0: 3 + Math.random() * 3,
+            r1: 14 + Math.random() * 12 + boost * 4, // khói mảnh
             seed: Math.random() * 100,
             golden: boost > 0.25 && Math.random() < 0.45,
           });
@@ -716,7 +648,10 @@
 
         const radius = lerp(p.r0, p.r1, easeOutCubic(u));
         const env = u < 0.16 ? (u / 0.16) : Math.pow(1 - (u - 0.16) / 0.84, 1.45);
-        const alpha = env * (0.20 + boost * 0.18);
+        // Khói tan hết trước SMOKE_TOP_Y: mờ dần trong 70px cuối rồi xoá hạt
+        const heightFade = clamp((p.y - SMOKE_TOP_Y) / 70, 0, 1);
+        if (heightFade <= 0) { this.particles.splice(i, 1); continue; }
+        const alpha = Math.min(0.35, env * (0.17 + boost * 0.16)) * heightFade; // độ đục tối đa 0.35
 
         const grad = ctx.createRadialGradient(p.x, p.y, radius * 0.08, p.x, p.y, radius);
         if (p.golden && u < 0.45) {
@@ -1369,6 +1304,314 @@
     }
   }
 
+  /* =========================================================================
+   * 8. ĐIỀU PHỐI NGHI LỄ LÊN LỄ PHẬT TRƯỚC BÀN THỜ (CEREMONY DIRECTOR)
+   *    - Lệnh: !thắp nhang (incense), !cúng bái (worship), !quỳ lạy (prostrate)
+   *    - Mờ dần ở chỗ ngồi (0.6s) → hiện tại altarSpot (0.6s) → hành lễ →
+   *      mờ dần tại altarSpot (0.6s) → hiện lại ở chỗ ngồi cũ (0.6s).
+   *    - Thầy trụ trì (giữa) lùi nhẹ sang trái 120px trong lúc hành lễ rồi về chỗ.
+   * ========================================================================= */
+
+  class CeremonyDirector {
+    constructor() {
+      this.active = false;
+      this.viewerId = null;
+      this.kind = 'incense';
+      this.phase = 'idle'; // 'idle' | 'fade_out_seat' | 'fade_in_altar' | 'perform' | 'fade_out_altar' | 'fade_in_seat'
+      this.timer = 0;
+      this.subStep = 0;
+      this.fadeSec = 0.6;
+      this.incenseBoostSec = 6.0;
+      this.incenseHoldSec = 2.2;
+      this.tailSec = 0.35;
+      this.sinceStart = 0;
+      this.performDeadline = Infinity;
+      this.outFrom = 1;
+      this.inFrom = 0;
+      this.pending = null; // phiên kế tiếp nếu phiên trước chưa khép kịp
+
+      this.altarX = 540;
+      this.altarY = 1415;
+      this.altarScale = 0.52;
+      this.masterShiftTarget = -120;
+      this.masterOffsetX = 0;
+      this.tagHide = 0; // 0..1: mức ẩn thẻ tên 3 vị thầy khi có người ở altarSpot
+    }
+
+    _restore(v) {
+      v.inCeremony = false;
+      v.atAltarSpot = false;
+      v.ceremonyAlpha = 1;
+      v.ceremonyHoldPose = null;
+      v.isBowing = false;
+      v.bowQueue = 0;
+      v.bowPauseRemain = 0;
+      v.onFinalDeepBow = null;
+      if (v.seat) {
+        v.x = v.seat.x;
+        v.y = v.seat.y;
+        v.targetX = v.seat.x;
+        v.targetY = v.seat.y;
+        v.state = 'sit';
+      }
+    }
+
+    reset(visitorsMap) {
+      if (this.viewerId && visitorsMap) {
+        const prev = visitorsMap.get(this.viewerId);
+        if (prev) this._restore(prev);
+      }
+      this.active = false;
+      this.viewerId = null;
+      this.phase = 'idle';
+      this.timer = 0;
+      this.subStep = 0;
+      this.pending = null;
+      this.masterOffsetX = 0;
+    }
+
+    // Lệnh mới đến khi phiên trước chưa xong: phiên trước kết thúc mượt trong ~0.4s rồi mới bắt đầu phiên mới
+    start(msg, visitorsMap, altarSpotCfg, floor, gridCols) {
+      if (!visitorsMap.get(msg.id)) return false;
+      if (this.active) {
+        this.pending = { msg, visitorsMap, altarSpotCfg, floor, gridCols };
+        this._abort(visitorsMap);
+        return true;
+      }
+      return this._begin(msg, visitorsMap, altarSpotCfg, floor, gridCols);
+    }
+
+    _abort(visitorsMap) {
+      const v = visitorsMap.get(this.viewerId);
+      this.fadeSec = Math.min(this.fadeSec, 0.2); // 0.2s ra + 0.2s vào = 0.4s
+      if (!v) { this.active = false; this.viewerId = null; this.phase = 'idle'; return; }
+      v.isBowing = false;
+      v.bowQueue = 0;
+      v.bowPauseRemain = 0;
+      v.onFinalDeepBow = null;
+      v.ceremonyHoldPose = null;
+      if (this.phase === 'fade_in_altar' || this.phase === 'perform') {
+        this.phase = 'fade_out_altar';
+        this.timer = 0;
+        this.outFrom = v.ceremonyAlpha;
+      } else if (this.phase === 'fade_out_seat') {
+        this.phase = 'fade_in_seat';
+        this.timer = 0;
+        this.inFrom = v.ceremonyAlpha;
+      }
+    }
+
+    _begin(msg, visitorsMap, altarSpotCfg, floor, gridCols) {
+      const v = visitorsMap.get(msg.id);
+      if (!v) return false;
+
+      // Người chưa kịp đi tới bồ đoàn thì đặt vào chỗ ngồi trước rồi mới mờ dần lên bàn thờ
+      if (v.seat && v.state === 'walk') {
+        v.x = v.seat.x;
+        v.y = v.seat.y;
+        v.state = 'sit';
+        v.fade = 1;
+        v.scale = v.computePerspectiveScale(floor, gridCols);
+        v.targetScale = v.scale;
+      }
+
+      const spot = altarSpotCfg || {};
+      this.altarX = Number.isFinite(spot.x) ? spot.x : 540;
+      this.altarY = Number.isFinite(spot.y) ? spot.y : 1415;
+      this.altarScale = Number.isFinite(spot.scale) ? spot.scale : 0.52;
+      this.masterShiftTarget = Number.isFinite(spot.masterShiftX) ? spot.masterShiftX : -120;
+
+      this.fadeSec = clamp(+msg.fadeSec || 0.6, 0.2, 3.0);
+      this.incenseBoostSec = clamp(+msg.incenseBoostSec || 6.0, 1.0, 30.0);
+      this.incenseHoldSec = clamp(Number.isFinite(+msg.incenseHoldSec) ? +msg.incenseHoldSec : 2.2, 0.5, 10);
+      this.tailSec = clamp(Number.isFinite(+msg.tailSec) ? +msg.tailSec : 0.35, 0, 3);
+      this.sinceStart = 0;
+      // Hạn chót tự kết thúc lễ nếu lệch giờ với server (server là nguồn thời gian duy nhất)
+      this.performDeadline = (+msg.totalSec > 0) ? (+msg.totalSec - 2 * this.fadeSec + 0.3) : Infinity;
+
+      this.active = true;
+      this.viewerId = v.id;
+      this.kind = msg.kind || 'incense';
+      this.phase = 'fade_out_seat';
+      this.timer = 0;
+      this.subStep = 0;
+      this.outFrom = 1;
+      this.inFrom = 0;
+
+      v.inCeremony = true;
+      v.atAltarSpot = false;
+      v.ceremonyAlpha = 1;
+      v.ceremonyHoldPose = null;
+      v.ceremonyX = this.altarX;
+      v.ceremonyY = this.altarY;
+      v.ceremonyScale = this.altarScale;
+      v.isBowing = false;
+      v.bowQueue = 0;
+      v.bowPauseRemain = 0;
+      return true;
+    }
+
+    update(dt, nowMs, visitorsMap, floor, gridCols, hooks = {}) {
+      const wantShift = this.active && (
+        this.phase === 'fade_out_seat' ||
+        this.phase === 'fade_in_altar' ||
+        this.phase === 'perform'
+      );
+      const targetMasterX = wantShift ? this.masterShiftTarget : 0;
+      this.masterOffsetX = lerpDt(this.masterOffsetX, targetMasterX, 0.11, dt);
+      if (!wantShift && Math.abs(this.masterOffsetX) < 0.25) {
+        this.masterOffsetX = 0;
+      }
+
+      const atAltar = this.active && (this.phase === 'fade_in_altar' || this.phase === 'perform' || this.phase === 'fade_out_altar');
+      this.tagHide = clamp(this.tagHide + (atAltar ? dt : -dt) / 0.3, 0, 1); // mờ 0.3s
+
+      if (!this.active) {
+        if (this.pending) {
+          const p = this.pending;
+          this.pending = null;
+          this._begin(p.msg, p.visitorsMap, p.altarSpotCfg, p.floor, p.gridCols);
+        }
+        return;
+      }
+
+      const v = visitorsMap.get(this.viewerId);
+      if (!v) {
+        this.active = false;
+        this.viewerId = null;
+        this.phase = 'idle';
+        return;
+      }
+
+      this.timer += dt;
+      this.sinceStart += dt;
+
+      if (this.phase === 'fade_out_seat') {
+        const k = clamp(this.timer / this.fadeSec, 0, 1);
+        v.ceremonyAlpha = this.outFrom * (1 - easeInOutSine(k));
+        if (this.timer >= this.fadeSec) {
+          this.phase = 'fade_in_altar';
+          this.timer = 0;
+          v.atAltarSpot = true;
+          v.ceremonyX = this.altarX;
+          v.ceremonyY = this.altarY;
+          v.ceremonyScale = this.altarScale;
+          v.x = this.altarX;
+          v.y = this.altarY;
+          v.scale = this.altarScale;
+          v.targetScale = this.altarScale;
+          v.ceremonyAlpha = 0;
+          v.glow = Math.max(v.glow, 0.55);
+        }
+        return;
+      }
+
+      if (this.phase === 'fade_in_altar') {
+        const k = clamp(this.timer / this.fadeSec, 0, 1);
+        v.ceremonyAlpha = easeInOutSine(k);
+        if (this.timer >= this.fadeSec) {
+          v.ceremonyAlpha = 1;
+          this.phase = 'perform';
+          this.timer = 0;
+          this.subStep = 0;
+
+          if (this.kind === 'incense') {
+            // !thắp nhang: chắp tay tịnh tâm trước lư hương, khói nhang bùng lên, rồi lạy 1 lần
+            v.ceremonyHoldPose = 0.3;
+            if (hooks.incenseFX) hooks.incenseFX.boostForSeconds(this.incenseBoostSec, 0.96);
+          } else if (this.kind === 'worship') {
+            // !cúng bái: lạy 3 lần liên tiếp, đánh chuông nhỏ ở lạy cuối
+            v.ceremonyHoldPose = null;
+            v.startCeremonyBows(3, {
+              holdSec: BOW_CFG.holdSec,
+              pauseBetweenSec: BOW_CFG.pauseSec,
+              onFinalDeepBow: () => { if (hooks.onSmallBell) hooks.onSmallBell(); },
+            });
+          } else if (this.kind === 'prostrate') {
+            // !quỳ lạy: 1 lần, giữ lâu hơn, hào quang sen dưới bồ đoàn
+            v.ceremonyHoldPose = null;
+            v.activateLotusAura(nowMs, 2);
+            v.startCeremonyBows(1, { holdSec: BOW_CFG.prostrateHoldSec });
+          }
+        }
+        return;
+      }
+
+      if (this.phase === 'perform') {
+        v.ceremonyAlpha = 1;
+        const bowsDone = !v.isBowing && v.bowQueue === 0 && v.bowPauseRemain <= 0;
+        if (this.kind === 'incense') {
+          if (this.subStep === 0 && this.timer >= this.incenseHoldSec) {
+            this.subStep = 1;
+            v.ceremonyHoldPose = null;
+            v.startCeremonyBows(1, { holdSec: BOW_CFG.holdSec });
+          } else if (this.subStep === 1 && bowsDone) {
+            this.subStep = 2;
+            this.timer = 0;
+          } else if (this.subStep === 2 && this.timer >= this.tailSec) {
+            this._toFadeOutAltar();
+          }
+        } else {
+          // worship (3 lạy) hoặc prostrate (1 lạy giữ lâu)
+          if (this.subStep === 0 && bowsDone) {
+            this.subStep = 1;
+            this.timer = 0;
+          } else if (this.subStep === 1 && this.timer >= this.tailSec) {
+            this._toFadeOutAltar();
+          }
+        }
+        if (this.phase === 'perform' && this.sinceStart >= this.performDeadline) {
+          this._abort(visitorsMap);
+        }
+        return;
+      }
+
+      if (this.phase === 'fade_out_altar') {
+        const k = clamp(this.timer / this.fadeSec, 0, 1);
+        v.ceremonyAlpha = this.outFrom * (1 - easeInOutSine(k));
+        if (this.timer >= this.fadeSec) {
+          this.phase = 'fade_in_seat';
+          this.timer = 0;
+          this.inFrom = 0;
+          v.atAltarSpot = false;
+          v.ceremonyHoldPose = null;
+          if (v.seat) {
+            v.x = v.seat.x;
+            v.y = v.seat.y;
+            v.targetX = v.seat.x;
+            v.targetY = v.seat.y;
+          }
+          v.scale = v.computePerspectiveScale(floor, gridCols);
+          v.targetScale = v.scale;
+          v.ceremonyAlpha = 0;
+        }
+        return;
+      }
+
+      if (this.phase === 'fade_in_seat') {
+        const k = clamp(this.timer / this.fadeSec, 0, 1);
+        v.ceremonyAlpha = this.inFrom + (1 - this.inFrom) * easeInOutSine(k);
+        if (this.timer >= this.fadeSec) {
+          v.ceremonyAlpha = 1;
+          v.inCeremony = false;
+          v.atAltarSpot = false;
+          v.ceremonyHoldPose = null;
+          this.active = false;
+          this.viewerId = null;
+          this.phase = 'idle';
+          this.timer = 0;
+          this.subStep = 0;
+        }
+      }
+    }
+
+    _toFadeOutAltar() {
+      this.phase = 'fade_out_altar';
+      this.timer = 0;
+      this.outFrom = 1;
+    }
+  }
+
   // Xuất module toàn cục cho overlay.html sử dụng
   global.ChanhDienCanvas = {
     lerp,
@@ -1379,7 +1622,11 @@
     SilkMeritScroll,
     AmbientLightingSystem,
     CameraZoomController,
-    BOW_KEYFRAMES_12,
+    CeremonyDirector,
+    setBowConfig,
+    getBowConfig: () => Object.assign({}, BOW_CFG),
+    bowTotalSec,
+    drawBowedCharacter,
   };
 })(window);
 

@@ -54,6 +54,12 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #toast{left:50%;top:1400px;z-index:5;max-width:900px;padding:12px 34px;border-radius:40px;border:2px solid var(--gold2);white-space:nowrap;
   font-family:var(--display);font-size:34px;color:var(--gold2);background:rgba(40,16,6,.9);opacity:0;transform:translate(-50%,10px);transition:opacity .4s,transform .4s;pointer-events:none}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+#ceremonyInvite{left:50%;top:1432px;z-index:5;max-width:920px;padding:13px 38px;border-radius:999px;border:2.5px solid var(--gold2);white-space:nowrap;
+  font-family:var(--display);font-weight:700;font-size:33px;color:#fff2cc;
+  background:linear-gradient(180deg,rgba(88,30,10,.94),rgba(38,14,6,.94));
+  box-shadow:0 10px 30px rgba(0,0,0,.6),0 0 28px rgba(255,204,102,.32);
+  opacity:0;transform:translate(-50%,10px);transition:opacity .45s,transform .45s;pointer-events:none}
+#ceremonyInvite.show{opacity:1;transform:translate(-50%,0)}
 #gift{left:70px;right:70px;top:940px;z-index:5;padding:30px 40px;text-align:center;border-radius:28px;border:3px solid var(--gold2);
   background:radial-gradient(ellipse at 50% 0%,rgba(150,40,20,.95),rgba(50,14,6,.95));box-shadow:0 0 60px rgba(255,190,90,.45);
   opacity:0;transform:scale(.85);transition:opacity .45s,transform .45s cubic-bezier(.2,1.4,.4,1);pointer-events:none}
@@ -106,12 +112,14 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   <div id="guide" class="card ui">
     <div>💬 <b>Bình luận bất kỳ</b> để bước vào thiền</div>
     <div>Gõ <b>nam · nữ · sư · ni · tiểu · bà · cao tăng</b> đổi hình</div>
+    <div>🙏 Gõ <b>!thắp nhang · !cúng bái · !quỳ lạy</b> lên lễ Phật</div>
     <div>📜 Gõ <b>!xinquẻ · Cầu an · Tĩnh tâm</b> nhận lời Phật dạy</div>
     <div>🎁 Cúng dường được <b>xướng tên &amp; ghi Sổ Vàng</b></div>
   </div>
   <div id="merit" class="card ui"><h3 id="meritTitle">✦ Công Đức ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
   <div id="chant" class="ui"><h4 id="chantTitle">✦ TỤNG KINH ĐỊNH KỲ ✦</h4><p id="chantText"></p></div>
   <div id="toast" class="ui"></div>
+  <div id="ceremonyInvite" class="ui" aria-live="polite"></div>
   <div id="gift" class="ui"><div class="who" id="giftWho"></div><div class="what" id="giftWhat"></div><div class="pray" id="giftPray"></div></div>
 
   <!-- Card Thư Pháp Rút Quẻ Cầu An & Lời Phật Dạy (8 giây) -->
@@ -141,12 +149,15 @@ const {
   SilkMeritScroll,
   AmbientLightingSystem,
   CameraZoomController,
+  CeremonyDirector,
+  setBowConfig,
 } = window.ChanhDienCanvas;
 
 const incenseFX = new IncenseSmokeSystem();
 const meritScroll = new SilkMeritScroll();
 const ambientFX = new AmbientLightingSystem();
 const cameraZoom = new CameraZoomController();
+const ceremonyDirector = new CeremonyDirector();
 let silentUntil = 0;
 
 /* ======================= assets ======================= */
@@ -163,7 +174,7 @@ function avatar(url){ if(!url) return null; let im=avatars.get(url); if(!im){ im
 
 /* ======================= seats ======================= */
 let FLOOR = { yTop: 1430, yBot: 1870, halfTop: 330, halfBot: 470 };
-let LAYOUT = { halo:{y:320,scale:1.9,alpha:.12}, candleGlow:{x:0,y:250,w:1080,h:1050}, incense:{y:990} };
+let LAYOUT = { halo:{y:320,scale:1.9,alpha:.12}, candleGlow:{x:0,y:250,w:1080,h:1050}, incense:{y:990}, altarSpot:{x:540,y:1415,scale:.52,masterShiftX:-120} };
 const GRID = { 24:[6,4], 36:[6,6], 64:[8,8], 100:[10,10] };
 let cap = 24, seats = [];
 function currentCols(){ return (GRID[cap] || GRID[24])[0]; }
@@ -239,10 +250,12 @@ function applyContent(c){
     g.append(d);
   }
   Object.assign(credit, c.credit || {});
+  if (c.ceremony?.bow) setBowConfig(c.ceremony.bow);
   if (c.layout){
     document.getElementById('gift').style.top = c.layout.gift.top + 'px';
     document.getElementById('toast').style.top = c.layout.toast.top + 'px';
     document.getElementById('chant').style.top = c.layout.chant.top + 'px';
+    if (c.ceremony?.bannerTop != null) document.getElementById('ceremonyInvite').style.top = c.ceremony.bannerTop + 'px';
     FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers;
     layout(cap);
   }
@@ -273,6 +286,11 @@ let toastHide=null;
 function showToast(text, sec){
   const el=document.getElementById('toast'); el.textContent=text; el.classList.add('show');
   clearTimeout(toastHide); toastHide=setTimeout(()=>el.classList.remove('show'), sec*1000);
+}
+let ceremonyInviteHide=null;
+function showCeremonyInvite(text, sec=3){
+  const el=document.getElementById('ceremonyInvite'); el.textContent=text; el.classList.add('show');
+  clearTimeout(ceremonyInviteHide); ceremonyInviteHide=setTimeout(()=>el.classList.remove('show'), sec*1000);
 }
 let giftHide=null;
 function showGift(m){
@@ -422,12 +440,20 @@ function connect(){
     const m=JSON.parse(e.data);
     switch(m.t){
       case 'state':
+        ceremonyDirector.reset(visitors);
         applyContent(m.content);
         Object.assign(settings,m.settings); applySettings(); startedAt=m.startedAt; silentUntil=m.silentUntil||0;
         visitors.clear(); order=[]; layout(m.cap); for (const p of m.viewers) addVisitor(p,true); updateCount(); renderMerit(); break;
       case 'settings': Object.assign(settings,m.settings); applySettings(); if (m.cap!==cap){ layout(m.cap); updateCount(); } break;
       case 'silent': silentUntil=m.silentUntil||0; break;
       case 'zoom': { const v=visitors.get(m.id); if(v && !v.inCeremony && settings.zoomEnabled!==false && Date.now()>=silentUntil) cameraZoom.trigger(m, v); } break;
+      case 'ceremony': {
+        const inviteTxt = m.inviteText || fillTpl(CONTENT?.ceremony?.inviteText ?? '🙏 Mời Phật tử {name} lên lễ Phật', { name: m.name });
+        if (m.bow) setBowConfig(m.bow);
+        showCeremonyInvite(inviteTxt, +m.inviteSec || CONTENT?.ceremony?.inviteSec || 3);
+        ceremonyDirector.start(m, visitors, LAYOUT.altarSpot, FLOOR, currentCols());
+        break;
+      }
       case 'join': if (m.cap!==cap) layout(m.cap); addVisitor(m.v, m.v.demo && visitors.size>8); updateCount(); break;
       case 'leave': removeVisitor(m.id); updateCount(); renderMerit(); break;
       case 'skin': { const v=visitors.get(m.id); if(v){ v.skin=m.skin; v.glow=.85; v.triggerBow(1,0); } } break;
@@ -484,6 +510,7 @@ function frame(now){
 
   const cols = currentCols();
   for (const v of visitors.values()) v.update(dt, now, FLOOR, cols);
+  ceremonyDirector.update(dt, now, visitors, FLOOR, cols, { incenseFX, onSmallBell: () => bell(false) });
   cameraZoom.update(dt, visitors, settings.zoomEnabled !== false, Date.now() < silentUntil);
 
   cameraZoom.applyTransform(ctx);
@@ -500,29 +527,43 @@ function frame(now){
   // 3. Lư Hương Lửa & Khói Trầm Tương Tác (Perlin Noise + Sine Wave drift)
   incenseFX.updateAndDraw(ctx, dt, t, 540, LAYOUT.incense.y);
 
-  // 4. Quý Thầy trụ trì trước bàn thờ
+  // 4. Quý Thầy trụ trì trước bàn thờ (Sư Trụ Trì giữa lùi nhẹ sang trái 120px khi có người tại altarSpot)
+  const masterShift = ceremonyDirector.masterOffsetX || 0;
+  const shiftRatio = Math.min(1, Math.abs(masterShift) / 120);
   for (const tc of TEACHERS){
-    if (tc.master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,tc.x,tc.y-120,.9,.5); ctx.restore(); }
-    sprite(A[tc.skin],tc.x,tc.y,tc.s);
-    tag(tc.name,tc.x,tc.y-tc.s*260-22,tc.s,'gold');
+    const tx = tc.master ? (tc.x + masterShift) : tc.x;
+    if (tc.master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,tx,tc.y-120,.9,.5); ctx.restore(); }
+    sprite(A[tc.skin],tx,tc.y,tc.s);
+    const tagA = 1 - (ceremonyDirector.tagHide || 0);   // ẩn thẻ tên 3 thầy khi có người ở altarSpot
+    // Dàn nhẹ tâm bảng tên ngang cùng hàng (không đè lên nhau và không chạm thẻ hướng dẫn bên trái)
+    const tagX = tc.master ? (tx + 68 * shiftRatio) : (tc.x < 400 ? tc.x - 52 * shiftRatio : tc.x);
+    if (tagA > 0.01){ ctx.save(); ctx.globalAlpha = tagA; tag(tc.name, tagX, tc.y - tc.s*260 - 22, tc.s, 'gold'); ctx.restore(); }
   }
 
   // 5. Phật tử ngồi thiền & hành lễ (cập nhật Lerp + Perspective Scaling + 12-Frame Bowing + Lotus Aura 5 phút)
   const bubbles=[];
   const list=[...visitors.values()].sort((a,b)=>a.y-b.y);
   for (const v of list){
+    const effAlpha = v.getEffectiveAlpha();
+    if (effAlpha <= 0.004) continue;
     cameraZoom.drawCharacterAuraRing(ctx, v, t);
     const topY = v.draw(ctx, t, now, A);
     const ws = v.scale;
-    const ty = v.y - topY - 14 * ws / .4;
+    // Người ở altarSpot: thẻ tên đặt dưới bồ đoàn (không che thẻ các thầy / đầu người lễ)
+    const ty = v.atAltarSpot ? v.y + 16 * ws / .4 + 0.75 * Math.max(15, Math.round(30 * ws / .4)) : v.y - topY - 14 * ws / .4;
     const avImg = avatar(v.avatar);
     const zoomedHideNormalTag = cameraZoom.drawZoomedNameplate(ctx, v, topY, t, avImg);
     if (!zoomedHideNormalTag){
-      tag(v.name, v.x, ty, ws, v.skin==='master'||v.coins>=99?'gold':'', avImg, v.state==='sit' ? v.seat?.gap : 0);
+      ctx.save();
+      ctx.globalAlpha = effAlpha;
+      const tagStyle = (v.atAltarSpot || v.skin==='master' || v.coins>=99) ? 'gold' : '';
+      const maxTagW = (!v.atAltarSpot && v.state==='sit') ? v.seat?.gap : 0;
+      tag(v.name, v.x, ty, ws, tagStyle, avImg, maxTagW);
+      ctx.restore();
     }
-    if (v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws]); else v.bubble=null;
+    if (!v.atAltarSpot && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
   }
-  for (const b of bubbles) bubble(...b);
+  for (const [bt, bx, by, bs, ba] of bubbles){ ctx.save(); ctx.globalAlpha = ba; bubble(bt, bx, by, bs); ctx.restore(); }
 
   // 6. Vật phẩm cúng dường bay lên, cánh sen & tim
   for (let i=fx.length-1;i>=0;i--){ const f=fx[i]; f.t+=dt; const k=f.t/f.life; if(k>=1){ fx.splice(i,1); continue; } const pop=1-Math.pow(1-Math.min(1,f.t*4),3);
