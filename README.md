@@ -71,20 +71,6 @@ Việc sử dụng mã nguồn đồng nghĩa với việc bạn đã đọc và
 
 > **Disclaimer (EN):** This project is shared free of charge for educational purposes only and is provided "AS IS", without warranty of any kind. Anyone who uses, modifies or redistributes it is solely responsible for their own content, streams, donations, compliance with TikTok and other platforms' terms, and applicable laws. The author is not affiliated with, does not endorse, and accepts no liability for any channel, account, product or activity built with this code, nor for any direct or indirect damages.
 
-## Ủng hộ tác giả
+## Nguồn gốc và giấy phép
 
-Dự án chia sẻ miễn phí. Nếu thấy hữu ích và muốn góp chút công đức để tác giả duy trì và làm thêm tính năng, bạn có thể chuyển khoản:
-
-| | |
-|---|---|
-| Ngân hàng | **MB Bank** |
-| Số tài khoản | **999979798886** |
-| Chủ tài khoản | **HUYNH HUU NHAN** |
-
-![QR chuyển khoản MB Bank](https://img.vietqr.io/image/MB-999979798886-compact2.png?accountName=HUYNH%20HUU%20NHAN&addInfo=Ung%20ho%20Chanh%20Dien%20Online)
-
-Xin cảm ơn và chúc bạn thân tâm an lạc. Nam mô A Di Đà Phật.
-
-## Giấy phép
-
-MIT, xem `LICENSE`.
+Dự án này là bản phát triển từ [kentjuno/chanh-dien-online](https://github.com/kentjuno/chanh-dien-online), © 2026 Kent Juno, phát hành theo giấy phép **MIT**. Giữ nguyên file `LICENSE` và thông báo bản quyền gốc. Các phần chỉnh sửa, bổ sung trong bản này cũng theo MIT.
