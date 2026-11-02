@@ -152,13 +152,13 @@ export default {
       "halfBot": 470
     },
     "gift": {
-      "top": 1110
+      "top": 940
     },
     "chant": {
-      "top": 1210
+      "top": 1235
     },
     "toast": {
-      "top": 1030
+      "top": 1400
     }
   },
   "credit": {
