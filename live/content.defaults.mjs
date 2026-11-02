@@ -39,7 +39,22 @@ export default {
     "line": "Nam mô A Di Đà Phật. Phật tử {name} thành tâm dâng {gift}{times}. {prayer}.",
     "timesSpoken": ", {count} lần",
     "what": "thành tâm dâng {gift}{times} · công đức {total}",
-    "timesShown": " ×{count}"
+    "timesShown": " ×{count}",
+    "merged": "Nam mô A Di Đà Phật. Xin tùy hỷ công đức của {names} và {more} Phật tử khác.",
+    "mergedAll": "Nam mô A Di Đà Phật. Xin tùy hỷ công đức của {names}."
+  },
+  "follow": {
+    "line": "Nam mô A Di Đà Phật. Cảm ơn Phật tử {name} đã theo dõi kênh. Nguyện cầu cho Phật tử thân tâm thường an lạc."
+  },
+  "share": {
+    "text": "🙏 {name} đã chia sẻ",
+    "showSec": 4
+  },
+  "milestone": {
+    "every": 1000,
+    "line": "Nam mô A Di Đà Phật. Cảm ơn mọi người đã thả {n} trái tim. Nguyện cầu cho tất cả thân tâm an lạc.",
+    "text": "♥ {n} trái tim ♥",
+    "showSec": 5
   },
   "demo": {
     "names": [
@@ -91,17 +106,6 @@ export default {
       "Cầu công việc hanh thông"
     ]
   },
-  "credit": {
-    "enabled": true,
-    "text": "✦ Mã nguồn được chia sẻ bởi Kent Juno ✦",
-    "everyMin": [
-      5,
-      10
-    ],
-    "showSec": 7,
-    "y": 1890,
-    "fontPx": 22
-  },
   "layout": {
     "halo": {
       "y": 320,
@@ -152,6 +156,20 @@ export default {
     },
     "chant": {
       "top": 1210
+    },
+    "toast": {
+      "top": 1030
     }
+  },
+  "credit": {
+    "enabled": true,
+    "text": "✦ Mã nguồn được chia sẻ bởi Kent Juno ✦",
+    "everyMin": [
+      5,
+      10
+    ],
+    "showSec": 7,
+    "y": 1890,
+    "fontPx": 22
   }
 };

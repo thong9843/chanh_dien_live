@@ -41,6 +41,10 @@ function loadContent(){
     guide: { lines: cArr(o('guide').lines, D.guide.lines, 160, 6) },
     prayers: cArr(r.prayers, D.prayers, 300, 100), chants: cArr(r.chants, D.chants, 400, 100),
     demo: { names: cArr(o('demo').names, D.demo.names, 18, 200), botLines: cArr(o('demo').botLines, D.demo.botLines, 120, 100) },
+    follow: { line: cStr(o('follow').line, D.follow.line, 240) },
+    share: { text: cStr(o('share').text, D.share.text, 80), showSec: cNum(o('share').showSec, 1, 30, D.share.showSec) },
+    milestone: { every: Math.round(cNum(o('milestone').every, 100, 100000, D.milestone.every)), line: cStr(o('milestone').line, D.milestone.line, 240),
+                 text: cStr(o('milestone').text, D.milestone.text, 80), showSec: cNum(o('milestone').showSec, 1, 30, D.milestone.showSec) },
     layout: (() => {
       const L = o('layout'), D = DEFAULT_CONTENT.layout, sub = k => (L[k] && typeof L[k] === 'object' && !Array.isArray(L[k])) ? L[k] : {};
       const n = (src, def, k, lo, hi) => cNum(src[k], lo, hi, def[k]);
@@ -55,6 +59,7 @@ function loadContent(){
         teachers: tl.map((t, i) => { const dt = D.teachers[i] || D.teachers[0], tt = (t && typeof t === 'object') ? t : {};
           return { name: cStr(tt.name, dt.name, 30), skin: ['monk','nun','granny','man','woman','child'].includes(tt.skin) ? tt.skin : dt.skin,
                    x: cNum(tt.x, 0, 1080, dt.x), y: cNum(tt.y, 0, 1920, dt.y), s: cNum(tt.s, .05, 5, dt.s), master: !!tt.master }; }),
+        toast: { top: cNum(sub('toast').top, 0, 1800, D.toast.top) },
         gift: { top: cNum(sub('gift').top, 0, 1800, D.gift.top) }, chant: { top: cNum(sub('chant').top, 0, 1800, D.chant.top) },
         floor: { yTop, yBot, halfTop: n(fl, df, 'halfTop', 50, 540), halfBot: n(fl, df, 'halfBot', 50, 540) },
       };
@@ -65,7 +70,7 @@ function loadContent(){
 }
 const CONTENT = loadContent();
 // phần overlay cần để vẽ chữ (lời nguyện, câu tụng, tên demo chỉ dùng ở server)
-const CLIENT_CONTENT = { labels: CONTENT.labels, guide: CONTENT.guide, layout: CONTENT.layout, gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown }, credit: CONTENT.credit };
+const CLIENT_CONTENT = { labels: CONTENT.labels, guide: CONTENT.guide, layout: CONTENT.layout, share: CONTENT.share, milestone: { text: CONTENT.milestone.text, showSec: CONTENT.milestone.showSec }, gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown }, credit: CONTENT.credit };
 const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
 
 /* ------------------------------------------------------------------ state */
@@ -145,7 +150,37 @@ function onGift(id, name, giftName, count, diamonds, avatar){
   const line = fill(CONTENT.gift.line, { name: spoken(v.name), gift: giftName, count, total: v.coins, prayer,
     times: count > 1 ? fill(CONTENT.gift.timesSpoken, { count }) : '' });
   broadcast({ t:'gift', id, name: v.name, giftName, count, coins, total: v.coins, tier, prayer });
-  if (settings.gifts.readAll || coins >= settings.gifts.minDiamonds) say(line, { tag:'gift', id });
+  if (settings.gifts.readAll || coins >= settings.gifts.minDiamonds) say(line, { tag:'gift', small: tier < 3, names: [spoken(v.name)] }, tier >= 3 ? 3 : 1);
+}
+
+/* follow / share / mốc tim. "Buổi" = từ lúc chạy server đến lúc kết nối sang phòng khác. */
+const followed = new Set(); let likeTotal = 0, mileDone = null;
+function resetSession(){ followed.clear(); likeTotal = 0; mileDone = null; }
+function onFollow(id, name, avatar){
+  id = String(id || '').slice(0, 64); if (!id) return;
+  if (followed.has(id)) return;                                   // mỗi người một lần mỗi buổi: chống bấm theo dõi / bỏ theo dõi liên tục
+  followed.add(id);
+  const { v } = seat(id, name, { avatar });
+  const who = v ? v.name : String(name || CONTENT.labels.anonymous).slice(0, 18);
+  broadcast({ t:'follow', id, name: who });
+  say(fill(CONTENT.follow.line, { name: spoken(who) }), { tag:'follow' }, 2);
+}
+function onShare(name){
+  const who = String(name || CONTENT.labels.anonymous).slice(0, 18);
+  broadcast({ t:'share', name: who });
+}
+function onLikes(id, n, total){
+  n = Math.max(1, Math.min(100000, +n || 1));
+  broadcast({ t:'like', id, n });
+  const before = likeTotal;
+  likeTotal = (Number.isFinite(total) && total > likeTotal) ? total : likeTotal + n;      // ưu tiên tổng tim của phòng nếu TikTok gửi
+  const every = CONTENT.milestone.every, m = Math.floor(likeTotal / every);
+  if (mileDone === null) mileDone = Math.floor(Math.max(0, Math.min(before, likeTotal - n)) / every);   // vào giữa phòng: không đọc bù các mốc cũ
+  if (m > mileDone){
+    mileDone = m; const count = m * every;
+    broadcast({ t:'milestone', n: count });
+    say(fill(CONTENT.milestone.line, { n: count }), { tag:'milestone' }, 2);
+  }
 }
 
 function pickPrayer(){
@@ -157,7 +192,34 @@ const spoken = s => String(s).replace(/[_@.]+/g, ' ').replace(/[^\p{L}\p{N}\s]/g
 /* ------------------------------------------------------------------ TTS */
 const ttsQueue = []; let ttsBusy = false, ttsSeq = 0;
 function esc(s){ return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])); }
-function say(text, meta = {}){ if (ttsQueue.length >= 15) { addLog('Hàng đợi giọng đọc đầy, bỏ qua 1 câu'); return; } ttsQueue.push({ text: String(text).slice(0, 500), meta }); pumpTTS(); }
+const MAX_Q = 15, MERGE_OVER = 8;
+// Thang ưu tiên: 4 say thủ công > 3 quà lớn > 2 follow / mốc tim > 1 quà nhỏ > 0 tụng định kỳ. Cùng mức thì ai đến trước đọc trước.
+function say(text, meta = {}, prio = 1){
+  const item = { text: String(text).slice(0, 500), meta, prio };
+  if (ttsQueue.length >= MAX_Q){
+    const low = Math.min(...ttsQueue.map(q => q.prio));
+    if (prio <= low){ addLog('Hàng đợi giọng đọc đầy, bỏ qua 1 câu'); return; }
+    const i = ttsQueue.map(q => q.prio).lastIndexOf(low); ttsQueue.splice(i, 1);          // bỏ câu thấp nhất, mới nhất
+    addLog('Hàng đợi giọng đọc đầy, bỏ 1 câu ưu tiên thấp');
+  }
+  let at = ttsQueue.length; while (at > 0 && ttsQueue[at - 1].prio < prio) at--;           // chèn sau mọi câu có mức >= mình
+  ttsQueue.splice(at, 0, item);
+  if (ttsQueue.length > MERGE_OVER) mergeSmallGifts();
+  pumpTTS();
+}
+// Hàng dài: gộp mọi quà nhỏ chưa đọc thành 1 câu, đặt ở chỗ câu quà nhỏ đầu tiên
+function mergeSmallGifts(){
+  const idx = ttsQueue.map((q, i) => q.meta.small ? i : -1).filter(i => i >= 0);
+  if (idx.length < 2) return;
+  const names = [...new Set(idx.flatMap(i => ttsQueue[i].meta.names || []))];
+  const shown = names.slice(0, 3).join(', '), more = names.length - 3;
+  const text = more > 0 ? fill(CONTENT.gift.merged, { names: shown, more }) : fill(CONTENT.gift.mergedAll, { names: shown });
+  const merged = { text: text.slice(0, 500), meta: { tag: 'gift', small: true, names }, prio: 1 };
+  const first = idx[0];
+  for (let k = idx.length - 1; k >= 0; k--) ttsQueue.splice(idx[k], 1);
+  ttsQueue.splice(first, 0, merged);
+  addLog(`Gộp ${idx.length} câu quà nhỏ thành 1 (${names.length} người)`);
+}
 async function pumpTTS(){
   if (ttsBusy || !ttsQueue.length) return; ttsBusy = true;
   const { text, meta } = ttsQueue.shift();
@@ -170,14 +232,14 @@ async function pumpTTS(){
     await new Promise((res, rej) => { audioStream.on('data', c => chunks.push(c)); audioStream.on('close', res); audioStream.on('error', rej); });
     try { tts.close(); } catch {}
     fs.writeFileSync(path.join(TTS_DIR, file), Buffer.concat(chunks));
-    broadcast({ t:'tts', url: `/live/tts/${file}`, text, ...meta });
+    broadcast({ t:'tts', url: `/live/tts/${file}`, text, tag: meta.tag });
     const old = fs.readdirSync(TTS_DIR).sort(); while (old.length > 40) { try { fs.unlinkSync(path.join(TTS_DIR, old.shift())); } catch {} }
   } catch (e) { addLog('TTS lỗi: ' + (e?.message || e)); }
   ttsBusy = false; setTimeout(pumpTTS, 50);
 }
 
 let chantIdx = 0, chantTimer = null;
-function chant(){ const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant' }); }
+function chant(){ const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant' }, 0); }
 function scheduleChant(){ clearInterval(chantTimer); if (settings.autoChant) chantTimer = setInterval(chant, Math.max(1, settings.chantEveryMin) * 60_000); }
 scheduleChant();
 
@@ -186,7 +248,7 @@ let TikTokLib = null;
 async function connectTikTok(uniqueId){
   uniqueId = String(uniqueId || '').trim().replace(/^.*tiktok\.com\/@?/i, '').replace(/^@/, '').replace(/\/.*$/, '');
   if (!uniqueId) return;
-  await disconnectTikTok();
+  await disconnectTikTok(); resetSession();
   tiktokState = { status: 'connecting', uniqueId, error: '' }; broadcast({ t:'tiktok', ...tiktokState });
   try {
     TikTokLib ||= await import('tiktok-live-connector');
@@ -204,7 +266,9 @@ async function connectTikTok(uniqueId){
       addLog(`🎁 ${nm(d.user)} tặng ${gname} x${d.repeatCount || 1}`);
     });
     conn.on(WebcastEvent.MEMBER, d => { if (settings.joinOnEnter) seat(d.user?.uniqueId, nm(d.user), { avatar: av(d.user) }); });
-    conn.on(WebcastEvent.LIKE, d => broadcast({ t:'like', id: d.user?.uniqueId, n: d.likeCount || 1 }));
+    conn.on(WebcastEvent.LIKE, d => onLikes(d.user?.uniqueId, d.likeCount || 1, d.totalLikeCount));
+    conn.on(WebcastEvent.FOLLOW, d => onFollow(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
+    conn.on(WebcastEvent.SHARE, d => onShare(nm(d.user)));
     conn.on(ControlEvent.DISCONNECTED, () => { tiktokState = { ...tiktokState, status: 'disconnected' }; broadcast({ t:'tiktok', ...tiktokState }); addLog('TikTok: mất kết nối'); });
     conn.on(ControlEvent.ERROR, e => addLog('TikTok lỗi: ' + (e?.info || e?.message || e)));
     const st = await conn.connect();
@@ -237,12 +301,15 @@ function onControl(m){
     case 'disconnect': disconnectTikTok(); addLog('Đã ngắt kết nối TikTok'); break;
     case 'chat': { const n = String(m.name || 'Khách').slice(0, 18); onChat('sim_' + n, n, String(m.text || 'Nam mô A Di Đà Phật').slice(0, 120)); break; }
     case 'gift': { const n = String(m.name || 'Khách').slice(0, 18); onGift('sim_' + n, n, String(m.gift || 'Hoa hồng').slice(0, 30), clamp(m.count, 1, 99), clamp(m.diamonds, 1, 50000)); break; }
+    case 'follow': { const n = String(m.name || 'Khách').slice(0, 18); onFollow('sim_' + n, n); break; }
+    case 'share': onShare(String(m.name || 'Khách').slice(0, 18)); break;
+    case 'likes': onLikes('sim_' + String(m.name || 'Khách').slice(0, 18), clamp(m.n, 1, 5000)); break;
     case 'fill': fillDemo(clamp(m.n, 1, 100)); addLog(`Đổ người mẫu: ${viewers.size} người`); break;
     case 'clear': clearSeats(); break;
     case 'bell': broadcast({ t:'bell' }); break;
     case 'mo': broadcast({ t:'mo1' }); break;
     case 'chant': chant(); break;
-    case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }); break;
+    case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }, 4); break;
     case 'settings':
       applySettings(m.settings || {});
       scheduleChant(); broadcast({ t:'settings', settings, cap: capacity() }); break;
@@ -275,7 +342,7 @@ function setBots(on, n, pace){
       const ids = [...viewers.keys()].filter(id => id.startsWith('bot_')); if (!ids.length) return;
       const id = ids[Math.floor(Math.random() * ids.length)], v = viewers.get(id), r = Math.random();
       if (r < .62) onChat(id, v.name, BOT_LINES[Math.floor(Math.random() * BOT_LINES.length)]);
-      else if (r < .9) broadcast({ t:'like', id, n: 1 + Math.floor(Math.random() * 4) });
+      else if (r < .9) onLikes(id, 1 + Math.floor(Math.random() * 4));
       else if (r < .985) onGift(id, v.name, 'Hoa hồng', 1 + Math.floor(Math.random() * 3), 1);
       else onGift(id, v.name, 'Đèn hoa sen', 1, 99);
     }, every);

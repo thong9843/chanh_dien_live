@@ -77,6 +77,11 @@ button.red{background:var(--red);border-color:#b84a33}
       <button data-gift="Đèn hoa sen" data-dia="30">Hoa sen · 30</button>
       <button data-gift="Chuông vàng" data-dia="199">Chuông · 199</button>
     </div>
+    <div class="row">
+      <button id="btnFollow">Follow</button>
+      <button id="btnShare">Share</button>
+      <button id="btnLikes">+1000 tim</button>
+    </div>
     <p class="hint">Gõ <b>nam · nữ · sư · ni · tiểu · bà · cao tăng</b> làm bình luận để đổi hình.</p>
     <h2>Đổ người mẫu</h2>
     <div class="row"><button data-fill="15">15</button><button data-fill="36">36</button><button data-fill="64">64</button><button data-fill="100">100</button></div>
@@ -180,6 +185,9 @@ $('btnOverlay').onclick = () => window.open('/live/overlay.html', 'overlay916', 
 $('btnChat').onclick = () => send('chat', { name: $('simName').value, text: $('simText').value });
 document.querySelectorAll('[data-gift]').forEach(b => b.onclick = () => send('gift', { name: $('simName').value, gift: b.dataset.gift, diamonds: +b.dataset.dia, count: 1 }));
 document.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => send('fill', { n: +b.dataset.fill }));
+$('btnFollow').onclick = () => send('follow', { name: $('simName').value });
+$('btnShare').onclick = () => send('share', { name: $('simName').value });
+$('btnLikes').onclick = () => send('likes', { name: $('simName').value, n: 1000 });
 $('btnClear').onclick = () => send('clear');
 $('btnBots').onclick = () => send('bots', { on: $('btnBots').textContent.includes('Bật'), n: +$('botN').value, pace: $('botPace').value });
 $('btnSay').onclick = () => send('say', { text: $('sayText').value });

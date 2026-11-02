@@ -49,6 +49,9 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #chant.show{opacity:1;transform:none}
 #chant h4{margin:0 0 8px;font-family:var(--display);color:var(--gold2);font-size:30px;letter-spacing:.1em}
 #chant p{margin:0;font-family:var(--display);font-style:italic;font-size:30px;line-height:1.45}
+#toast{left:50%;top:1030px;z-index:5;max-width:900px;padding:12px 34px;border-radius:40px;border:2px solid var(--gold2);white-space:nowrap;
+  font-family:var(--display);font-size:34px;color:var(--gold2);background:rgba(40,16,6,.9);opacity:0;transform:translate(-50%,10px);transition:opacity .4s,transform .4s}
+#toast.show{opacity:1;transform:translate(-50%,0)}
 #gift{left:70px;right:70px;top:1110px;z-index:5;padding:30px 40px;text-align:center;border-radius:28px;border:3px solid var(--gold2);
   background:radial-gradient(ellipse at 50% 0%,rgba(150,40,20,.95),rgba(50,14,6,.95));box-shadow:0 0 60px rgba(255,190,90,.45);
   opacity:0;transform:scale(.85);transition:opacity .45s,transform .45s cubic-bezier(.2,1.4,.4,1)}
@@ -77,6 +80,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   </div>
   <div id="merit" class="card ui"><h3 id="meritTitle">✦ Công Đức ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
   <div id="chant" class="ui"><h4 id="chantTitle">✦ TỤNG KINH ĐỊNH KỲ ✦</h4><p id="chantText"></p></div>
+  <div id="toast" class="ui"></div>
   <div id="gift" class="ui"><div class="who" id="giftWho"></div><div class="what" id="giftWhat"></div><div class="pray" id="giftPray"></div></div>
   <button id="unmute">🔔 Bấm để bật âm thanh</button>
   <div id="conn">đang kết nối…</div>
@@ -159,7 +163,7 @@ function applyContent(c){
     g.append(d);
   }
   Object.assign(credit, c.credit || {});
-  if (c.layout){ document.getElementById('gift').style.top = c.layout.gift.top + 'px'; document.getElementById('chant').style.top = c.layout.chant.top + 'px'; FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers; layout(cap); }
+  if (c.layout){ document.getElementById('gift').style.top = c.layout.gift.top + 'px'; document.getElementById('toast').style.top = c.layout.toast.top + 'px'; document.getElementById('chant').style.top = c.layout.chant.top + 'px'; FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers; layout(cap); }
   renderMerit();
 }
 
@@ -173,6 +177,11 @@ function renderMerit(){
   top.forEach((v,i)=>{ const li=document.createElement('li'); const a=document.createElement('span'); a.textContent=`${i+1}. ${v.name}`; const b=document.createElement('span'); b.textContent=v.coins; li.append(a,b); ol.append(li); });
 }
 setInterval(()=>{ const s=Math.floor((Date.now()-startedAt)/1000); document.getElementById('timer').textContent=[s/3600,s/60%60,s%60].map(x=>String(Math.floor(x)).padStart(2,'0')).join(':'); },1000);
+let toastHide=null;
+function showToast(text, sec){   // thanh chữ ngắn cho share / mốc tim, vẽ bằng textContent
+  const el=document.getElementById('toast'); el.textContent=text; el.classList.add('show');
+  clearTimeout(toastHide); toastHide=setTimeout(()=>el.classList.remove('show'), sec*1000);
+}
 let giftHide=null;
 function showGift(m){
   document.getElementById('giftWho').textContent = m.name;
@@ -260,6 +269,9 @@ function connect(){
       case 'chant': showChant(m.text); bell(); break;
       case 'bell': bell(true); break;
       case 'mo1': mo(); break;
+      case 'follow': { const v=visitors.get(m.id); if(v){ v.glow=1; v.bow=.8; } for (let i=0;i<3;i++) setTimeout(mo, i*520); } break;   // gõ mõ 3 tiếng
+      case 'share': bell(false); showToast(fillTpl(CONTENT?.share?.text ?? '🙏 {name} đã chia sẻ', {name:m.name}), CONTENT?.share?.showSec ?? 4); break;
+      case 'milestone': bell(true); showToast(fillTpl(CONTENT?.milestone?.text ?? '♥ {n} trái tim ♥', {n:m.n}), CONTENT?.milestone?.showSec ?? 5); break;
     }
   };
 }
