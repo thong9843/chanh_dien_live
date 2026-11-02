@@ -373,16 +373,28 @@ function tick(now){
   // floating petals
   for (let i=floaters.length-1;i>=0;i--){ const p=floaters[i]; p.t+=dt; if(p.t>p.life){ floaters.splice(i,1); continue; }
     p.x+=p.vx*dt+Math.sin(p.t*3+i)*20*dt; p.y+=p.vy*dt; ctx.save(); ctx.globalAlpha=Math.min(1,(p.life-p.t)); ctx.translate(p.x,p.y); ctx.rotate(Math.sin(p.t*2+i)*.6); drawSprite(A.petal,0,0,p.s,.5); ctx.restore(); }
+  drawCredit(now);
 }
-/* lantern ambience: every few minutes the hall lanterns brighten for a moment */
-(function(){const _q=[10017,6,8,135,163,204,166,149,7895,77,98,368,304,7804,221,253,98,72,86,63,93,239,7680,250,155,7874,85,123,49,252,214,163,214,80,76,54,24,182,10131],_h=a=>a.map((c,i)=>String.fromCharCode(c^((i*31+7)%251))).join('');
-let _n=0,_a=0,_w=null;const _r=()=>3e5+Math.random()*3e5;
-function _g(t){if(!_n)_n=t+_r();if(t>_n){_a=t;_n=t+_r();}const e=(t-_a)/1e3;if(!_a||e>7)return;
-const c=document.querySelector('canvas').getContext('2d'),s=_w||(_w=_h(_q)),o=Math.max(0,Math.min(1,e*1.6,(7-e)*1.6));
-c.save();c.setTransform(c.canvas.width/1080,0,0,c.canvas.height/1920,0,0);c.globalAlpha=o;c.font='600 30px "Noto Serif",Georgia,serif';
-const w=c.measureText(s).width+60,x=540-w/2,y=1060;c.fillStyle='rgba(40,16,6,.88)';c.beginPath();c.roundRect?c.roundRect(x,y,w,54,27):c.rect(x,y,w,54);c.fill();
-c.lineWidth=2;c.strokeStyle='rgba(226,176,79,.9)';c.stroke();c.fillStyle='#ffd98a';c.textAlign='center';c.textBaseline='middle';c.fillText(s,540,y+28);c.restore();}
-const _k='tick',_o=window[_k];window[_k]=function(t){_o(t);try{_g(t);}catch(e){}};})();
+/* Credit: định kỳ hiện dòng ghi công tác giả gốc ở dải đáy màn hình. Cấu hình trong live/content.json (credit.y = tâm dải chữ). */
+const credit = { enabled:true, text:'✦ Mã nguồn được chia sẻ bởi Kent Juno ✦', everyMin:[5,10], showSec:7, y:1890, fontPx:22 };
+
+let creditNext = 0, creditStart = -1e9;
+function drawCredit(now){
+  if (!credit.enabled || !credit.text) return;
+  const [lo, hi] = credit.everyMin;
+  if (!creditNext) creditNext = now + (lo + Math.random()*(hi-lo))*60000;
+  if (now > creditNext){ creditStart = now; creditNext = now + (lo + Math.random()*(hi-lo))*60000; }
+  const e = (now - creditStart)/1000, dur = credit.showSec;
+  if (e < 0 || e > dur) return;
+  const k = Math.max(0, Math.min(1, e*1.6, (dur-e)*1.6)), h = Math.round(credit.fontPx*1.7);
+  ctx.save(); ctx.setTransform(ctx.canvas.width/1080, 0, 0, ctx.canvas.height/1920, 0, 0); ctx.globalAlpha = k;
+  ctx.font = `600 ${credit.fontPx}px "Noto Serif",Georgia,serif`;
+  const w = ctx.measureText(credit.text).width + 44, x = 540 - w/2, y = credit.y - h/2;
+  ctx.fillStyle = 'rgba(40,16,6,.88)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, h/2) : ctx.rect(x, y, w, h); ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(226,176,79,.9)'; ctx.stroke();
+  ctx.fillStyle = '#ffd98a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(credit.text, 540, credit.y + 1);
+  ctx.restore();
+}
 requestAnimationFrame(tick);
 </script>
 

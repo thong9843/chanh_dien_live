@@ -1,0 +1,10 @@
+{
+  "credit": {
+    "enabled": true,
+    "text": "✦ Mã nguồn được chia sẻ bởi Kent Juno ✦",
+    "everyMin": [5, 10],
+    "showSec": 7,
+    "y": 1890,
+    "fontPx": 22
+  }
+}
