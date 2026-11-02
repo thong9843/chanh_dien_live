@@ -41,13 +41,30 @@ function loadContent(){
     guide: { lines: cArr(o('guide').lines, D.guide.lines, 160, 6) },
     prayers: cArr(r.prayers, D.prayers, 300, 100), chants: cArr(r.chants, D.chants, 400, 100),
     demo: { names: cArr(o('demo').names, D.demo.names, 18, 200), botLines: cArr(o('demo').botLines, D.demo.botLines, 120, 100) },
+    layout: (() => {
+      const L = o('layout'), D = DEFAULT_CONTENT.layout, sub = k => (L[k] && typeof L[k] === 'object' && !Array.isArray(L[k])) ? L[k] : {};
+      const n = (src, def, k, lo, hi) => cNum(src[k], lo, hi, def[k]);
+      const fl = sub('floor'), df = D.floor;
+      let yTop = n(fl, df, 'yTop', 0, 1920), yBot = n(fl, df, 'yBot', 0, 1920); if (yTop >= yBot){ yTop = df.yTop; yBot = df.yBot; }
+      const g = sub('candleGlow'), dg = D.candleGlow, h = sub('halo'), dh = D.halo;
+      const tl = Array.isArray(L.teachers) && L.teachers.length ? L.teachers.slice(0, 8) : D.teachers;
+      return {
+        halo: { y: n(h, dh, 'y', -500, 2500), scale: n(h, dh, 'scale', .05, 5), alpha: n(h, dh, 'alpha', 0, 1) },
+        candleGlow: { x: n(g, dg, 'x', -1080, 1080), y: n(g, dg, 'y', 0, 1920), w: n(g, dg, 'w', 0, 2160), h: n(g, dg, 'h', 0, 1920) },
+        incense: { y: n(sub('incense'), D.incense, 'y', 0, 1920) },
+        teachers: tl.map((t, i) => { const dt = D.teachers[i] || D.teachers[0], tt = (t && typeof t === 'object') ? t : {};
+          return { name: cStr(tt.name, dt.name, 30), skin: ['monk','nun','granny','man','woman','child'].includes(tt.skin) ? tt.skin : dt.skin,
+                   x: cNum(tt.x, 0, 1080, dt.x), y: cNum(tt.y, 0, 1920, dt.y), s: cNum(tt.s, .05, 5, dt.s), master: !!tt.master }; }),
+        floor: { yTop, yBot, halfTop: n(fl, df, 'halfTop', 50, 540), halfBot: n(fl, df, 'halfBot', 50, 540) },
+      };
+    })(),
     credit: { enabled: typeof cr.enabled === 'boolean' ? cr.enabled : D.credit.enabled, text: cStr(cr.text, D.credit.text, 120),
               everyMin: [Math.min(lo, hi), Math.max(lo, hi)], showSec: cNum(cr.showSec, 1, 60, 7), y: cNum(cr.y, 0, 1920, 1890), fontPx: cNum(cr.fontPx, 10, 60, 22) },
   };
 }
 const CONTENT = loadContent();
 // phần overlay cần để vẽ chữ (lời nguyện, câu tụng, tên demo chỉ dùng ở server)
-const CLIENT_CONTENT = { labels: CONTENT.labels, guide: CONTENT.guide, gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown }, credit: CONTENT.credit };
+const CLIENT_CONTENT = { labels: CONTENT.labels, guide: CONTENT.guide, layout: CONTENT.layout, gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown }, credit: CONTENT.credit };
 const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
 
 /* ------------------------------------------------------------------ state */

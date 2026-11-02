@@ -101,5 +101,51 @@ export default {
     "showSec": 7,
     "y": 1890,
     "fontPx": 22
+  },
+  "layout": {
+    "halo": {
+      "y": 320,
+      "scale": 1.9,
+      "alpha": 0.12
+    },
+    "candleGlow": {
+      "x": 0,
+      "y": 250,
+      "w": 1080,
+      "h": 1050
+    },
+    "incense": {
+      "y": 990
+    },
+    "teachers": [
+      {
+        "name": "Thầy Minh Đạo",
+        "skin": "monk",
+        "x": 300,
+        "y": 1330,
+        "s": 0.42
+      },
+      {
+        "name": "Sư Trụ Trì",
+        "skin": "monk",
+        "x": 540,
+        "y": 1345,
+        "s": 0.46,
+        "master": true
+      },
+      {
+        "name": "Thầy Tâm Từ",
+        "skin": "monk",
+        "x": 780,
+        "y": 1330,
+        "s": 0.42
+      }
+    ],
+    "floor": {
+      "yTop": 1430,
+      "yBot": 1870,
+      "halfTop": 330,
+      "halfBot": 470
+    }
   }
 };

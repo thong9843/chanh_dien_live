@@ -101,7 +101,8 @@ function avatar(url){ if(!url) return null; let im=avatars.get(url); if(!im){ im
 
 /* ======================= seats ======================= */
 // Floor trapezoid in the painting: back row just below the altar, front row near the bottom.
-const FLOOR = { yTop: 1215, yBot: 1845, halfTop: 290, halfBot: 430 };
+let FLOOR = { yTop: 1430, yBot: 1870, halfTop: 330, halfBot: 470 };   // ghi đè bởi content.json → layout.floor
+let LAYOUT = { halo:{y:320,scale:1.9,alpha:.12}, candleGlow:{x:0,y:250,w:1080,h:1050}, incense:{y:990} };
 const GRID = { 24:[6,4], 36:[6,6], 64:[8,8], 100:[10,10] };
 let cap = 24, seats = [];
 function layout(c){
@@ -130,7 +131,7 @@ function reseat(){
 document.getElementById('count').textContent = '0/24';
 
 /* the three fixed teachers in front of the altar */
-const TEACHERS = [ { name:'Thầy Minh Đạo', skin:'monk', x:300, y:1085, s:.36 }, { name:'Sư Trụ Trì', skin:'monk', x:540, y:1100, s:.4, master:true }, { name:'Thầy Tâm Từ', skin:'monk', x:780, y:1085, s:.36 } ];
+let TEACHERS = [ { name:'Thầy Minh Đạo', skin:'monk', x:300, y:1330, s:.42 }, { name:'Sư Trụ Trì', skin:'monk', x:540, y:1345, s:.46, master:true }, { name:'Thầy Tâm Từ', skin:'monk', x:780, y:1330, s:.42 } ];
 
 function addVisitor(p, instant){
   if (visitors.has(p.id)) { Object.assign(visitors.get(p.id), { name:p.name, skin:p.skin, avatar:p.avatar, coins:p.coins }); return; }
@@ -157,6 +158,7 @@ function applyContent(c){
     g.append(d);
   }
   Object.assign(credit, c.credit || {});
+  if (c.layout){ FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers; layout(cap); }
   renderMerit();
 }
 
@@ -296,9 +298,9 @@ function frame(now){
   if (A.hall.naturalWidth) ctx.drawImage(A.hall,0,0,1080,1920);
   // light: halo pulse behind the Buddha, candle flicker, incense smoke
   haloPulse=Math.max(0,haloPulse-dt*.4);
-  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.2+.08*Math.sin(t*1.2)+haloPulse*.5; sprite(A.halo,540,560,2.7+haloPulse*.35,.5); ctx.restore();
-  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.05+.035*Math.sin(t*9)*Math.sin(t*13.3); ctx.fillStyle='#ffb347'; ctx.fillRect(0,300,1080,800); ctx.restore();
-  ctx.save(); ctx.fillStyle='#efe3cc'; for (let i=0;i<16;i++){ const a=(t*.08+i*.0625)%1; ctx.globalAlpha=.28*(1-a); ctx.beginPath(); ctx.arc(540+Math.sin(a*7+i)*20*a, 1000-a*280, 4+a*15, 0, 6.28); ctx.fill(); } ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=LAYOUT.halo.alpha+.08*Math.sin(t*1.2)+haloPulse*.5; sprite(A.halo,540,LAYOUT.halo.y,LAYOUT.halo.scale+haloPulse*.35,.5); ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.05+.035*Math.sin(t*9)*Math.sin(t*13.3); ctx.fillStyle='#ffb347'; ctx.fillRect(LAYOUT.candleGlow.x,LAYOUT.candleGlow.y,LAYOUT.candleGlow.w,LAYOUT.candleGlow.h); ctx.restore();
+  ctx.save(); ctx.fillStyle='#efe3cc'; for (let i=0;i<16;i++){ const a=(t*.08+i*.0625)%1; ctx.globalAlpha=.28*(1-a); ctx.beginPath(); ctx.arc(540+Math.sin(a*7+i)*20*a, LAYOUT.incense.y-a*280, 4+a*15, 0, 6.28); ctx.fill(); } ctx.restore();
   // teachers
   for (const tc of TEACHERS){ if (tc.master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,tc.x,tc.y-120,.9,.5); ctx.restore(); }
     sprite(A[tc.skin],tc.x,tc.y,tc.s); tag(tc.name,tc.x,tc.y-tc.s*260-22,tc.s,'gold'); }
