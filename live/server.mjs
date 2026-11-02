@@ -86,6 +86,22 @@ function loadContent(){
           pauseSec: cNum(b.pauseSec, 0, 3, db.pauseSec),
         };
       })(),
+      walk: (() => {
+        const w = (ce.walk && typeof ce.walk === 'object' && !Array.isArray(ce.walk)) ? ce.walk : {}, dw = dce.walk;
+        let minSec = cNum(w.minSec, 0.3, 10, dw.minSec), maxSec = cNum(w.maxSec, 0.3, 20, dw.maxSec); if (minSec > maxSec) { minSec = dw.minSec; maxSec = dw.maxSec; }
+        return {
+          speedPxPerSec: cNum(w.speedPxPerSec, 20, 1000, dw.speedPxPerSec), minSec, maxSec,
+          stepSec: cNum(w.stepSec, 0.1, 2, dw.stepSec), riseSec: cNum(w.riseSec, 0.1, 2, dw.riseSec),
+          bobPx: cNum(w.bobPx, 0, 12, dw.bobPx), laneFrac: cNum(w.laneFrac, 0.1, 0.9, dw.laneFrac),
+        };
+      })(),
+      stand: (() => {
+        const t = (ce.stand && typeof ce.stand === 'object' && !Array.isArray(ce.stand)) ? ce.stand : {}, dt = dce.stand;
+        const hr = (t.headRatio && typeof t.headRatio === 'object') ? t.headRatio : {}, headRatio = {};
+        for (const k of Object.keys(dt.headRatio)) headRatio[k] = cNum(hr[k], 0.05, 0.4, dt.headRatio[k]);
+        return { dropPct: cNum(t.dropPct, 0, 0.12, dt.dropPct), squashPct: cNum(t.squashPct, 0, 0.15, dt.squashPct),
+          waistRatio: cNum(t.waistRatio, 0.3, 0.7, dt.waistRatio), headRatio };
+      })(),
       maxQueue: Math.round(cNum(ce.maxQueue, 1, 20, dce.maxQueue)),
       cooldownSec: cNum(ce.cooldownSec, 0, 3600, dce.cooldownSec),
       bannerTop: cNum(ce.bannerTop, 0, 1850, dce.bannerTop),
@@ -104,7 +120,7 @@ function loadContent(){
         incense: { y: n(sub('incense'), D.incense, 'y', 0, 1920) },
         teachers: tl.map((t, i) => { const dt = D.teachers[i] || D.teachers[0], tt = (t && typeof t === 'object') ? t : {};
           return { name: cStr(tt.name, dt.name, 30), skin: ['monk','nun','granny','man','woman','child'].includes(tt.skin) ? tt.skin : dt.skin,
-                   x: cNum(tt.x, 0, 1080, dt.x), y: cNum(tt.y, 0, 1920, dt.y), s: cNum(tt.s, .05, 5, dt.s), master: !!tt.master }; }),
+                   x: cNum(tt.x, 0, 1080, dt.x), y: cNum(tt.y, 0, 1920, dt.y), s: cNum(tt.s, .05, 5, dt.s), master: !!tt.master, flip: !!tt.flip }; }),
         toast: { top: cNum(sub('toast').top, 0, 1800, D.toast.top) },
         gift: { top: cNum(sub('gift').top, 0, 1800, D.gift.top) }, chant: { top: cNum(sub('chant').top, 0, 1800, D.chant.top) },
         floor: { yTop, yBot, halfTop: n(fl, df, 'halfTop', 50, 540), halfBot: n(fl, df, 'halfBot', 50, 540) },
@@ -112,7 +128,6 @@ function loadContent(){
           x: n(as, das, 'x', 120, 960),
           y: n(as, das, 'y', 900, 1850),
           scale: n(as, das, 'scale', 0.15, 1.5),
-          masterShiftX: n(as, das, 'masterShiftX', -400, 400),
         },
       };
     })(),
@@ -256,7 +271,7 @@ function isHighTierGift(giftName, coins, tier){
 }
 
 function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo }; }
-function snapshot(){ return { t:'state', settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, content: CLIENT_CONTENT }; }
+function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, content: CLIENT_CONTENT }; }
 
 /* ------------------------------------------- Silent mode, Altar Ceremony & Camera Zoom */
 const zoomQueue = [];
@@ -291,14 +306,58 @@ function parseCeremonyCommand(text){
   return null;
 }
 
-// Tổng thời gian 1 lượt lễ (giây) = 4 lần mờ + thời gian hành lễ, tính từ cùng số liệu content.json mà overlay dùng
-function computeCeremonyDurationSec(kind){
+// Skin có đủ bộ ảnh tư thế assets/pose_<skin>_{stand,walkL,walkR}.png thì được đứng dậy đi bộ lên bàn thờ
+const POSE_SKINS = new Set();
+let POSE_FILES = [];   // các file pose_<skin>_<pose>.png có thật trong assets/ (overlay chỉ nạp đúng những file này)
+function scanPoseSkins(){
+  POSE_SKINS.clear();
+  let files = []; try { files = fs.readdirSync(path.join(ROOT, 'assets')); } catch {}
+  const SK = ['man', 'woman', 'granny', 'monk', 'nun', 'child'];
+  POSE_FILES = files.filter(f => new RegExp('^pose_(' + SK.join('|') + ')_(stand|walkL|walkR|kneel|prostrate)\\.png$').test(f)).sort();
+  for (const sk of SK){
+    if (['stand', 'walkL', 'walkR'].every(p => files.includes(`pose_${sk}_${p}.png`))) POSE_SKINS.add(sk);
+  }
+}
+scanPoseSkins();
+
+// Toạ độ chỗ ngồi theo đúng cách overlay xếp (cùng công thức layout() ở overlay.html) để ước lượng quãng đường đi bộ
+const SEAT_GRID = { 24: [6, 4], 36: [6, 6], 64: [8, 8], 100: [10, 10] };
+function seatLayout(cap){
+  const fl = CONTENT.layout.floor, [cols, rows] = SEAT_GRID[cap] || SEAT_GRID[24], seats = [];
+  for (let r = 0; r < rows; r++){
+    const t = rows === 1 ? .5 : r / (rows - 1);
+    const y = fl.yTop + (fl.yBot - fl.yTop) * t, half = fl.halfTop + (fl.halfBot - fl.halfTop) * t;
+    for (let k = 0; k < cols; k++){
+      let u = (k - (cols - 1) / 2) / ((cols - 1) / 2); u = Math.sign(u) * (.14 + .86 * Math.abs(u));
+      seats.push({ x: 540 + u * half, y, r });
+    }
+  }
+  seats.sort((a, b) => (b.r - a.r) || (Math.abs(a.x - 540) - Math.abs(b.x - 540)));
+  return { seats, rowGap: rows > 1 ? (fl.yBot - fl.yTop) / (rows - 1) : 0 };
+}
+
+// Thời gian đi bộ của 1 người: tốc độ cố định, kẹp trong [minSec, maxSec].
+// Đường đi: ghế → bước ra phía trước hàng (laneFrac × khoảng cách hàng) → ngang tới lối giữa x=540 → thẳng lên altarSpot.
+function ceremonyWalkInfo(v){
+  const w = CONTENT.ceremony.walk;
+  if (!POSE_SKINS.has(v.skin)) return null;
+  const { seats, rowGap } = seatLayout(capacity());
+  const seat = seats[[...viewers.keys()].indexOf(v.id)];
+  if (!seat) return null;
+  const dy = rowGap * w.laneFrac, altar = CONTENT.layout.altarSpot;
+  const len = dy + Math.abs(altar.x - seat.x) + Math.abs(seat.y + dy - altar.y);
+  return { sec: Math.min(w.maxSec, Math.max(w.minSec, len / w.speedPxPerSec)), laneFrac: w.laneFrac, stepSec: w.stepSec, riseSec: w.riseSec, bobPx: w.bobPx };
+}
+
+// Tổng thời gian 1 lượt lễ (giây): ngồi tại chỗ = 4 lần mờ + hành lễ; có ảnh pose = đứng dậy + đi bộ + hành lễ + 2 lần mờ
+function computeCeremonyDurationSec(kind, walk){
   const c = CONTENT.ceremony, b = c.bow;
   const bowSec = hold => b.downSec + hold + b.upSec;
   let perform;
   if (kind === 'incense') perform = c.incenseHoldSec + bowSec(b.holdSec);
   else if (kind === 'worship') perform = bowSec(b.holdSec) * 3 + b.pauseSec * 2;
   else perform = bowSec(b.prostrateHoldSec);
+  if (walk) return walk.riseSec + walk.sec + perform + c.tailSec + c.fadeSec * 2;
   return c.fadeSec * 4 + perform + c.tailSec;
 }
 
@@ -317,7 +376,8 @@ function startCeremony(v, kind){
     if (zoomQueue[i].id === v.id) zoomQueue.splice(i, 1);
   }
   const c = CONTENT.ceremony;
-  const totalSec = computeCeremonyDurationSec(kind);
+  const walk = ceremonyWalkInfo(v);
+  const totalSec = computeCeremonyDurationSec(kind, walk);
   const now = Date.now();
   ceremonyActive = { id: v.id, name: v.name, kind, endsAt: now + totalSec * 1000 };
   ceremonyCooldowns.set(v.id, now); // cooldown chỉ tính khi bắt đầu hành lễ
@@ -337,6 +397,8 @@ function startCeremony(v, kind){
     incenseHoldSec: c.incenseHoldSec,
     tailSec: c.tailSec,
     bow: c.bow,
+    stand: c.stand,
+    walk,
     totalSec,
   });
 

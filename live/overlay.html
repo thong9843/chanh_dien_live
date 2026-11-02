@@ -151,6 +151,7 @@ const {
   CameraZoomController,
   CeremonyDirector,
   setBowConfig,
+  setStandConfig,
 } = window.ChanhDienCanvas;
 
 const incenseFX = new IncenseSmokeSystem();
@@ -169,6 +170,15 @@ const IMG = {
   incense:'/assets/fx_incense.png', petal:'/assets/fx_petal.png', scroll:'/assets/fx_scroll.png',
 };
 for (const [k,src] of Object.entries(IMG)){ const im=new Image(); im.src=src; A[k]=im; }
+ceremonyDirector.assets = A;
+// Ảnh tư thế đứng/đi bộ: chỉ nạp những file server báo là có thật (poseFiles trong snapshot), không đoán tên → không còn 404.
+// Skin thiếu bộ stand/walkL/walkR giữ cách lên lễ cũ; kneel + prostrate tự dùng nếu có.
+function loadPoseFiles(files){
+  for (const f of (Array.isArray(files) ? files : [])){
+    const m = /^(pose_[a-z]+_(?:stand|walkL|walkR|kneel|prostrate))\.png$/.exec(String(f)); if (!m || A[m[1]]) continue;
+    const im = new Image(); im.src = '/assets/' + m[0]; A[m[1]] = im;
+  }
+}
 const avatars = new Map();
 const AVATAR_MAX = 200;   // LRU: giữ tối đa ~200 ảnh đại diện, bỏ ảnh lâu không dùng nhất
 function avatar(url){
@@ -181,7 +191,7 @@ function avatar(url){
 
 /* ======================= seats ======================= */
 let FLOOR = { yTop: 1430, yBot: 1870, halfTop: 330, halfBot: 470 };
-let LAYOUT = { halo:{y:320,scale:1.9,alpha:.12}, candleGlow:{x:0,y:250,w:1080,h:1050}, incense:{y:990}, altarSpot:{x:540,y:1415,scale:.52,masterShiftX:-120} };
+let LAYOUT = { halo:{y:320,scale:1.9,alpha:.12}, candleGlow:{x:0,y:250,w:1080,h:1050}, incense:{y:990}, altarSpot:{x:540,y:1350,scale:.4} };
 const GRID = { 24:[6,4], 36:[6,6], 64:[8,8], 100:[10,10] };
 let cap = 24, seats = [];
 function currentCols(){ return (GRID[cap] || GRID[24])[0]; }
@@ -217,11 +227,14 @@ function reseat(){
 }
 document.getElementById('count').textContent = '0/24';
 
-/* the three fixed teachers in front of the altar */
+/* sáu vị thầy hai bên bàn thờ, chừa trống lối giữa (flip = lật ngang để quay vào giữa) */
 let TEACHERS = [
-  { name:'Thầy Minh Đạo', skin:'monk', x:300, y:1330, s:.42 },
-  { name:'Sư Trụ Trì', skin:'monk', x:540, y:1345, s:.46, master:true },
-  { name:'Thầy Tâm Từ', skin:'monk', x:780, y:1330, s:.42 },
+  { name:'Thầy Minh Đạo', skin:'monk', x:165, y:1345, s:.4 },
+  { name:'Thầy Thiện Hạnh', skin:'monk', x:275, y:1335, s:.4 },
+  { name:'Sư Trụ Trì', skin:'monk', x:385, y:1325, s:.4, master:true },
+  { name:'Thầy Tâm Từ', skin:'monk', x:695, y:1325, s:.4, flip:true },
+  { name:'Thầy Giác Tâm', skin:'monk', x:805, y:1335, s:.4, flip:true },
+  { name:'Thầy Pháp Duyên', skin:'monk', x:915, y:1345, s:.4, flip:true },
 ];
 
 function addVisitor(p, instant){
@@ -258,6 +271,7 @@ function applyContent(c){
   }
   Object.assign(credit, c.credit || {});
   if (c.ceremony?.bow) setBowConfig(c.ceremony.bow);
+  if (c.ceremony?.stand) setStandConfig(c.ceremony.stand);
   if (c.layout){
     document.getElementById('gift').style.top = c.layout.gift.top + 'px';
     document.getElementById('toast').style.top = c.layout.toast.top + 'px';
@@ -447,6 +461,7 @@ function connect(){
     const m=JSON.parse(e.data);
     switch(m.t){
       case 'state':
+        loadPoseFiles(m.poseFiles);
         ceremonyDirector.reset(visitors);
         applyContent(m.content);
         Object.assign(settings,m.settings); applySettings(); startedAt=m.startedAt; silentUntil=m.silentUntil||0;
@@ -457,6 +472,7 @@ function connect(){
       case 'ceremony': {
         const inviteTxt = m.inviteText || fillTpl(CONTENT?.ceremony?.inviteText ?? '🙏 Mời Phật tử {name} lên lễ Phật', { name: m.name });
         if (m.bow) setBowConfig(m.bow);
+        ceremonyDirector.gridRows = (GRID[cap] || GRID[24])[1];
         showCeremonyInvite(inviteTxt, +m.inviteSec || CONTENT?.ceremony?.inviteSec || 3);
         ceremonyDirector.start(m, visitors, LAYOUT.altarSpot, FLOOR, currentCols());
         break;
@@ -534,17 +550,18 @@ function frame(now){
   // 3. Lư Hương Lửa & Khói Trầm Tương Tác (Perlin Noise + Sine Wave drift)
   incenseFX.updateAndDraw(ctx, dt, t, 540, LAYOUT.incense.y);
 
-  // 4. Quý Thầy trụ trì trước bàn thờ (Sư Trụ Trì giữa lùi nhẹ sang trái 120px khi có người tại altarSpot)
-  const masterShift = ceremonyDirector.masterOffsetX || 0;
-  const shiftRatio = Math.min(1, Math.abs(masterShift) / 120);
+  // 4. Sáu vị thầy hai bên bàn thờ (lối giữa để trống). Thẻ tên chen chúc thì chỉ hiện tên thầy trụ trì.
+  ctx.save();
+  const tagFont = tc => { const fs = Math.max(15, Math.round(30 * tc.s / .4)); return [fs, `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`]; };
+  const tagW = tc => { const [fs, f] = tagFont(tc); ctx.font = f; return ctx.measureText(tc.name).width + fs; };
+  const tw = TEACHERS.map(tagW);
+  const crowded = TEACHERS.some((a, i) => TEACHERS.some((b, j) => j > i && Math.abs(a.x - b.x) < (tw[i] + tw[j]) / 2 + 8 && Math.abs(a.y - b.y) < 60));
+  ctx.restore();
   for (const tc of TEACHERS){
-    const tx = tc.master ? (tc.x + masterShift) : tc.x;
-    if (tc.master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,tx,tc.y-120,.9,.5); ctx.restore(); }
-    sprite(A[tc.skin],tx,tc.y,tc.s);
-    const tagA = 1 - (ceremonyDirector.tagHide || 0);   // ẩn thẻ tên 3 thầy khi có người ở altarSpot
-    // Dàn nhẹ tâm bảng tên ngang cùng hàng (không đè lên nhau và không chạm thẻ hướng dẫn bên trái)
-    const tagX = tc.master ? (tx + 68 * shiftRatio) : (tc.x < 400 ? tc.x - 52 * shiftRatio : tc.x);
-    if (tagA > 0.01){ ctx.save(); ctx.globalAlpha = tagA; tag(tc.name, tagX, tc.y - tc.s*260 - 22, tc.s, 'gold'); ctx.restore(); }
+    if (tc.master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,tc.x,tc.y-120,.9,.5); ctx.restore(); }
+    if (tc.flip){ ctx.save(); ctx.translate(tc.x,0); ctx.scale(-1,1); sprite(A[tc.skin],0,tc.y,tc.s); ctx.restore(); }
+    else sprite(A[tc.skin],tc.x,tc.y,tc.s);
+    if (!crowded || tc.master) tag(tc.name, tc.x, tc.y - tc.s*260 - 22, tc.s, 'gold');
   }
 
   // 5. Phật tử ngồi thiền & hành lễ (cập nhật Lerp + Perspective Scaling + 12-Frame Bowing + Lotus Aura 5 phút)
@@ -564,7 +581,7 @@ function frame(now){
       ctx.save();
       ctx.globalAlpha = effAlpha;
       const tagStyle = (v.atAltarSpot || v.skin==='master' || v.coins>=99) ? 'gold' : '';
-      const maxTagW = (!v.atAltarSpot && v.state==='sit') ? v.seat?.gap : 0;
+      const maxTagW = (!v.atAltarSpot && !v.walkControlled && v.state==='sit') ? v.seat?.gap : 0;
       tag(v.name, v.x, ty, ws, tagStyle, avImg, maxTagW);
       ctx.restore();
     }

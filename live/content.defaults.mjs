@@ -156,6 +156,21 @@ export default {
       "upSec": 0.9,
       "prostrateHoldSec": 1.5,
       "pauseSec": 0.3
+    },
+    "walk": {
+      "speedPxPerSec": 140,
+      "minSec": 1.2,
+      "maxSec": 3.5,
+      "stepSec": 0.35,
+      "riseSec": 0.4,
+      "bobPx": 2,
+      "laneFrac": 0.5
+    },
+    "stand": {
+      "dropPct": 0.09,
+      "squashPct": 0.10,
+      "waistRatio": 0.46,
+      "headRatio": { "man": 0.17, "woman": 0.17, "granny": 0.24 }
     }
   },
   "demo": {
@@ -226,28 +241,12 @@ export default {
       "y": 990
     },
     "teachers": [
-      {
-        "name": "Thầy Minh Đạo",
-        "skin": "monk",
-        "x": 300,
-        "y": 1330,
-        "s": 0.42
-      },
-      {
-        "name": "Sư Trụ Trì",
-        "skin": "monk",
-        "x": 540,
-        "y": 1345,
-        "s": 0.46,
-        "master": true
-      },
-      {
-        "name": "Thầy Tâm Từ",
-        "skin": "monk",
-        "x": 780,
-        "y": 1330,
-        "s": 0.42
-      }
+      { "name": "Thầy Minh Đạo", "skin": "monk", "x": 165, "y": 1345, "s": 0.4, "flip": false },
+      { "name": "Thầy Thiện Hạnh", "skin": "monk", "x": 275, "y": 1335, "s": 0.4, "flip": false },
+      { "name": "Sư Trụ Trì", "skin": "monk", "x": 385, "y": 1325, "s": 0.4, "flip": false, "master": true },
+      { "name": "Thầy Tâm Từ", "skin": "monk", "x": 695, "y": 1325, "s": 0.4, "flip": true },
+      { "name": "Thầy Giác Tâm", "skin": "monk", "x": 805, "y": 1335, "s": 0.4, "flip": true },
+      { "name": "Thầy Pháp Duyên", "skin": "monk", "x": 915, "y": 1345, "s": 0.4, "flip": true }
     ],
     "floor": {
       "yTop": 1430,
@@ -257,9 +256,8 @@ export default {
     },
     "altarSpot": {
       "x": 540,
-      "y": 1415,
-      "scale": 0.52,
-      "masterShiftX": -120
+      "y": 1350,
+      "scale": 0.4
     },
     "gift": {
       "top": 940

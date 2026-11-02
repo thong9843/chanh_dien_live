@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 const DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets');
 const CHARS = { c_man: 260, c_woman: 260, c_granny: 260, c_monk: 260, c_nun: 260, c_child: 229 };   // chiều cao bắt buộc
+const POSE_SKINS = ['man', 'woman', 'granny', 'monk', 'nun', 'child'];
+const POSES = ['stand', 'walkL', 'walkR'], POSES_OPT = ['kneel', 'prostrate'];   // pose_<skin>_<pose>.png: đủ stand/walkL/walkR mới có đi bộ; kneel+prostrate tuỳ chọn
+const isPoseFile = n => new RegExp(`^pose_(${POSE_SKINS.join('|')})_(${[...POSES, ...POSES_OPT].join('|')})\.png$`).test(n);
 const FX = ['fx_banner', 'fx_bell', 'fx_halo', 'fx_incense', 'fx_lotus', 'fx_mo', 'fx_petal', 'fx_scroll'];
 const WIDTH_OK = [100, 400];                                                                            // rộng linh hoạt, chỉ cảnh báo ngoài khoảng
 let errors = 0, warns = 0;
@@ -87,7 +90,7 @@ console.log('Tên file');
 const need = ['hall.jpg', ...Object.keys(CHARS).map(n => n + '.png'), ...FX.map(n => n + '.png')];
 for (const n of need) files.has(n) ? ok(n) : bad('thiếu ' + n);
 const known = new Set([...need, 'music', 'README.md']);
-for (const n of files) if (!known.has(n)) warn(n.startsWith('anim_') ? `${n}: sprite cũ, nên xoá (code tự hiện tư thế ngồi)` : `file lạ: ${n}`);
+for (const n of files) if (!known.has(n) && !isPoseFile(n)) warn(n.startsWith('anim_') ? `${n}: sprite cũ, nên xoá (code tự hiện tư thế ngồi)` : `file lạ: ${n}`);
 
 console.log('PNG nhân vật (cao đúng, rộng hợp lý, có alpha, 4 góc trong suốt)');
 for (const [name, H] of Object.entries(CHARS)){
@@ -106,6 +109,32 @@ for (const [name, H] of Object.entries(CHARS)){
     else ok(`${f}: 4 góc trong suốt`);
   } catch (e) { bad(`${f}: ${e.message}`); }
 }
+
+console.log('PNG tư thế đứng / đi bộ (tuỳ chọn: thiếu chỉ cảnh báo, skin đó dùng cách lên lễ cũ)');
+let anyPose = false;
+for (const sk of POSE_SKINS){
+  const have = [...POSES, ...POSES_OPT].filter(k => files.has(`pose_${sk}_${k}.png`));
+  if (!have.length) continue;
+  anyPose = true;
+  const missing = POSES.filter(k => !have.includes(k));
+  missing.length ? warn(`pose_${sk}: thiếu ${missing.join(', ')} → ${sk} chưa đi bộ được`) : ok(`pose_${sk}: đủ stand/walkL/walkR`);
+  if (have.some(k => POSES_OPT.includes(k)) && !POSES_OPT.every(k => have.includes(k))) warn(`pose_${sk}: có kneel hoặc prostrate nhưng thiếu cái còn lại → bỏ qua nhánh quỳ lạy`);
+  for (const k of have){
+    const f = `pose_${sk}_${k}.png`;
+    try {
+      const p = parsePng(fs.readFileSync(path.join(DIR, f)));
+      if (!hasAlpha(p)){ bad(`${f}: không có kênh alpha`); continue; }
+      if (p.interlace){ warn(`${f}: PNG interlace, bỏ qua kiểm tra góc`); continue; }
+      const u = unfilter(p);
+      const corners = [[0, 0], [p.w - 1, 0], [0, p.h - 1], [p.w - 1, p.h - 1]].map(([x, y]) => alphaAt(p, u, x, y));
+      const opaque = corners.filter(a => a === null || a > 250).length;
+      if (opaque === 4) bad(`${f}: cả 4 góc đều đục (alpha ${corners.join('/')}), nền chưa được tách`);
+      else if (opaque) warn(`${f}: ${opaque}/4 góc đục (alpha ${corners.join('/')})`);
+      else ok(`${f}: ${p.w}x${p.h}, 4 góc trong suốt`);
+    } catch (e) { bad(`${f}: ${e.message}`); }
+  }
+}
+if (!anyPose) warn('chưa có ảnh pose_<skin>_<stand|walkL|walkR>.png nào (lên lễ dùng cách mờ tại chỗ)');
 
 console.log('PNG hiệu ứng (có alpha)');
 for (const n of FX){
