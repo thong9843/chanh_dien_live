@@ -5,3 +5,5 @@ live/tts/
 .env.*
 .DS_Store
 Thumbs.db
+.venv/
+tts_sidecar/.venv/
