@@ -385,10 +385,14 @@ function startAudio(){
   sfx = AC.createGain(); sfx.gain.value=1; sfx.connect(master);
   nextTrack(); scheduleMo(); bell(); playTTS();
 }
+// Chỉ MỘT phần tử Audio cho nhạc nền, nối vào đồ thị âm thanh đúng một lần; đổi bài = đổi src. (Mỗi lần new Audio + createMediaElementSource
+// đều bị Chrome giữ lại mãi: rò listener và node DOM.)
 function nextTrack(){
-  if (musicEl){ musicEl.pause(); }
-  musicEl = new Audio(TRACKS[trackIdx++ % TRACKS.length]); const src=AC.createMediaElementSource(musicEl); src.connect(musicGain);
-  musicEl.onended = nextTrack; musicEl.play().catch(()=>{});
+  if (!musicEl){
+    musicEl = new Audio(); const src=AC.createMediaElementSource(musicEl); src.connect(musicGain);
+    musicEl.onended = nextTrack;
+  }
+  musicEl.src = TRACKS[trackIdx++ % TRACKS.length]; musicEl.play().catch(()=>{});
 }
 function duck(on){ if(!musicGain) return; const t=AC.currentTime, target = !settings.music ? 0 : on ? .14 : .5; musicGain.gain.cancelScheduledValues(t); musicGain.gain.setValueAtTime(musicGain.gain.value,t); musicGain.gain.linearRampToValueAtTime(target,t+.5); }
 let haloPulse=0;
@@ -416,17 +420,29 @@ let moTimer=null; function scheduleMo(){ clearInterval(moTimer); if (AC && setti
 // Hàng đợi phát giọng đọc tuần tự ở Client (chống chồng lấp, phát .mp3 Edge TTS)
 const ttsQ=[]; let ttsPlaying=false;
 function queueTTS(url, onStart){ if (ttsQ.length < 25) ttsQ.push({url,onStart}); playTTS(); }
+// Giọng đọc: cũng chỉ MỘT phần tử Audio + một nút nguồn + một gain, dùng lại cho mọi câu (xem ghi chú ở nextTrack).
+// Mỗi câu chỉ gán handler (thuộc tính on…, ghi đè chứ không cộng dồn) và đổi src; phát xong thì gỡ handler và bỏ nguồn để nhả bộ đệm âm thanh.
+let ttsEl=null;
+function ttsElement(){
+  if (!ttsEl){ ttsEl=new Audio(); const src=AC.createMediaElementSource(ttsEl); const g=AC.createGain(); g.gain.value=1.25; src.connect(g); g.connect(master); }
+  return ttsEl;
+}
 function playTTS(){
   if (ttsPlaying || !ttsQ.length || !AC) return;
   ttsPlaying=true;
   const {url,onStart}=ttsQ.shift();
-  const el=new Audio(url);
-  const src=AC.createMediaElementSource(el);
-  const g=AC.createGain(); g.gain.value=1.25;
-  src.connect(g); g.connect(master);
+  const el=ttsElement();
+  let done=false, watchdog=null;
+  const finish=delay=>{
+    if(done) return; done=true; clearTimeout(watchdog);
+    el.onplay=el.onended=el.onerror=null;
+    try{ el.pause(); el.removeAttribute('src'); el.load(); }catch{}
+    duck(false); ttsPlaying=false; setTimeout(playTTS,delay);
+  };
   el.onplay=()=>{ duck(true); onStart&&onStart(); };
-  el.onended=el.onerror=()=>{ duck(false); ttsPlaying=false; setTimeout(playTTS,380); };
-  el.play().catch(()=>{ duck(false); ttsPlaying=false; setTimeout(playTTS,400); });
+  el.onended=el.onerror=()=>finish(380);
+  watchdog=setTimeout(()=>finish(0),90000);   // chốt chặn: câu kẹt (không ended, không error) không được chặn hàng đợi mãi
+  el.src=url; el.play().catch(()=>finish(400));
 }
 
 /* ======================= effects ======================= */

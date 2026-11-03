@@ -200,8 +200,8 @@ const startedAt = Date.now();
 let silentUntil = 0;                 // trạng thái chung toàn hệ thống (thiền im lặng)
 let silentEndTimer = null;
 let tiktok = null, tiktokState = { status: 'idle', uniqueId: '', error: '' };
-const log = [];
-function addLog(s){ const line = `[${new Date().toLocaleTimeString('vi-VN')}] ${s}`; log.push(line); if (log.length > 300) log.shift(); broadcast({ t:'log', line }, 'control'); console.log(line); }
+const log = []; const LOG_MAX = 500;   // nhật ký vòng: giữ tối đa 500 dòng mới nhất
+function addLog(s){ const line = `[${new Date().toLocaleTimeString('vi-VN')}] ${s}`; log.push(line); if (log.length > LOG_MAX) log.splice(0, log.length - LOG_MAX); broadcast({ t:'log', line }, 'control'); console.log(line); }
 
 const CAPS = [24, 36, 64, 100];
 function capacity(){ if (settings.seatMode !== 'auto') return +settings.seatMode; const n = viewers.size; return CAPS.find(c => n <= c) || 100; }
@@ -681,11 +681,12 @@ function onMember(id, name, avatar){
 }
 
 /* follow / share / mốc tim. "Buổi" = từ lúc chạy server đến lúc kết nối sang phòng khác. */
-const followed = new Set(); let likeTotal = 0, mileDone = null;
+const followed = new Set(); const FOLLOWED_MAX = 5000; let likeTotal = 0, mileDone = null;   // followed có trần: đầy thì bỏ người cũ nhất
 function resetSession(){ followed.clear(); likeTotal = 0; mileDone = null; resetZoom(); resetCeremony(); }
 function onFollow(id, name, avatar){
   id = String(id || '').slice(0, 64); if (!id) return;
   if (followed.has(id)) return;
+  if (followed.size >= FOLLOWED_MAX) followed.delete(followed.values().next().value);
   followed.add(id);
   const { v } = seat(id, name, { avatar });
   const who = v ? v.name : sanitizeDisplayName(name);
@@ -874,12 +875,38 @@ function explainTikTokError(e, step, hasKey){
   if (/Failed to retrieve Room ID|Room ID/i.test(msg)) return 'Không tra được phòng: sai username, kênh không live, hoặc TikTok chặn tạm thời.';
   return msg.slice(0, 300);
 }
-async function connectTikTok(uniqueId){
+/* Tự nối lại: người dùng bấm "Kết nối" thì ttDesired = username và server giữ kết nối đó; mất kết nối hoặc lần nối thất bại (kể cả lần đầu)
+   thì thử lại với thời gian chờ tăng dần 5→10→20→40→60 giây (giữ ở 60). Bấm "Ngắt" thì dừng hẳn. ttGen đánh số lần nối để bỏ kết quả của lần đã bị thay thế/ngắt. */
+let ttDesired = null, ttGen = 0, ttAttempt = 0, ttRetryTimer = null;
+const TT_BACKOFF_SEC = [5, 10, 20, 40, 60];
+function scheduleTikTokReconnect(uniqueId, gen, extra = {}){
+  if (gen !== ttGen || ttDesired !== uniqueId) return;
+  clearTimeout(ttRetryTimer);
+  ttAttempt++;
+  const sec = TT_BACKOFF_SEC[Math.min(ttAttempt - 1, TT_BACKOFF_SEC.length - 1)];
+  tiktokState = { ...extra, status: 'reconnecting', uniqueId, attempt: ttAttempt, retryAt: Date.now() + sec * 1000 };
+  broadcast({ t:'tiktok', ...tiktokState });
+  addLog(`🔁 TikTok: nối lại lần ${ttAttempt} sau ${sec} giây`);
+  ttRetryTimer = setTimeout(() => { ttRetryTimer = null; bg('Nối lại TikTok lỗi', connectTikTok(uniqueId, { auto: true })); }, sec * 1000);
+}
+async function teardownTikTok(){
+  if (!tiktok) return;
+  const c = tiktok; tiktok = null;
+  try { c.removeAllListeners?.(); } catch {}
+  try { await c.disconnect(); } catch {}
+}
+async function connectTikTok(uniqueId, opts = {}){
   uniqueId = String(uniqueId || '').trim().replace(/^.*tiktok\.com\/@?/i, '').replace(/^@/, '').replace(/\/.*$/, '');
   if (!uniqueId) return;
-  await disconnectTikTok(); resetSession();
-  tiktokState = { status: 'connecting', uniqueId, error: '' }; broadcast({ t:'tiktok', ...tiktokState });
-  let step = 'khởi tạo';
+  if (opts.auto){ if (ttDesired !== uniqueId) return; }          // lần tự nối lại: chỉ chạy khi người dùng vẫn muốn kết nối kênh này
+  else { ttDesired = uniqueId; ttAttempt = 0; resetSession(); }  // người dùng bấm Kết nối: phiên mới
+  clearTimeout(ttRetryTimer); ttRetryTimer = null;
+  const gen = ++ttGen;
+  await teardownTikTok();
+  if (gen !== ttGen) return;
+  tiktokState = { status: 'connecting', uniqueId, error: '', ...(ttAttempt ? { attempt: ttAttempt } : {}) }; broadcast({ t:'tiktok', ...tiktokState });
+  let step = 'khởi tạo', conn = null;
+  const abandon = async () => { if (conn){ try { conn.removeAllListeners?.(); } catch {} try { await conn.disconnect(); } catch {} } };
   try {
     TikTokLib ||= await import('tiktok-live-connector');
     const { TikTokLiveConnection, WebcastEvent, ControlEvent } = TikTokLib;
@@ -890,7 +917,7 @@ async function connectTikTok(uniqueId){
     const apiKey = process.env.EULER_API_KEY || '';
     if (apiKey) SignConfig.apiKey = apiKey;
     tiktokState.key = !!apiKey;
-    const conn = new TikTokLiveConnection(uniqueId, { enableExtendedGiftInfo: false, fetchRoomInfoOnConnect: false, processInitialData: false, ...(apiKey ? { signApiKey: apiKey } : {}) });
+    conn = new TikTokLiveConnection(uniqueId, { enableExtendedGiftInfo: false, fetchRoomInfoOnConnect: false, processInitialData: false, ...(apiKey ? { signApiKey: apiKey } : {}) });
     const on = (ev, fn) => conn.on(ev, guard('Sự kiện TikTok lỗi', fn));       // lỗi trong một sự kiện chỉ ghi log, không phá kết nối
     const av = u => u?.profilePicture?.url?.[0] || u?.profilePicture?.urlList?.[0] || u?.avatarThumb?.urlList?.[0] || u?.avatarThumb?.url?.[0] || '';
     const nm = u => u?.nickname || u?.uniqueId || CONTENT.labels.anonymous;
@@ -906,11 +933,16 @@ async function connectTikTok(uniqueId){
     on(WebcastEvent.LIKE, d => onLikes(d.user?.uniqueId, d.likeCount || 1, d.totalLikeCount));
     on(WebcastEvent.FOLLOW, d => onFollow(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
     on(WebcastEvent.SHARE, d => onShare(nm(d.user)));
-    on(ControlEvent.DISCONNECTED, () => { tiktokState = { ...tiktokState, status: 'disconnected' }; broadcast({ t:'tiktok', ...tiktokState }); addLog('TikTok: mất kết nối'); });
+    on(ControlEvent.DISCONNECTED, () => {
+      if (gen !== ttGen) return;
+      tiktokState = { ...tiktokState, status: 'disconnected' }; broadcast({ t:'tiktok', ...tiktokState }); addLog('TikTok: mất kết nối');
+      scheduleTikTokReconnect(uniqueId, gen, { error: 'Mất kết nối với phòng live.', key: tiktokState.key });
+    });
     on(ControlEvent.ERROR, e => addLog('TikTok lỗi: ' + (e?.info || e?.message || e)));
     // 3 bước, log từng bước để biết bước nào bị từ chối
     step = 'tra phòng';
     const roomId = await conn.fetchRoomId();
+    if (gen !== ttGen) return await abandon();
     addLog(`🔎 [1/3] Tra phòng xong (roomId ${String(roomId).slice(0, 6)}…)`);
     step = 'thông tin phòng';
     try {
@@ -921,20 +953,33 @@ async function connectTikTok(uniqueId){
       if (e?.name === 'UserOfflineError' || /isn't online/i.test(String(e?.message))) throw e;
       addLog(`⚠ [2/3] Bỏ qua thông tin phòng (${String(e?.message || e).slice(0, 160)}), vẫn thử mở WebSocket`);
     }
+    if (gen !== ttGen) return await abandon();
     step = 'mở WebSocket';
     const st = await conn.connect(roomId);
+    if (gen !== ttGen) return await abandon();
     tiktok = conn;
+    ttAttempt = 0;
     tiktokState = { status: 'connected', uniqueId, error: '', roomId: st?.roomId || roomId || '', key: tiktokState.key };
     addLog(`✅ [3/3] Đã kết nối live @${uniqueId}`);
   } catch (e) {
+    await abandon();
+    if (gen !== ttGen) return;                                      // lần nối này đã bị thay thế hoặc người dùng bấm Ngắt
     const hasKey = !!process.env.EULER_API_KEY;
-    tiktokState = { status: 'error', uniqueId, error: explainTikTokError(e, step, hasKey), step, key: hasKey };
-    addLog(`❌ Không kết nối được @${uniqueId} (bước: ${step}): ${tiktokState.error}`);
-    if (e?.message && tiktokState.error !== String(e.message).slice(0, 300)) addLog(`   chi tiết gốc: ${String(e.message).replace(/\s+/g, ' ').slice(0, 200)}`);
+    const err = { error: explainTikTokError(e, step, hasKey), step, key: hasKey };
+    addLog(`❌ Không kết nối được @${uniqueId} (bước: ${step}): ${err.error}`);
+    if (e?.message && err.error !== String(e.message).slice(0, 300)) addLog(`   chi tiết gốc: ${String(e.message).replace(/\s+/g, ' ').slice(0, 200)}`);
+    tiktokState = { status: 'error', uniqueId, ...err };
+    scheduleTikTokReconnect(uniqueId, gen, err);                    // kể cả lần đầu thất bại: tự thử lại, tới khi bấm Ngắt
+    return;
   }
   broadcast({ t:'tiktok', ...tiktokState });
 }
-async function disconnectTikTok(){ if (tiktok){ try { await tiktok.disconnect(); } catch {} tiktok = null; } tiktokState = { status:'idle', uniqueId:'', error:'' }; broadcast({ t:'tiktok', ...tiktokState }); }
+// Người dùng bấm Ngắt: dừng hẳn, không tự nối lại.
+async function disconnectTikTok(){
+  ttDesired = null; ttGen++; ttAttempt = 0; clearTimeout(ttRetryTimer); ttRetryTimer = null;
+  await teardownTikTok();
+  tiktokState = { status:'idle', uniqueId:'', error:'' }; broadcast({ t:'tiktok', ...tiktokState });
+}
 
 /* ------------------------------------------------------------- test data */
 const DEMO_NAMES = CONTENT.demo.names;
