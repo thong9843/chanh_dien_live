@@ -20,8 +20,9 @@ npm start
 ```
 
 1. Mở `http://localhost:3000/live/control.html` (bảng điều khiển).
-2. Bấm **Mở màn hình overlay 9:16**, rồi bấm **Bật âm thanh** một lần trong cửa sổ đó (trình duyệt chặn tự phát tiếng).
-3. Trong TikTok LIVE Studio: *Add source → Window capture* → chọn cửa sổ overlay. Với OBS thì dùng *Browser source* trỏ tới `http://localhost:3000/live/overlay.html`, kích thước 1080×1920.
+2. Chạy `live\start-overlay.bat`: mở Edge ở cửa sổ riêng 540×960 (không thanh địa chỉ), rồi bấm **Bật âm thanh** một lần trong cửa sổ đó (trình duyệt chặn tự phát tiếng). Cửa sổ dùng hồ sơ Edge riêng và các cờ chống bị làm chậm khi bị che hay thu nhỏ nên quay LIVE ổn định hơn. Nút **Mở màn hình overlay 9:16** trên bảng điều khiển vẫn dùng được nhưng không có các cờ này.
+3. Trong TikTok LIVE Studio: *Add source → Window capture* → chọn cửa sổ **chanh_dien_live** (cửa sổ Edge vừa mở), giữ tỷ lệ 9:16. Đừng thu nhỏ (minimize) cửa sổ đó; đặt nó nằm sau LIVE Studio thì vẫn được. Với OBS thì dùng *Browser source* trỏ tới `http://localhost:3000/live/overlay.html`, kích thước 1080×1920.
+   - Kích thước cửa sổ đặt ở đầu `start-overlay.bat` (`set W=540`, `set H=960`). Muốn hình nét hơn khi LIVE Studio phát 720p, thử `576×1024` nếu màn hình đủ chỗ.
 4. Bật LIVE trên TikTok, nhập `@username` vào bảng điều khiển, bấm **Kết nối**.
 
 Chưa live vẫn thử được: dùng **Thử tương tác**, **Đổ người mẫu 15/36/64/100** hoặc **Bot mô phỏng**.
