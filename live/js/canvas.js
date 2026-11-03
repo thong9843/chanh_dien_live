@@ -257,6 +257,9 @@
 
   const LOTUS_AURA_DURATION_MS = 5 * 60 * 1000; // 5 phút tri ân dưới chân bồ đoàn
 
+  // Điểm lễ trước bàn thờ: giá trị dự phòng DUY NHẤT phía trình duyệt; giá trị thật lấy từ content.json (layout.altarSpot).
+  const ALTAR_DEFAULT = Object.freeze({ x: 540, y: 1350, scale: 0.4 });
+
   class Character {
     constructor(data, x = 540, y = 2020) {
       this.id = data.id;
@@ -289,9 +292,9 @@
       this.inCeremony = false;
       this.atAltarSpot = false;
       this.ceremonyAlpha = 1;
-      this.ceremonyScale = 0.4;
-      this.ceremonyX = 540;
-      this.ceremonyY = 1350;
+      this.ceremonyScale = ALTAR_DEFAULT.scale;
+      this.ceremonyX = ALTAR_DEFAULT.x;
+      this.ceremonyY = ALTAR_DEFAULT.y;
       this.ceremonyHoldPose = null; // mức cúi 0..1 giữ nguyên khi chắp tay dâng hương
 
       // Một lần lạy = cúi xuống → giữ → ngẩng lên (thời gian lấy từ ceremony.bow)
@@ -804,13 +807,16 @@
 
   class SilkMeritScroll {
     constructor() {
+      this.cfg = null;   // chuỗi + toạ độ từ content.json (meritScroll), server gửi kèm snapshot
       this.queue = [];
       this.current = null;
       this.timer = 0;
     }
 
+    configure(cfg) { this.cfg = cfg || null; }
+
     enqueue(donation) {
-      if (this.queue.length >= 6) return;
+      if (!this.cfg || this.queue.length >= 6) return;
       this.queue.push({
         name: String(donation.name || 'Phật tử').slice(0, 22),
         giftName: String(donation.giftName || 'Hoa Sen').slice(0, 28),
@@ -853,11 +859,12 @@
       const writeProgress = clamp((this.timer - 0.95) / 2.1, 0, 1);
       const sealProgress = clamp((this.timer - 2.85) / 0.35, 0, 1);
 
-      const cx = 540;
-      const cy = 468; // Phía trên màn hình (ngay dưới thanh trạng thái, không che chánh điện dưới)
-      const maxHalfW = 395;
+      const C = this.cfg;
+      const cx = C.x;
+      const cy = C.y;
+      const maxHalfW = C.halfW;
       const halfW = Math.max(16, maxHalfW * openRatio);
-      const scrollH = 206;
+      const scrollH = C.height;
       const topY = cy - scrollH * 0.5;
       const botY = cy + scrollH * 0.5;
       const waveY = Math.sin(t * 2.1) * 2.5;
@@ -937,19 +944,19 @@
           ctx.textBaseline = 'middle';
           ctx.font = '700 24px "Noto Serif", Georgia, serif';
           ctx.fillStyle = '#8b1e12';
-          ctx.fillText('✦  SỔ VÀNG CÔNG ĐỨC  ✦', cx, topY + 42);
+          ctx.fillText(C.title, cx, topY + 42);
 
           // Tên Phật tử phong cách thư pháp trang trọng
           ctx.font = 'italic 700 42px "Noto Serif", Georgia, serif';
           ctx.fillStyle = '#241006';
-          ctx.fillText(`Phật tử ${this.current.name}`, cx, cy - 2);
+          ctx.fillText(`${C.namePrefix} ${this.current.name}`.trim(), cx, cy - 2);
 
           // Lễ vật & Điểm công đức
           const timesTxt = this.current.count > 1 ? ` ×${this.current.count}` : '';
           ctx.font = '600 25px "Be Vietnam Pro", system-ui, sans-serif';
           ctx.fillStyle = '#6b2410';
           ctx.fillText(
-            `Cúng dường ${this.current.giftName}${timesTxt}  ·  Công đức ${this.current.total} ✧`,
+            C.offering.replace(/\{(\w+)\}/g, (m, k) => ({ gift: this.current.giftName, times: timesTxt, total: this.current.total })[k] ?? m),
             cx,
             cy + 44
           );
@@ -957,7 +964,7 @@
           // Lời chúc hồi hướng ngắn
           ctx.font = 'italic 20px "Noto Serif", Georgia, serif';
           ctx.fillStyle = '#5c3d1e';
-          ctx.fillText('Nguyện cầu bình an · Phước báu vô lượng', cx, botY - 30);
+          ctx.fillText(C.blessing, cx, botY - 30);
 
           ctx.restore();
 
@@ -999,8 +1006,8 @@
           ctx.font = '700 15px "Noto Serif", Georgia, serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText('PHƯỚC', 0, -9);
-          ctx.fillText('BÁU', 0, 11);
+          ctx.fillText(C.sealTop, 0, -9);
+          ctx.fillText(C.sealBottom, 0, 11);
           ctx.restore();
         }
 
@@ -1435,9 +1442,9 @@
       this.inFrom = 0;
       this.pending = null; // phiên kế tiếp nếu phiên trước chưa khép kịp
 
-      this.altarX = 540;
-      this.altarY = 1350;
-      this.altarScale = 0.4;
+      this.altarX = ALTAR_DEFAULT.x;
+      this.altarY = ALTAR_DEFAULT.y;
+      this.altarScale = ALTAR_DEFAULT.scale;
 
       // Chế độ ảnh tư thế (đứng dậy → đi bộ → vái đứng); overlay gán assets + gridRows trước khi start()
       this.assets = null;
@@ -1532,9 +1539,9 @@
       }
 
       const spot = altarSpotCfg || {};
-      this.altarX = Number.isFinite(spot.x) ? spot.x : 540;
-      this.altarY = Number.isFinite(spot.y) ? spot.y : 1350;
-      this.altarScale = Number.isFinite(spot.scale) ? spot.scale : 0.4;
+      this.altarX = Number.isFinite(spot.x) ? spot.x : ALTAR_DEFAULT.x;
+      this.altarY = Number.isFinite(spot.y) ? spot.y : ALTAR_DEFAULT.y;
+      this.altarScale = Number.isFinite(spot.scale) ? spot.scale : ALTAR_DEFAULT.scale;
 
       this.fadeSec = clamp(+msg.fadeSec || 0.6, 0.2, 3.0);
       this.incenseBoostSec = clamp(+msg.incenseBoostSec || 6.0, 1.0, 30.0);
@@ -1830,6 +1837,7 @@
     AmbientLightingSystem,
     CameraZoomController,
     CeremonyDirector,
+    ALTAR_DEFAULT,
     setBowConfig,
     setStandConfig,
     hasPoseSet,

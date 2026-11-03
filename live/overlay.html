@@ -150,6 +150,7 @@ const {
   AmbientLightingSystem,
   CameraZoomController,
   CeremonyDirector,
+  ALTAR_DEFAULT,
   setBowConfig,
   setStandConfig,
 } = window.ChanhDienCanvas;
@@ -191,7 +192,7 @@ function avatar(url){
 
 /* ======================= seats ======================= */
 let FLOOR = { yTop: 1430, yBot: 1870, halfTop: 330, halfBot: 470 };
-let LAYOUT = { halo:{y:320,scale:1.9,alpha:.12}, candleGlow:{x:0,y:250,w:1080,h:1050}, incense:{y:990}, altarSpot:{x:540,y:1350,scale:.4} };
+let LAYOUT = { halo:{y:320,scale:1.9,alpha:.12}, candleGlow:{x:0,y:250,w:1080,h:1050}, incense:{y:990}, altarSpot:ALTAR_DEFAULT };
 const GRID = { 24:[6,4], 36:[6,6], 64:[8,8], 100:[10,10] };
 let cap = 24, seats = [];
 function currentCols(){ return (GRID[cap] || GRID[24])[0]; }
@@ -270,6 +271,7 @@ function applyContent(c){
     g.append(d);
   }
   Object.assign(credit, c.credit || {});
+  meritScroll.configure(c.meritScroll);
   if (c.ceremony?.bow) setBowConfig(c.ceremony.bow);
   if (c.ceremony?.stand) setStandConfig(c.ceremony.stand);
   if (c.layout){
@@ -289,7 +291,7 @@ function updateCount(){ document.getElementById('count').textContent = `${visito
 function updateAmbientBadge(){
   const isDay = ambientFX.isDaytime(settings.lightingMode || 'auto');
   const pill = document.getElementById('ambientPill');
-  if (pill) pill.textContent = isDay ? '☀️ Nắng Chánh Điện' : '🕯️ Đêm Tĩnh Tâm';
+  if (pill) pill.textContent = isDay ? L('ambientDay','') : L('ambientNight','');
 }
 function renderMerit(){
   const top = [...visitors.values()].filter(v=>v.coins>0).sort((a,b)=>b.coins-a.coins).slice(0,5);

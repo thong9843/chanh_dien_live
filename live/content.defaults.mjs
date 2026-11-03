@@ -13,7 +13,9 @@ export default {
     "connecting": "đang kết nối…",
     "lost": "mất kết nối server… đang thử lại",
     "anonymous": "ẩn danh",
-    "defaultGift": "Hoa Sen"
+    "defaultGift": "Hoa Sen",
+    "ambientDay": "☀️ Nắng Chánh Điện",
+    "ambientNight": "🕯️ Đêm Tĩnh Tâm"
   },
   "guide": {
     "lines": [
@@ -268,6 +270,18 @@ export default {
     "toast": {
       "top": 1400
     }
+  },
+  "meritScroll": {
+    "title": "✦  SỔ VÀNG CÔNG ĐỨC  ✦",
+    "namePrefix": "Phật tử",
+    "offering": "Cúng dường {gift}{times}  ·  Công đức {total} ✧",
+    "blessing": "Nguyện cầu bình an · Phước báu vô lượng",
+    "sealTop": "PHƯỚC",
+    "sealBottom": "BÁU",
+    "x": 540,
+    "y": 468,
+    "halfW": 395,
+    "height": 206
   },
   "credit": {
     "enabled": true,

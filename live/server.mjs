@@ -150,6 +150,10 @@ function loadContent(){
         },
       };
     })(),
+    meritScroll: (() => { const m = o('meritScroll'), dm = D.meritScroll;
+      return { title: cStr(m.title, dm.title, 60), namePrefix: cStr(m.namePrefix, dm.namePrefix, 20), offering: cStr(m.offering, dm.offering, 120),
+               blessing: cStr(m.blessing, dm.blessing, 80), sealTop: cStr(m.sealTop, dm.sealTop, 8), sealBottom: cStr(m.sealBottom, dm.sealBottom, 8),
+               x: cNum(m.x, 0, 1080, dm.x), y: cNum(m.y, 100, 1800, dm.y), halfW: cNum(m.halfW, 100, 540, dm.halfW), height: cNum(m.height, 120, 400, dm.height) }; })(),
     credit: { enabled: typeof cr.enabled === 'boolean' ? cr.enabled : D.credit.enabled, text: cStr(cr.text, D.credit.text, 120),
               everyMin: [Math.min(lo, hi), Math.max(lo, hi)], showSec: cNum(cr.showSec, 1, 60, 7), y: cNum(cr.y, 0, 1920, 1890), fontPx: cNum(cr.fontPx, 10, 60, 22) },
   };
@@ -162,6 +166,7 @@ const CLIENT_CONTENT = {
   zoom: CONTENT.zoom,
   ceremony: CONTENT.ceremony,
   credit: CONTENT.credit,
+  meritScroll: CONTENT.meritScroll,
 };
 const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m);
 
