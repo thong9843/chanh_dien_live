@@ -173,7 +173,13 @@ export default {
       "squashPct": 0.10,
       "waistRatio": 0.46,
       "headRatio": { "man": 0.17, "woman": 0.17, "granny": 0.24 }
-    }
+    },
+    "kneel": {
+      "downSec": 0.4,
+      "upSec": 0.4,
+      "prostrateFadeSec": 0.35
+    },
+    "prostrateExtraDrop": { "man": 0, "woman": 0, "granny": 0.06 }
   },
   "demo": {
     "names": [

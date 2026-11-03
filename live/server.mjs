@@ -121,6 +121,15 @@ function loadContent(){
         return { dropPct: cNum(t.dropPct, 0, 0.12, dt.dropPct), squashPct: cNum(t.squashPct, 0, 0.15, dt.squashPct),
           waistRatio: cNum(t.waistRatio, 0.3, 0.7, dt.waistRatio), headRatio };
       })(),
+      kneel: (() => {
+        const k = (ce.kneel && typeof ce.kneel === 'object' && !Array.isArray(ce.kneel)) ? ce.kneel : {}, dk = dce.kneel;
+        return { downSec: cNum(k.downSec, 0.1, 2, dk.downSec), upSec: cNum(k.upSec, 0.1, 2, dk.upSec), prostrateFadeSec: cNum(k.prostrateFadeSec, 0.1, 2, dk.prostrateFadeSec) };
+      })(),
+      prostrateExtraDrop: (() => {
+        const e = (ce.prostrateExtraDrop && typeof ce.prostrateExtraDrop === 'object' && !Array.isArray(ce.prostrateExtraDrop)) ? ce.prostrateExtraDrop : {}, out = {};
+        for (const k of Object.keys(dce.prostrateExtraDrop)) out[k] = cNum(e[k], 0, 0.12, dce.prostrateExtraDrop[k]);
+        return out;
+      })(),
       maxQueue: Math.round(cNum(ce.maxQueue, 1, 20, dce.maxQueue)),
       cooldownSec: cNum(ce.cooldownSec, 0, 3600, dce.cooldownSec),
       bannerTop: cNum(ce.bannerTop, 0, 1850, dce.bannerTop),
@@ -374,11 +383,19 @@ function ceremonyWalkInfo(v){
 }
 
 // Tổng thời gian 1 lượt lễ (giây): ngồi tại chỗ = 4 lần mờ + hành lễ; có ảnh pose = đứng dậy + đi bộ + hành lễ + 2 lần mờ
-function computeCeremonyDurationSec(kind, walk){
+// Quỳ + lạy bằng ảnh kneel/prostrate (chỉ !cúng bái, !quỳ lạy, skin có đi bộ và đủ 2 ảnh): các đoạn mờ chéo cũng được cộng vào tổng thời gian.
+function kneelCapable(v, kind){
+  return kind !== 'incense' && POSE_SKINS.has(v.skin) && POSE_FILES.includes(`pose_${v.skin}_kneel.png`) && POSE_FILES.includes(`pose_${v.skin}_prostrate.png`);
+}
+function computeCeremonyDurationSec(kind, walk, kneel){
   const c = CONTENT.ceremony, b = c.bow;
   const bowSec = hold => b.downSec + hold + b.upSec;
   let perform;
-  if (kind === 'incense') perform = c.incenseHoldSec + bowSec(b.holdSec);
+  if (walk && kneel){
+    const n = kind === 'worship' ? 3 : 1, hold = kind === 'worship' ? b.holdSec : b.prostrateHoldSec;
+    perform = kneel.downSec + n * (2 * kneel.prostrateFadeSec + hold) + (n - 1) * b.pauseSec + kneel.upSec;
+  }
+  else if (kind === 'incense') perform = c.incenseHoldSec + bowSec(b.holdSec);
   else if (kind === 'worship') perform = bowSec(b.holdSec) * 3 + b.pauseSec * 2;
   else perform = bowSec(b.prostrateHoldSec);
   if (walk) return walk.riseSec + walk.sec + perform + c.tailSec + c.fadeSec * 2;
@@ -401,7 +418,8 @@ function startCeremony(v, kind){
   }
   const c = CONTENT.ceremony;
   const walk = ceremonyWalkInfo(v);
-  const totalSec = computeCeremonyDurationSec(kind, walk);
+  const kneel = walk && kneelCapable(v, kind) ? c.kneel : null;
+  const totalSec = computeCeremonyDurationSec(kind, walk, kneel);
   const now = Date.now();
   ceremonyActive = { id: v.id, name: v.name, kind, endsAt: now + totalSec * 1000 };
   ceremonyCooldowns.set(v.id, now); // cooldown chỉ tính khi bắt đầu hành lễ
@@ -423,6 +441,8 @@ function startCeremony(v, kind){
     bow: c.bow,
     stand: c.stand,
     walk,
+    kneel,
+    prostrateExtraDrop: kneel ? c.prostrateExtraDrop : undefined,
     totalSec,
   });
 

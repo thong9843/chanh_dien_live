@@ -243,6 +243,43 @@
     return (sh - headTop) * ws;
   }
 
+  // Hạ thêm người ở pha lạy (prostrate) theo từng skin, tỉ lệ chiều cao ảnh; server kẹp 0–0.12 (content.json → ceremony.prostrateExtraDrop)
+  const PROSTRATE_EXTRA = { man: 0, woman: 0, granny: 0.06 };
+  function setProstrateExtraDrop(c) {
+    if (!c || typeof c !== 'object') return;
+    for (const k of Object.keys(c)) {
+      if (!/^[a-z]{2,12}$/.test(k)) continue;
+      const v = +c[k];
+      if (Number.isFinite(v)) PROSTRATE_EXTRA[k] = clamp(v, 0, 0.12);
+    }
+  }
+
+  // Vẽ ảnh quỳ (kneel) nguyên khổ: ctx đã translate tới chân nhân vật. Trả về chiều cao ảnh theo ws.
+  function drawKneelCharacter(ctx, img, drawScale, ws) {
+    const sw = img.naturalWidth, sh = img.naturalHeight;
+    ctx.drawImage(img, -sw * drawScale / 2, -sh * drawScale, sw * drawScale, sh * drawScale);
+    return sh * ws;
+  }
+
+  // Vẽ ảnh lạy sát đất (prostrate). extra = phần hạ thêm (0..1) theo chiều cao ảnh: nửa trên (từ đỉnh đến hông) nén xuống,
+  // đáy (gối, bàn chân) giữ nguyên chỗ.
+  function drawProstrateCharacter(ctx, img, drawScale, ws, extra) {
+    const sw = img.naturalWidth, sh = img.naturalHeight;
+    const drop = Math.max(0, extra) * sh;
+    if (drop < 0.5) {
+      ctx.drawImage(img, -sw * drawScale / 2, -sh * drawScale, sw * drawScale, sh * drawScale);
+      return sh * ws;
+    }
+    const hipY = Math.round(sh * 0.62);
+    ctx.save();
+    ctx.scale(drawScale, drawScale);
+    ctx.translate(-sw / 2, -sh);
+    ctx.drawImage(img, 0, hipY, sw, sh - hipY, 0, hipY, sw, sh - hipY);                    // gối + bàn chân: giữ nguyên
+    ctx.drawImage(img, 0, 0, sw, hipY + 1, 0, drop, sw, hipY + 1 - drop);                  // lưng + đầu: hạ xuống, nén nhẹ
+    ctx.restore();
+    return (sh - drop) * ws;
+  }
+
   const POSE_KEYS = ['stand', 'walkL', 'walkR'];
   function hasPoseSet(assets, skin) {
     return !!assets && POSE_KEYS.every(k => { const im = assets['pose_' + skin + '_' + k]; return im && im.naturalWidth > 0; });
@@ -314,6 +351,8 @@
       this.walkControlled = false; // đang đi bộ: CeremonyDirector điều khiển x, y, scale
       this.walkImgKey = 'stand';   // 'stand' | 'walkL' | 'walkR'
       this.walkBobPx = 0;          // nhún nhẹ theo bước chân
+      this.kneelMix = 0;           // 0 = ảnh đứng, 1 = ảnh quỳ (mờ chéo); CeremonyDirector điều khiển
+      this.prostrateMix = 0;       // 0 = ảnh quỳ, 1 = ảnh lạy sát đất (chỉ có nghĩa khi kneelMix > 0)
 
       // Hào quang hoa sen 5 phút dưới chân bồ đoàn
       this.lotusAuraUntil = 0;
@@ -589,15 +628,18 @@
 
       // Ảnh đứng/đi bộ (mờ chéo với ảnh ngồi) khi lên lễ; kneel/prostrate tự dùng nếu có đủ file
       const mix = this.poseMix > 0.004 ? clamp(this.poseMix, 0, 1) : 0;
-      let standImg = null, standDeform = true;
+      // Các lớp ảnh tư thế: đứng/đi bộ ↔ quỳ ↔ lạy, trọng số theo kneelMix/prostrateMix (mờ chéo). Vái đứng vẫn dùng ảnh đứng.
+      let poseLayers = null;
       if (mix > 0 && hasPoseSet(assets, skinImgKey)) {
-        let key = this.walkImgKey;
-        if (key === 'stand' && this.bowPose > 0.3 && hasKneelSet(assets, skinImgKey)) {
-          key = this.bowPose > 0.75 ? 'prostrate' : 'kneel';
-          standDeform = false;
-        }
-        standImg = assets['pose_' + skinImgKey + '_' + key];
+        poseLayers = [];
+        const kn = hasKneelSet(assets, skinImgKey) ? clamp(this.kneelMix, 0, 1) : 0;
+        const pr = kn > 0 ? clamp(this.prostrateMix, 0, 1) : 0;
+        const wS = 1 - kn, wK = kn * (1 - pr), wP = kn * pr;
+        if (wS > 0.004) poseLayers.push({ kind: 'stand', img: assets['pose_' + skinImgKey + '_' + this.walkImgKey], w: wS });
+        if (wK > 0.004) poseLayers.push({ kind: 'kneel', img: assets['pose_' + skinImgKey + '_kneel'], w: wK });
+        if (wP > 0.004) poseLayers.push({ kind: 'prostrate', img: assets['pose_' + skinImgKey + '_prostrate'], w: wP, extra: (PROSTRATE_EXTRA[skinImgKey] || 0) * pr });
       }
+      const standImg = poseLayers && poseLayers.length ? true : null;
       const sitAlpha = standImg ? effAlpha * (1 - mix) : effAlpha;
 
       if (sitAlpha > 0.004 && baseImg && baseImg.naturalWidth > 0) {
@@ -612,10 +654,18 @@
         }
       }
       if (standImg) {
-        const a = effAlpha * mix;
-        ctx.globalAlpha = a;
         ctx.translate(0, -this.walkBobPx);
-        topY = drawStandCharacter(ctx, standImg, drawScale, ws, standDeform ? this.bowPose : 0, a, skinImgKey);
+        let first = true;
+        for (const L of poseLayers) {
+          if (!L.img || !L.img.naturalWidth) continue;
+          const a = effAlpha * mix * L.w;
+          ctx.globalAlpha = a;
+          let h;
+          if (L.kind === 'stand') h = drawStandCharacter(ctx, L.img, drawScale, ws, this.bowPose, a, skinImgKey);
+          else if (L.kind === 'kneel') h = drawKneelCharacter(ctx, L.img, drawScale, ws);
+          else h = drawProstrateCharacter(ctx, L.img, drawScale, ws, L.extra);
+          if (first) { topY = h; first = false; }
+        }
       }
 
       ctx.restore();
@@ -1424,6 +1474,8 @@
    *    - Có ảnh pose (assets/pose_<skin>_*): ngồi → đứng dậy → đi lối giữa tới altarSpot → vái đứng → mờ → về chỗ ngồi.
    * ========================================================================= */
 
+  const KNEEL_PHASES = new Set(['kneel_down', 'kneel_bow', 'kneel_up', 'kneel_tail']);
+
   class CeremonyDirector {
     constructor() {
       this.active = false;
@@ -1452,6 +1504,8 @@
       this.poseMode = false;
       this.walk = null;       // { sec, stepSec, riseSec, bobPx, laneFrac } do server tính
       this.path = null;       // { pts: [{x,y}], len, scale0 }
+      this.kneel = null;      // { downSec, upSec, prostrateFadeSec } khi lễ bằng ảnh quỳ + lạy (chỉ !cúng bái, !quỳ lạy)
+      this.kb = null;         // tiến trình các lạy: { n, i, stage, holdSec, bellDone }
     }
 
     _resetPose(v) {
@@ -1459,6 +1513,8 @@
       v.walkControlled = false;
       v.walkImgKey = 'stand';
       v.walkBobPx = 0;
+      v.kneelMix = 0;
+      v.prostrateMix = 0;
     }
 
     _restore(v) {
@@ -1513,7 +1569,7 @@
       v.bowPauseRemain = 0;
       v.onFinalDeepBow = null;
       v.ceremonyHoldPose = null;
-      if (this.phase === 'fade_in_altar' || this.phase === 'perform' || this.phase === 'rise' || this.phase === 'walk') {
+      if (this.phase === 'fade_in_altar' || this.phase === 'perform' || this.phase === 'rise' || this.phase === 'walk' || KNEEL_PHASES.has(this.phase)) {
         this.phase = 'fade_out_altar';
         this.timer = 0;
         this.outFrom = v.ceremonyAlpha;
@@ -1563,6 +1619,8 @@
       const skinKey = v.skin === 'master' ? 'monk' : v.skin;
       this.walk = null;
       this.path = null;
+      this.kneel = null;
+      this.kb = null;
       this.poseMode = !!(msg.walk && v.seat && hasPoseSet(this.assets, skinKey));
       if (this.poseMode) {
         setStandConfig(msg.stand);
@@ -1571,6 +1629,12 @@
           sec: clamp(+w.sec || 2, 0.3, 20), stepSec: clamp(+w.stepSec || 0.35, 0.1, 2),
           riseSec: clamp(+w.riseSec || 0.4, 0.1, 2), bobPx: clamp(+w.bobPx || 0, 0, 12), laneFrac: clamp(+w.laneFrac || 0.5, 0.1, 0.9),
         };
+        // Quỳ + lạy bằng ảnh kneel/prostrate: chỉ !cúng bái và !quỳ lạy, chỉ khi server báo và skin đủ ảnh. Còn lại vái đứng như cũ.
+        const kc = msg.kneel;
+        if (kc && typeof kc === 'object' && this.kind !== 'incense' && hasKneelSet(this.assets, skinKey)) {
+          this.kneel = { downSec: clamp(+kc.downSec || 0.4, 0.1, 2), upSec: clamp(+kc.upSec || 0.4, 0.1, 2), prostrateFadeSec: clamp(+kc.prostrateFadeSec || 0.35, 0.1, 2) };
+          setProstrateExtraDrop(msg.prostrateExtraDrop);
+        }
         this.phase = 'rise';
       } else {
         this.phase = 'fade_out_seat';
@@ -1674,6 +1738,12 @@
         return;
       }
 
+      if (KNEEL_PHASES.has(this.phase)) {
+        if (this.sinceStart >= this.performDeadline) { this._abort(visitorsMap); return; }
+        this._updateKneel(v, dt, hooks);
+        return;
+      }
+
       if (this.phase === 'fade_in_altar') {
         const k = clamp(this.timer / this.fadeSec, 0, 1);
         v.ceremonyAlpha = easeInOutSine(k);
@@ -1759,6 +1829,16 @@
 
     // Bắt đầu hành lễ tại altarSpot (dùng chung cho chế độ mờ tại chỗ và chế độ đi bộ)
     _startPerform(v, nowMs, hooks) {
+      if (this.kneel && this.kind !== 'incense') {
+        // Đứng → mờ chéo sang quỳ → (quỳ ↔ lạy) × n → quỳ → mờ chéo về đứng. Không dùng cúi/nén ảnh.
+        v.ceremonyHoldPose = null;
+        if (this.kind === 'prostrate') v.activateLotusAura(nowMs, 2);
+        const worship = this.kind === 'worship';
+        this.kb = { n: worship ? 3 : 1, i: 0, stage: 0, holdSec: worship ? BOW_CFG.holdSec : BOW_CFG.prostrateHoldSec, bellDone: false };
+        this.phase = 'kneel_down';
+        this.timer = 0;
+        return;
+      }
       if (this.kind === 'incense') {
         // !thắp nhang: chắp tay tịnh tâm trước lư hương, khói nhang bùng lên, rồi lạy 1 lần
         v.ceremonyHoldPose = 0.3;
@@ -1777,6 +1857,50 @@
         v.activateLotusAura(nowMs, 2);
         v.startCeremonyBows(1, { holdSec: BOW_CFG.prostrateHoldSec });
       }
+    }
+
+    // Chuỗi quỳ lạy. Trả về true nếu đã xử lý khung này. Mọi thời gian lấy từ kneel (server) + BOW_CFG, đã kẹp.
+    _updateKneel(v, dt, hooks) {
+      const K = this.kneel, kb = this.kb;
+      if (!K || !kb) { this._toFadeOutAltar(); return true; }
+      v.ceremonyAlpha = 1;
+      if (this.phase === 'kneel_down') {
+        v.kneelMix = easeInOutSine(clamp(this.timer / K.downSec, 0, 1));
+        if (this.timer >= K.downSec) { v.kneelMix = 1; this.phase = 'kneel_bow'; this.timer = 0; kb.stage = 0; }
+        return true;
+      }
+      if (this.phase === 'kneel_bow') {
+        const F = K.prostrateFadeSec;
+        if (kb.stage === 0) {                                   // quỳ → lạy sát đất
+          v.prostrateMix = easeInOutSine(clamp(this.timer / F, 0, 1));
+          if (this.timer >= F) { v.prostrateMix = 1; kb.stage = 1; this.timer = 0; }
+        } else if (kb.stage === 1) {                            // giữ ở tư thế lạy
+          v.prostrateMix = 1;
+          // Chuông nhỏ khi chạm đỉnh lạy cuối của !cúng bái
+          if (!kb.bellDone && kb.i === kb.n - 1 && this.kind === 'worship') { kb.bellDone = true; if (hooks.onSmallBell) hooks.onSmallBell(); }
+          if (this.timer >= kb.holdSec) { kb.stage = 2; this.timer = 0; }
+        } else if (kb.stage === 2) {                            // lạy → quỳ
+          v.prostrateMix = 1 - easeInOutSine(clamp(this.timer / F, 0, 1));
+          if (this.timer >= F) {
+            v.prostrateMix = 0; kb.i++;
+            if (kb.i >= kb.n) { this.phase = 'kneel_up'; this.timer = 0; }
+            else { kb.stage = 3; this.timer = 0; }
+          }
+        } else {                                                // nghỉ giữa hai lạy (quỳ)
+          v.prostrateMix = 0;
+          if (this.timer >= BOW_CFG.pauseSec) { kb.stage = 0; this.timer = 0; }
+        }
+        return true;
+      }
+      if (this.phase === 'kneel_up') {
+        v.prostrateMix = 0;
+        v.kneelMix = 1 - easeInOutSine(clamp(this.timer / K.upSec, 0, 1));
+        if (this.timer >= K.upSec) { v.kneelMix = 0; this.phase = 'kneel_tail'; this.timer = 0; }
+        return true;
+      }
+      // kneel_tail: đứng yên một nhịp rồi mờ dần về chỗ
+      if (this.timer >= this.tailSec) this._toFadeOutAltar();
+      return true;
     }
 
     // Đường đi: ghế → bước ra phía trước hàng → ngang tới lối giữa (x = altarX) → thẳng lên altarSpot.
@@ -1840,6 +1964,7 @@
     ALTAR_DEFAULT,
     setBowConfig,
     setStandConfig,
+    setProstrateExtraDrop,
     hasPoseSet,
     getBowConfig: () => Object.assign({}, BOW_CFG),
     bowTotalSec,
