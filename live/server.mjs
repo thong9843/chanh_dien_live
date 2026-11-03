@@ -137,6 +137,14 @@ function loadContent(){
     },
     tts: {
       minGapMs: cNum(o('tts')?.minGapMs, 500, 10000, D.tts?.minGapMs || 2000),
+      order: (() => {
+        const allowed = ['vieneu', 'edge', 'cached'];
+        const raw = Array.isArray(o('tts')?.order) ? o('tts').order : D.tts?.order;
+        const filtered = (raw || []).filter(x => allowed.includes(x));
+        return filtered.length ? filtered : ['vieneu', 'edge', 'cached'];
+      })(),
+      vieneuVoice: cStr(o('tts')?.vieneuVoice, D.tts?.vieneuVoice || 'Thiền Tâm Đức', 80),
+      vieneuSpeed: cNum(o('tts')?.vieneuSpeed, 0.7, 1.2, D.tts?.vieneuSpeed || 0.9),
     },
     oracle: {
       userCooldownSec: cNum(o('oracle')?.userCooldownSec, 10, 3600, D.oracle?.userCooldownSec || 600),
@@ -353,7 +361,7 @@ function isHighTierGift(giftName, coins, tier){
 }
 
 function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo }; }
-function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, content: CLIENT_CONTENT }; }
+function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, vieneu: vieneuState, content: CLIENT_CONTENT }; }
 
 /* ------------------------------------------- Silent mode, Altar Ceremony & Camera Zoom */
 const zoomQueue = [];
@@ -762,33 +770,81 @@ function onLikes(id, n, total){
   }
 }
 
-/* ------------------------------------------------------------------ Edge TTS Queue & Disk Cache */
+/* ------------------------------------------------------------------ TTS Queue, VieNeu Sidecar & Disk Cache */
+const VIENEU_PORT = process.env.VIENEU_PORT || '8765';
+const VIENEU_BASE = (process.env.VIENEU_URL || `http://127.0.0.1:${VIENEU_PORT}`).replace(/\/+$/, '');
+
+let vieneuState = {
+  online: false,
+  device: 'unknown',
+  voice: '',
+  url: VIENEU_BASE,
+};
+
+async function checkVieNeuHealth() {
+  try {
+    const res = await fetch(`${VIENEU_BASE}/health`, { signal: AbortSignal.timeout(2500) });
+    if (res.ok) {
+      const data = await res.json();
+      const wasOnline = vieneuState.online;
+      vieneuState = {
+        online: true,
+        device: String(data.device || 'cpu'),
+        voice: String(data.voice || CONTENT.tts?.vieneuVoice || 'Thiền Tâm Đức'),
+        url: VIENEU_BASE,
+      };
+      if (!wasOnline) {
+        addLog(`🎙️ VieNeu TTS Sidecar kết nối thành công (${vieneuState.device.toUpperCase()} · ${vieneuState.voice})`);
+      }
+      broadcast({ t: 'vieneu', ...vieneuState }, 'control');
+      return true;
+    }
+  } catch {}
+  const wasOnline = vieneuState.online;
+  vieneuState = {
+    online: false,
+    device: 'unknown',
+    voice: '',
+    url: VIENEU_BASE,
+  };
+  if (wasOnline) {
+    addLog(`⚠️ VieNeu TTS Sidecar mất kết nối (${VIENEU_BASE})`);
+  }
+  broadcast({ t: 'vieneu', ...vieneuState }, 'control');
+  return false;
+}
+setInterval(checkVieNeuHealth, 8000);
+setTimeout(checkVieNeuHealth, 1000);
+
 const ttsQueue = []; let ttsBusy = false, ttsSeq = 0, lastTtsEndTime = 0, ttsFailCount = 0;
 const TTS_FAIL_DELAYS = [5000, 10000, 30000];
 const MAX_Q = 8, MERGE_OVER = 5;
 
 function esc(s){ return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])); }
 
-// Khóa lưu đĩa cho các câu cố định (pháp ngữ, kinh, lời chào): key = hash(text+voice+pitch+rate)
-function getTtsCacheKey(text, voice, pitch, rate) {
+// Khóa lưu đĩa cho các câu cố định (pháp ngữ, kinh, lời chào): key = hash(text+voice)
+function getTtsCacheKey(text, voice) {
   const normText = String(text || '').trim().replace(/\s+/g, ' ');
-  return crypto.createHash('sha1').update(`${normText}|${voice}|${pitch}|${rate}`).digest('hex').slice(0, 16);
+  const v = voice || CONTENT.tts?.vieneuVoice || settings.voice || 'Thiền Tâm Đức';
+  return crypto.createHash('sha1').update(`${normText}|${v}`).digest('hex').slice(0, 16);
 }
 
-function getCachedTtsFile(text) {
-  const key = getTtsCacheKey(text, settings.voice, settings.pitch, settings.rate);
-  const fileName = `cache_${key}.mp3`;
-  const filePath = path.join(TTS_DIR, fileName);
-  if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-    return { fileName, filePath };
+function getCachedTtsFile(text, voice) {
+  const key = getTtsCacheKey(text, voice);
+  for (const ext of ['wav', 'mp3']) {
+    const fileName = `cache_${key}.${ext}`;
+    const filePath = path.join(TTS_DIR, fileName);
+    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+      return { fileName, filePath, ext };
+    }
   }
   return null;
 }
 
-function saveCachedTtsFile(text, buf) {
+function saveCachedTtsFile(text, buf, ext = 'mp3', voice) {
   try {
-    const key = getTtsCacheKey(text, settings.voice, settings.pitch, settings.rate);
-    const fileName = `cache_${key}.mp3`;
+    const key = getTtsCacheKey(text, voice);
+    const fileName = `cache_${key}.${ext}`;
     const filePath = path.join(TTS_DIR, fileName);
     fs.writeFileSync(filePath, buf);
     return fileName;
@@ -796,6 +852,22 @@ function saveCachedTtsFile(text, buf) {
     console.error('Lỗi ghi cache TTS:', e?.message);
     return null;
   }
+}
+
+function getFallbackTextWithoutName(meta) {
+  const tag = meta?.tag || '';
+  if (tag === 'gift') return 'Tùy hỷ công đức Phật tử đã cúng dường.';
+  if (tag === 'follow') return 'Tùy hỷ Phật tử đã kết duyên lành.';
+  if (tag === 'oracle') return 'Pháp ngữ hôm nay gửi đến Phật tử.';
+  if (tag === 'member') return 'Chào mừng Phật tử đã đến chánh điện.';
+  return 'Nam Mô A Di Đà Phật.';
+}
+
+function getCachedFallbackWithoutName(meta) {
+  const fbText = getFallbackTextWithoutName(meta);
+  const cached = getCachedTtsFile(fbText);
+  if (cached) return { ...cached, text: fbText };
+  return null;
 }
 
 // Thang ưu tiên: 5 say thủ công > 4 quà lớn (≥99 xu) > 3 follow / mốc tim > 2 quà nhỏ (<99 xu) > 1 oracle > 0 tụng kinh / member.
@@ -811,7 +883,6 @@ function say(text, meta = {}, prio = 1){
       addLog(`Hàng đợi giọng đọc đầy (8/8), bỏ qua câu mới do ưu tiên thấp hơn (${meta.tag || 'tts'})`);
       return;
     }
-    // Tìm phần tử cũ nhất trong các phần tử có độ ưu tiên thấp nhất
     let oldestIdx = -1, oldestTime = Infinity;
     for (let i = 0; i < ttsQueue.length; i++){
       if (ttsQueue[i].prio === minPrio && ttsQueue[i].at < oldestTime){
@@ -845,9 +916,33 @@ function mergeSmallGifts(){
   addLog(`Gộp ${idx.length} câu quà nhỏ thành 1 (${names.length} người)`);
 }
 
-// Một lần tạo giọng: có timeout, luôn đóng kết nối, listener 'error' giữ nguyên sau khi xong (không để sự kiện error muộn làm sập server).
+// 1. Backend VieNeu: gọi sidecar với timeout 15s
+async function synthesizeViaVieNeu(text){
+  const clean = String(text || '').slice(0, 300).trim();
+  const res = await fetch(`${VIENEU_BASE}/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: clean,
+      voice: CONTENT.tts?.vieneuVoice || 'Thiền Tâm Đức',
+      speed: CONTENT.tts?.vieneuSpeed || 0.9,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`VieNeu HTTP ${res.status}: ${errText}`);
+  }
+  const ct = res.headers.get('content-type') || '';
+  const ext = ct.includes('wav') ? 'wav' : 'mp3';
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (!buf.length) throw new Error('VieNeu không trả về dữ liệu âm thanh');
+  return { buf, ext };
+}
+
+// 2. Backend Edge: tạo giọng qua Edge TTS
 const TTS_TIMEOUT_MS = 20_000;
-function synthesizeOnce(text){
+function synthesizeOnceEdge(text){
   return new Promise((resolve, reject) => {
     let tts = null, done = false, timer = null;
     const finish = (err, buf) => {
@@ -870,31 +965,28 @@ function synthesizeOnce(text){
     })().catch(e => finish(e instanceof Error ? e : new Error(String(e))));
   });
 }
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-// Lý do lỗi TTS ở dạng dễ hiểu cho bảng điều khiển.
 function explainTTSError(e){
   const msg = String(e?.message || e);
-  if (/Hết thời gian/i.test(msg)) return 'Edge TTS phản hồi quá chậm (hết thời gian chờ).';
-  if (/Stream closed|turn\.end|truncated/i.test(msg)) return 'Dịch vụ giọng đọc Edge ngắt kết nối giữa chừng (mạng yếu hoặc dịch vụ quá tải).';
-  if (/ENOTFOUND|EAI_AGAIN|ECONN|ETIMEDOUT|network|socket|getaddrinfo/i.test(msg)) return 'Không kết nối được dịch vụ Edge TTS, kiểm tra Internet.';
-  if (/không trả về âm thanh/i.test(msg)) return 'Edge TTS không trả về âm thanh.';
+  if (/Hết thời gian/i.test(msg)) return 'Dịch vụ giọng đọc phản hồi quá chậm (hết thời gian chờ).';
+  if (/Stream closed|turn\.end|truncated/i.test(msg)) return 'Dịch vụ giọng đọc ngắt kết nối giữa chừng.';
+  if (/ENOTFOUND|EAI_AGAIN|ECONN|ETIMEDOUT|network|socket|getaddrinfo/i.test(msg)) return 'Không kết nối được dịch vụ TTS, kiểm tra mạng hoặc sidecar.';
+  if (/không trả về âm thanh/i.test(msg)) return 'Dịch vụ TTS không trả về âm thanh.';
   return msg.replace(/\s+/g, ' ').slice(0, 200);
 }
-// Mọi yêu cầu tạo giọng (phát live lẫn nghe thử) xếp hàng một, không chạy song song; lỗi thì thử lại 1 lần.
+
 let edgeChain = Promise.resolve();
 function synthesizeViaEdge(text){
-  const cached = getCachedTtsFile(text);
-  if (cached) {
-    try { return Promise.resolve(fs.readFileSync(cached.filePath)); } catch {}
-  }
   const run = async () => {
-    try { return await synthesizeOnce(text); }
-    catch (e1) { addLog('TTS lỗi, thử lại 1 lần: ' + explainTTSError(e1)); await sleep(600); return await synthesizeOnce(text); }
+    try { return await synthesizeOnceEdge(text); }
+    catch (e1) { addLog('Edge TTS lỗi, thử lại 1 lần: ' + explainTTSError(e1)); await sleep(600); return await synthesizeOnceEdge(text); }
   };
   const p = edgeChain.then(run, run);
   edgeChain = p.catch(() => {});
   return p;
 }
+
 function reportTTSFail(e, what){
   const reason = explainTTSError(e);
   addLog(`${what}: ${reason}`);
@@ -907,6 +999,49 @@ function pruneTtsFiles(){
   while (old.length > 40) {
     try { fs.unlinkSync(path.join(TTS_DIR, old.shift())); } catch {}
   }
+}
+
+// Tổng hợp giọng đọc theo thứ tự tts.order: vieneu -> edge -> cached (với fallback không tên)
+async function synthesizeForQueue(text, meta){
+  const order = CONTENT.tts?.order || ['vieneu', 'edge', 'cached'];
+  let lastError = null;
+
+  for (const backend of order){
+    if (backend === 'vieneu'){
+      try {
+        const res = await synthesizeViaVieNeu(text);
+        return { buf: res.buf, ext: res.ext, backend: 'vieneu' };
+      } catch (e) {
+        lastError = e;
+      }
+    } else if (backend === 'edge'){
+      try {
+        const buf = await synthesizeViaEdge(text);
+        return { buf, ext: 'mp3', backend: 'edge' };
+      } catch (e) {
+        lastError = e;
+      }
+    } else if (backend === 'cached'){
+      const exact = getCachedTtsFile(text);
+      if (exact) return { file: exact.fileName, backend: 'cached' };
+      const fb = getCachedFallbackWithoutName(meta);
+      if (fb) {
+        addLog(`Dùng giọng lưu sẵn không tên cho [${meta?.tag || 'tts'}]: "${fb.text}"`);
+        return { file: fb.fileName, backend: 'cached_fallback' };
+      }
+    }
+  }
+
+  // Thử disk cache lần cuối nếu cả vieneu và edge đều lỗi
+  const exact = getCachedTtsFile(text);
+  if (exact) return { file: exact.fileName, backend: 'cached' };
+  const fb = getCachedFallbackWithoutName(meta);
+  if (fb) {
+    addLog(`Dùng giọng lưu sẵn không tên dự phòng cho [${meta?.tag || 'tts'}]: "${fb.text}"`);
+    return { file: fb.fileName, backend: 'cached_fallback' };
+  }
+
+  throw (lastError || new Error('Không tạo được giọng đọc từ các backend trong cấu hình'));
 }
 
 async function pumpTTS(){
@@ -925,22 +1060,21 @@ async function pumpTTS(){
 
   const { text, meta } = ttsQueue.shift();
   try {
-    const cached = getCachedTtsFile(text);
+    const res = await synthesizeForQueue(text, meta);
     let file = '';
-    if (cached) {
-      file = cached.fileName;
-    } else {
-      const buf = await synthesizeViaEdge(text);
-      ttsFailCount = 0; // reset on success
+    if (res.file) {
+      file = res.file;
+    } else if (res.buf) {
       const isFixed = meta.fixed || meta.tag === 'chant' || (CONTENT.chants && CONTENT.chants.includes(text));
       if (isFixed) {
-        file = saveCachedTtsFile(text, buf) || `tts_${Date.now()}_${++ttsSeq}.mp3`;
+        file = saveCachedTtsFile(text, res.buf, res.ext) || `tts_${Date.now()}_${++ttsSeq}.${res.ext}`;
       } else {
-        file = `tts_${Date.now()}_${++ttsSeq}.mp3`;
-        fs.writeFileSync(path.join(TTS_DIR, file), buf);
+        file = `tts_${Date.now()}_${++ttsSeq}.${res.ext}`;
+        fs.writeFileSync(path.join(TTS_DIR, file), res.buf);
       }
       pruneTtsFiles();
     }
+    ttsFailCount = 0; // reset on success
     lastTtsEndTime = Date.now();
     broadcast({ t: 'tts', url: `/live/tts/${file}`, text, tag: meta.tag });
   } catch (e) {
@@ -952,7 +1086,26 @@ async function pumpTTS(){
   setTimeout(pumpTTS, 100);
 }
 
-// Tạo file nghe thử cách đọc tên khó riêng trên bảng điều khiển (đọc nguyên câu quà từ content.json, không phát lên overlay)
+// Nghe thử giọng VieNeu trực tiếp từ bảng điều khiển
+async function previewVieNeuTTS(ws){
+  const sampleText = 'Tùy hỷ Phật tử Hải Đăng, Ngọc Hữu đã dâng hoa sen.';
+  try {
+    const res = await synthesizeViaVieNeu(sampleText);
+    const file = `tts_preview_vieneu_${Date.now()}_${++ttsSeq}.${res.ext}`;
+    fs.writeFileSync(path.join(TTS_DIR, file), res.buf);
+    pruneTtsFiles();
+    if (ws && ws.readyState === 1){
+      ws.send(JSON.stringify({ t: 'preview_vieneu', url: `/live/tts/${file}`, text: sampleText }));
+    }
+  } catch (e) {
+    const reason = reportTTSFail(e, 'Nghe thử VieNeu lỗi');
+    if (ws && ws.readyState === 1){
+      ws.send(JSON.stringify({ t: 'preview_vieneu', error: reason, text: sampleText }));
+    }
+  }
+}
+
+// Tạo file nghe thử cách đọc tên khó riêng trên bảng điều khiển
 async function previewNameTTS(rawName, ws){
   const raw = String(rawName || '').slice(0, 80);
   const spokenName = spoken(raw);
@@ -965,12 +1118,15 @@ async function previewNameTTS(rawName, ws){
     total: 1,
     prayer,
     times: '',
-  }).slice(0, 500);
+  }).slice(0, 300);
   try {
-    const buf = await synthesizeViaEdge(text);
-    const file = `tts_preview_${Date.now()}_${++ttsSeq}.mp3`;
-    fs.writeFileSync(path.join(TTS_DIR, file), buf);
-    pruneTtsFiles();
+    const res = await synthesizeForQueue(text, { tag: 'gift' });
+    let file = res.file;
+    if (!file && res.buf) {
+      file = `tts_preview_${Date.now()}_${++ttsSeq}.${res.ext || 'mp3'}`;
+      fs.writeFileSync(path.join(TTS_DIR, file), res.buf);
+      pruneTtsFiles();
+    }
     if (ws && ws.readyState === 1){
       ws.send(JSON.stringify({ t: 'preview_tts', url: `/live/tts/${file}`, rawName: raw, spokenName, text }));
     }
@@ -982,33 +1138,55 @@ async function previewNameTTS(rawName, ws){
   }
 }
 
-let chantIdx = 0, chantTimer = null;
-function chant(){ const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant', fixed: true }, 0); }
-function scheduleChant(){ clearInterval(chantTimer); if (settings.autoChant) chantTimer = setInterval(chant, Math.max(1, settings.chantEveryMin) * 60_000); }
-scheduleChant();
-// Sinh trước chậm rãi các câu cố định khi khởi động để lưu vào đĩa
 async function pregenerateFixedTts(){
   const fixed = [
     ...(CONTENT.chants || []),
     ...(CONTENT.prayers || []),
     ...((CONTENT.oracles || []).map(o => o.teaching || o.verse).filter(Boolean)),
+    'Tùy hỷ công đức Phật tử đã cúng dường.',
+    'Tùy hỷ Phật tử đã kết duyên lành.',
+    'Pháp ngữ hôm nay gửi đến Phật tử.',
+    'Chào mừng Phật tử đã đến chánh điện.',
+    'Nam Mô A Di Đà Phật.',
   ].filter(Boolean);
 
   for (const text of fixed){
     const cached = getCachedTtsFile(text);
     if (!cached){
       try {
-        const buf = await synthesizeViaEdge(text);
-        saveCachedTtsFile(text, buf);
-        addLog(`🎙️ Đã lưu đĩa câu cố định: "${text.slice(0, 30)}…"`);
+        let buf = null, ext = 'mp3';
+        const order = CONTENT.tts?.order || ['vieneu', 'edge'];
+        for (const engine of order){
+          if (engine === 'vieneu'){
+            try {
+              const res = await synthesizeViaVieNeu(text);
+              buf = res.buf; ext = res.ext; break;
+            } catch {}
+          } else if (engine === 'edge'){
+            try {
+              buf = await synthesizeViaEdge(text);
+              ext = 'mp3'; break;
+            } catch {}
+          }
+        }
+        if (buf) {
+          saveCachedTtsFile(text, buf, ext);
+          addLog(`🎙️ Đã lưu đĩa câu cố định: "${text.slice(0, 30)}…"`);
+        }
       } catch (e) {
-        // bỏ qua lỗi nếu không nối được mạng lúc khởi động
+        // bỏ qua lỗi nếu không nối được lúc khởi động
       }
-      await sleep(2500); // sinh chậm rãi cách nhau 2.5s
+      await sleep(2500);
     }
   }
 }
 setTimeout(pregenerateFixedTts, 3000);
+
+let chantIdx = 0, chantTimer = null;
+function chant(){ const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant', fixed: true }, 0); }
+function scheduleChant(){ clearInterval(chantTimer); if (settings.autoChant) chantTimer = setInterval(chant, Math.max(1, settings.chantEveryMin) * 60_000); }
+scheduleChant();
+
 
 
 /* --------------------------------------------------------------- TikTok */
@@ -1213,6 +1391,7 @@ function onControl(m, ws){
     case 'chant': chant(); break;
     case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }, 5); break;
     case 'test_name': bg('Nghe thử lỗi', previewNameTTS(m.name, ws)); break;
+    case 'test_vieneu': bg('Nghe thử VieNeu lỗi', previewVieNeuTTS(ws)); break;
     case 'settings':
       applySettings(m.settings || {});
       if (!settings.zoomEnabled) resetZoom();

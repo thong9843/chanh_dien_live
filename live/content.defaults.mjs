@@ -487,7 +487,10 @@ export default {
     "fontPx": 22
   },
   "tts": {
-    "minGapMs": 2000
+    "minGapMs": 2000,
+    "order": ["vieneu", "edge", "cached"],
+    "vieneuVoice": "Thiền Tâm Đức",
+    "vieneuSpeed": 0.9
   },
   "oracle": {
     "title": "Pháp ngữ hôm nay",
