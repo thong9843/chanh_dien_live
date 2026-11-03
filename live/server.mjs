@@ -151,6 +151,15 @@ function loadContent(){
                    x: cNum(tt.x, 0, 1080, dt.x), y: cNum(tt.y, 0, 1920, dt.y), s: cNum(tt.s, .05, 5, dt.s), master: !!tt.master, flip: !!tt.flip }; }),
         toast: { top: cNum(sub('toast').top, 0, 1800, D.toast.top) },
         gift: { top: cNum(sub('gift').top, 0, 1800, D.gift.top) }, chant: { top: cNum(sub('chant').top, 0, 1800, D.chant.top) },
+        // Đỉnh Sổ Vàng: không bao giờ cao hơn y 640 (vùng mặt tượng y 250–600 luôn được chừa trống)
+        meritScroll: { top: cNum(sub('meritScroll').top, 640, 1700, D.meritScroll.top) },
+        ui: (() => { const u = sub('ui'), du = D.ui;
+          return { pillsCenterX: n(u, du, 'pillsCenterX', 300, 780), hintTop: n(u, du, 'hintTop', 200, 900), hintMaxW: n(u, du, 'hintMaxW', 300, 1000),
+                   hintSec: n(u, du, 'hintSec', 2, 60), meritLeft: n(u, du, 'meritLeft', 0, 900), meritTop: n(u, du, 'meritTop', 0, 1800), meritW: n(u, du, 'meritW', 150, 500),
+                   bannerLeft: n(u, du, 'bannerLeft', 0, 400), bannerRight: n(u, du, 'bannerRight', 680, 1080), giftMaxW: n(u, du, 'giftMaxW', 300, 900) }; })(),
+        safeZones: (Array.isArray(L.safeZones) && L.safeZones.length ? L.safeZones.slice(0, 8) : D.safeZones).map((z, i) => {
+          const dz = D.safeZones[i] || D.safeZones[0], zz = (z && typeof z === 'object') ? z : {};
+          return { label: cStr(zz.label, dz.label, 40), x: cNum(zz.x, 0, 1080, dz.x), y: cNum(zz.y, 0, 1920, dz.y), w: cNum(zz.w, 0, 1080, dz.w), h: cNum(zz.h, 0, 1920, dz.h) }; }),
         floor: { yTop, yBot, halfTop: n(fl, df, 'halfTop', 50, 540), halfBot: n(fl, df, 'halfBot', 50, 540) },
         altarSpot: {
           x: n(as, das, 'x', 120, 960),
@@ -162,9 +171,9 @@ function loadContent(){
     meritScroll: (() => { const m = o('meritScroll'), dm = D.meritScroll;
       return { title: cStr(m.title, dm.title, 60), namePrefix: cStr(m.namePrefix, dm.namePrefix, 20), offering: cStr(m.offering, dm.offering, 120),
                blessing: cStr(m.blessing, dm.blessing, 80), sealTop: cStr(m.sealTop, dm.sealTop, 8), sealBottom: cStr(m.sealBottom, dm.sealBottom, 8),
-               x: cNum(m.x, 0, 1080, dm.x), y: cNum(m.y, 100, 1800, dm.y), halfW: cNum(m.halfW, 100, 540, dm.halfW), height: cNum(m.height, 120, 400, dm.height) }; })(),
+               x: cNum(m.x, 0, 1080, dm.x), halfW: cNum(m.halfW, 100, 540, dm.halfW), height: cNum(m.height, 120, 400, dm.height) }; })(),
     credit: { enabled: typeof cr.enabled === 'boolean' ? cr.enabled : D.credit.enabled, text: cStr(cr.text, D.credit.text, 120),
-              everyMin: [Math.min(lo, hi), Math.max(lo, hi)], showSec: cNum(cr.showSec, 1, 60, 7), y: cNum(cr.y, 0, 1920, 1890), fontPx: cNum(cr.fontPx, 10, 60, 22) },
+              everyMin: [Math.min(lo, hi), Math.max(lo, hi)], showSec: cNum(cr.showSec, 1, 60, 7), y: cNum(cr.y, 0, 1920, D.credit.y), fontPx: cNum(cr.fontPx, 10, 60, 22) },
   };
 }
 const CONTENT = loadContent();
@@ -190,6 +199,7 @@ const settings = {
   autoChant: true, chantEveryMin: 3,
   seatMode: 'auto',                  // auto | 24 | 36 | 64 | 100
   lightingMode: 'auto',              // auto (theo giờ thực) | day | night
+  safeZone: false,                   // phủ đỏ các vùng TikTok che (chỉ để canh bố cục, không dùng khi phát)
   zoomEnabled: CONTENT.zoom.enabled, // bật/tắt zoom vào Phật tử khi quà ≥99 xu hoặc follow
   joinOnEnter: false,                // also seat viewers who only enter the room
   readMemberJoin: false,             // xướng tên chào đón người mới vào phòng (khi bật joinOnEnter)
@@ -632,7 +642,7 @@ function onGift(id, name, giftName, count, diamonds, avatar){
   const prayer = hasCustomPrayer ? v.lastText : (CONTENT.gift.defaultPrayer || 'Nguyện cầu bình an, phước báu vô lượng');
   const tier = coins >= 99 ? 3 : coins >= 20 ? 2 : 1;
   const highGift = isHighTierGift(cleanGift, coins, tier);
-  const scrollMerit = tier >= 2 || coins >= 25 || highGift;
+  const scrollMerit = tier >= 3;               // quà ≥ 99 xu: chỉ hiện Sổ Vàng; quà nhỏ: chỉ khung #gift
 
   const spokenName = spoken(v.rawName || name || v.name);
   const line = fill(CONTENT.gift.line, {
@@ -1033,7 +1043,7 @@ const SETTING_RULES = {
   title: v => String(v).slice(0, 40), subtitle: v => String(v).slice(0, 60),
   voice: v => ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'].includes(v) ? v : settings.voice,
   pitch: v => clamp(v, -50, 50), rate: v => clamp(v, -50, 50), moBpm: v => clamp(v, 20, 120), chantEveryMin: v => clamp(v, 1, 60),
-  music: Boolean, mo: Boolean, autoChant: Boolean, zoomEnabled: Boolean, joinOnEnter: Boolean, readMemberJoin: Boolean,
+  music: Boolean, mo: Boolean, autoChant: Boolean, zoomEnabled: Boolean, joinOnEnter: Boolean, readMemberJoin: Boolean, safeZone: Boolean,
   lightingMode: v => ['auto', 'day', 'night'].includes(v) ? v : 'auto',
   gifts: v => ({ readAll: !!(v && v.readAll), minDiamonds: clamp(v && v.minDiamonds, 1, 50000) }),
   seatMode: v => ['auto', '24', '36', '64', '100'].includes(String(v)) ? String(v) : 'auto',

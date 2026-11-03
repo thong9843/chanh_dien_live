@@ -149,6 +149,7 @@ button.red{background:var(--red);border-color:#b84a33}
       </label>
     </div>
     <label class="check"><input type="checkbox" id="zoomEnabled" checked> Bật Zoom vào Phật tử (quà ≥99 xu hoặc follow, không zoom theo tim)</label>
+    <label class="check"><input type="checkbox" id="safeZone"> Phủ vùng an toàn TikTok lên overlay (đỏ = chỗ TikTok che; chỉ để canh bố cục, tắt trước khi phát)</label>
     <div class="row">
       <button class="gold" id="btnSilent">🧘 Thiền im lặng 5 phút</button>
       <button id="btnSilentCancel" hidden>Huỷ thiền im lặng</button>
@@ -179,7 +180,7 @@ function logLine(s){ const el=$('log'); el.textContent += s + '\n'; el.scrollTop
 const SETTING_IDS = [
   'voice','pitch','rate',
   'music','mo','autoChant','moBpm','chantEveryMin',
-  'lightingMode','zoomEnabled','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
+  'lightingMode','zoomEnabled','safeZone','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
 ];
 function syncGiftUI(){ $('giftMin').disabled = $('giftReadAll').checked; }
 function fillSettings(s){

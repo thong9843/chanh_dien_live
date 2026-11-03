@@ -975,7 +975,7 @@
 
       const C = this.cfg;
       const cx = C.x;
-      const cy = C.y;
+      const cy = (Number.isFinite(C.top) ? C.top : 1000) + C.height * 0.5;   // C.top = đỉnh Sổ Vàng (layout.meritScroll.top)
       const maxHalfW = C.halfW;
       const halfW = Math.max(16, maxHalfW * openRatio);
       const scrollH = C.height;

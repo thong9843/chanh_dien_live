@@ -148,7 +148,7 @@ export default {
     "tailSec": 0.35,
     "maxQueue": 5,
     "cooldownSec": 300,
-    "bannerTop": 1700,
+    "bannerTop": 1172,
     "bow": {
       "dropPct": 0.11,
       "squashPct": 0.10,
@@ -271,11 +271,32 @@ export default {
       "top": 940
     },
     "chant": {
-      "top": 1235
+      "top": 980
     },
     "toast": {
-      "top": 1400
-    }
+      "top": 870
+    },
+    "meritScroll": {
+      "top": 1000
+    },
+    "ui": {
+      "pillsCenterX": 459,
+      "hintTop": 326,
+      "hintMaxW": 740,
+      "hintSec": 8,
+      "meritLeft": 656,
+      "meritTop": 630,
+      "meritW": 262,
+      "bannerLeft": 162,
+      "bannerRight": 918,
+      "giftMaxW": 640
+    },
+    "safeZones": [
+      { "label": "Thanh trên TikTok", "x": 0, "y": 0, "w": 1080, "h": 230 },
+      { "label": "Cột phải TikTok", "x": 918, "y": 230, "w": 162, "h": 1500 },
+      { "label": "Bình luận + nút (dưới-trái)", "x": 0, "y": 1248, "w": 810, "h": 482 },
+      { "label": "Dải dưới", "x": 0, "y": 1730, "w": 1080, "h": 190 }
+    ]
   },
   "meritScroll": {
     "title": "✦  SỔ VÀNG CÔNG ĐỨC  ✦",
@@ -285,8 +306,7 @@ export default {
     "sealTop": "PHƯỚC",
     "sealBottom": "BÁU",
     "x": 540,
-    "y": 468,
-    "halfW": 395,
+    "halfW": 360,
     "height": 206
   },
   "credit": {
@@ -297,7 +317,7 @@ export default {
       10
     ],
     "showSec": 7,
-    "y": 1890,
+    "y": 1222,
     "fontPx": 22
   }
 };
