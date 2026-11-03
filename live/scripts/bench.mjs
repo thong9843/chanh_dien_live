@@ -114,7 +114,14 @@ async function main() {
   } catch (e) { log('Không đọc được GPU info:', e.message); }
 
   ctl = new WebSocket('ws://localhost:3000/ws?role=control', { headers: { Origin: 'http://localhost:3000' } });
+  let ttsFailures = 0;
   ctl.on('error', e => log('ctl lỗi:', e.message));
+  ctl.on('message', d => {
+    try {
+      const m = JSON.parse(d);
+      if (m.t === 'tts_error') ttsFailures++;
+    } catch {}
+  });
   await new Promise((r, j) => { ctl.on('open', r); ctl.on('error', j); });
   const cmd = o => { try { ctl.send(JSON.stringify({ t: 'ctl', ...o })); } catch (e) { log('Gửi lệnh lỗi:', e.message); } };
   cmd({ cmd: 'bots', on: true, n: 100, pace: 'fast' });
@@ -123,15 +130,18 @@ async function main() {
 
   // CPU các tiến trình Edge của phiên đo lấy bằng PowerShell Get-Process theo PID (không qua CDP nên không treo theo trình duyệt).
   // Lọc tiến trình msedge có --user-data-dir của phiên này; loại tiến trình lấy từ --type= (không có = browser).
-  const PS = `$u=$env:BENCH_UDD; $r=@(); foreach($p in (Get-CimInstance Win32_Process -Filter "Name='msedge.exe'")){ if($p.CommandLine -and $p.CommandLine.Contains($u)){ $t='browser'; if($p.CommandLine -match '--type=([a-z-]+)'){ $t=$Matches[1] }; $g=Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue; if($g){ $r+=[pscustomobject]@{type=$t;cpu=$g.TotalProcessorTime.TotalSeconds} } } }; ConvertTo-Json -Compress -InputObject @($r)`;
+  const PS = `$u=$env:BENCH_UDD; $r=@(); foreach($p in (Get-CimInstance Win32_Process -Filter "Name='msedge.exe'")){ if($p.CommandLine -and $p.CommandLine.Contains($u)){ $t='browser'; if($p.CommandLine -match '--type=([a-z-]+)'){ $t=$Matches[1] }; $g=Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue; if($g){ $r+=[pscustomobject]@{type=$t;cpu=$g.TotalProcessorTime.TotalSeconds} } } }; $pyCpu=0; foreach($py in (Get-CimInstance Win32_Process -Filter "Name='python.exe'")){ if($py.CommandLine -and ($py.CommandLine -match 'app\.py')){ $g=Get-Process -Id $py.ProcessId -ErrorAction SilentlyContinue; if($g){ $pyCpu += $g.TotalProcessorTime.TotalSeconds } } }; $r+=[pscustomobject]@{type='sidecar';cpu=$pyCpu}; ConvertTo-Json -Compress -InputObject @($r)`;
   const cpuNow = () => new Promise((resolve, reject) => {
     execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', PS], { timeout: CDP_TIMEOUT_MS, windowsHide: true, env: { ...process.env, BENCH_UDD: UDD } }, (err, out) => {
       if (err) return reject(new Error('Get-Process lỗi/treo >10s: ' + (err.killed ? 'timeout' : err.message)));
       try {
-        const l = JSON.parse(out); let t = 0; const byType = {};
-        for (const p of l) { t += p.cpu; const k = p.type === 'gpu-process' ? 'GPU' : p.type; byType[k] = (byType[k] || 0) + p.cpu; }
+        const l = JSON.parse(out); let t = 0; let pyCpu = 0; const byType = {};
+        for (const p of l) {
+          if (p.type === 'sidecar') { pyCpu = p.cpu; continue; }
+          t += p.cpu; const k = p.type === 'gpu-process' ? 'GPU' : p.type; byType[k] = (byType[k] || 0) + p.cpu;
+        }
         if (!l.length) return reject(new Error('không thấy tiến trình Edge của phiên đo'));
-        resolve({ t, byType });
+        resolve({ t, pyCpu, byType });
       } catch (e) { reject(e); }
     });
   });
@@ -163,7 +173,8 @@ async function main() {
       if (!c0 || f0 == null) { c0 = c1; f0 = f1; t0 = t1; throw new Error('chưa có mẫu gốc, đặt lại mốc'); }
       const g = k => (c1.byType[k] || 0) - (c0.byType[k] || 0);
       const fps = +((f1 - f0) / dt).toFixed(1), cpu = +((c1.t - c0.t) / dt * 100).toFixed(1);
-      const row = { min: +(i * INTERVAL / 60000).toFixed(1), fps, edgeCpuPctOfOneCore: cpu,
+      const sidecarCpu = c1.pyCpu != null && c0.pyCpu != null ? +((c1.pyCpu - c0.pyCpu) / dt * 100).toFixed(1) : 0;
+      const row = { min: +(i * INTERVAL / 60000).toFixed(1), fps, edgeCpuPctOfOneCore: cpu, sidecarCpuPctOfOneCore: sidecarCpu,
         renderer: +(g('renderer') / dt * 100).toFixed(1), gpu: +(g('GPU') / dt * 100).toFixed(1), browser: +(g('browser') / dt * 100).toFixed(1),
         msPerFrame: fps > 0 ? +(cpu / fps * 10).toFixed(1) : null,
         vis, jsHeapMB: +(m.JSHeapUsedSize / 1048576).toFixed(1), nodes: m.Nodes, listeners: m.JSEventListeners, nodeRssMB: nodeMem() };
@@ -178,7 +189,7 @@ async function main() {
   fs.writeFileSync(OUT, JSON.stringify({ label: LABEL, edgeFlags: EXTRA_FLAGS, skipped, rows }, null, 1));
   const ok = rows.filter(r => r.fps >= 20 && r.msPerFrame != null);
   const avg = k => ok.length ? +(ok.reduce((s, r) => s + r[k], 0) / ok.length).toFixed(1) : null;
-  log(`Xong. ${rows.length} mẫu, bỏ ${skipped}. Mẫu fps≥20: ${ok.length}; fps TB ${avg('fps')}, ms/khung TB ${avg('msPerFrame')}, CPU Edge TB ${avg('edgeCpuPctOfOneCore')}%, GPU TB ${avg('gpu')}%. Ghi ${OUT}`);
+  log(`Xong. ${rows.length} mẫu, bỏ ${skipped}. Mẫu fps≥20: ${ok.length}; fps TB ${avg('fps')}, ms/khung TB ${avg('msPerFrame')}, CPU Edge TB ${avg('edgeCpuPctOfOneCore')}%, CPU Sidecar TB ${avg('sidecarCpuPctOfOneCore')}%, GPU TB ${avg('gpu')}%, Lỗi TTS: ${ttsFailures}. Ghi ${OUT}`);
 }
 
 let code = 0;
