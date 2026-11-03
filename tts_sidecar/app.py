@@ -81,14 +81,14 @@ def find_preset_voice(target: str, available: list[str]) -> Optional[str]:
     return None
 
 
-def encode_wav_bytes(audio_arr: np.ndarray, sample_rate: int) -> bytes:
-    """Chuyển đổi numpy float32 array thành byte dữ liệu WAV (PCM 16-bit) trong bộ nhớ."""
+def encode_mp3_bytes(audio_arr: np.ndarray, sample_rate: int) -> bytes:
+    """Chuyển đổi numpy float32 array thành MP3 bytes trong bộ nhớ (tiết kiệm ~20x dung lượng so với WAV)."""
     if audio_arr.dtype != np.float32:
         audio_arr = np.asarray(audio_arr, dtype=np.float32)
     # Giới hạn biên độ âm thanh [-1.0, 1.0] tránh vỡ tiếng
     audio_arr = np.clip(audio_arr, -1.0, 1.0)
     buf = io.BytesIO()
-    sf.write(buf, audio_arr, sample_rate, format="WAV", subtype="PCM_16")
+    sf.write(buf, audio_arr, sample_rate, format="MP3")
     return buf.getvalue()
 
 
@@ -107,20 +107,38 @@ state = TTSGlobalState()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Khởi tạo model và tải dữ liệu 1 lần duy nhất khi khởi động
+    # Phát hiện thiết bị GPU/CUDA (onnxruntime-gpu hoặc PyTorch CUDA), tự động fallback về CPU nếu không có hoặc lỗi
+    detected_gpu = False
     try:
         import torch
-
-        state.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            detected_gpu = True
     except Exception:
-        state.device = "cpu"
+        pass
 
-    logger.info(f"Khởi tạo VieNeu-TTS (thiết bị: {state.device.upper()})...")
+    try:
+        import onnxruntime as ort
+        if "CUDAExecutionProvider" in ort.get_available_providers():
+            detected_gpu = True
+    except Exception:
+        pass
+
+    state.device = "cuda" if detected_gpu else "cpu"
+    logger.info(f"Khởi tạo VieNeu-TTS (thiết bị dự kiến: {state.device.upper()})...")
 
     from vieneu import Vieneu
 
     try:
-        state.engine = Vieneu(device=state.device)
+        if state.device == "cuda":
+            try:
+                state.engine = Vieneu(device="cuda")
+                logger.info("✓ VieNeu-TTS đã khởi chạy thành công trên CUDA GPU")
+            except Exception as gpu_err:
+                logger.warning(f"Không thể khởi chạy trên CUDA ({gpu_err}), chuyển sang CPU fallback...")
+                state.device = "cpu"
+                state.engine = Vieneu(device="cpu")
+        else:
+            state.engine = Vieneu(device="cpu")
         state.sample_rate = getattr(state.engine, "sample_rate", 48000)
     except Exception as e:
         logger.exception("Lỗi nghiêm trọng khi tải model VieNeu-TTS: %s", e)
@@ -243,16 +261,16 @@ async def synthesize_tts(req: TTSRequest):
                 text,
                 voice=voice_to_use,
             )
-            wav_bytes = encode_wav_bytes(audio_arr, state.sample_rate)
+            mp3_bytes = encode_mp3_bytes(audio_arr, state.sample_rate)
         except Exception as exc:
             logger.exception("Lỗi sinh âm thanh VieNeu: %s", exc)
             raise HTTPException(status_code=500, detail=f"Lỗi tổng hợp giọng đọc: {exc}") from exc
 
     return Response(
-        content=wav_bytes,
-        media_type="audio/wav",
+        content=mp3_bytes,
+        media_type="audio/mpeg",
         headers={
-            "Content-Disposition": 'inline; filename="tts.wav"',
+            "Content-Disposition": 'inline; filename="tts.mp3"',
             "Cache-Control": "no-store",
             "X-TTS-Voice": urllib.parse.quote(voice_to_use),
             "X-TTS-Device": state.device,
