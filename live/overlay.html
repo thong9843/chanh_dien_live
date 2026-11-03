@@ -287,9 +287,9 @@ function layout(c){
 
 const visitors = new Map();  // id -> Character
 let order = [];               // ids in seating order (bố cục cũ)
-// Chánh điện cũ (scene "old") dùng lưới theo số người; mọi cảnh ảnh mới dùng bố cục v3: 100 chỗ cố định hai bên lối giữa, server cấp chỉ số chỗ (p.seat).
-let V3 = null, V3_SEATS = [];
-const isV3 = () => resolveScene() !== 'old' && !!V3 && V3_SEATS.length > 0;
+// Chánh điện cũ (scene "old") dùng lưới theo số người; mọi cảnh ảnh mới dùng bố cục v3/v4: chỗ cố định hai bên lối giữa, server cấp chỉ số chỗ (p.seat).
+let V3 = null, V4 = null, V3_SEATS = [];
+const isV3 = () => resolveScene() !== 'old' && (!!V4 || !!V3) && V3_SEATS.length > 0;
 function reseat(){
   order = order.filter(id => visitors.has(id));
   const cols = currentCols();
@@ -367,7 +367,8 @@ function applyContent(c){
     applyUiLayout(c.layout);
     FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers; TAG_GAP = c.layout.teacherTagGap ?? 22; layoutVer++;
     V3 = c.layout.v3 || null; setV3Config(V3);
-    V3_SEATS = (V3 && window.LayoutV3) ? window.LayoutV3.buildSeats(V3, [c.layout.ui.tips, c.layout.ui.merit]) : [];
+    V4 = c.layout.v4 || null;
+    V3_SEATS = (V4 && window.LayoutV3?.buildSeatsV4) ? window.LayoutV3.buildSeatsV4(V4) : ((V3 && window.LayoutV3) ? window.LayoutV3.buildSeats(V3, [c.layout.ui.tips, c.layout.ui.merit]) : []);
     layout(cap);
   }
   renderMerit();
@@ -590,6 +591,9 @@ function pickTrack(){
   return bag.pop();
 }
 document.getElementById('unmute').onclick = e => { e.currentTarget.remove(); startAudio(); };
+if (new URLSearchParams(location.search).has('shot')) {
+  document.getElementById('unmute')?.remove();
+}
 function startAudio(){
   AC = new (window.AudioContext||window.webkitAudioContext)();
   AC.resume?.().catch(()=>{});
@@ -792,7 +796,8 @@ function drawCeremonyTag(v, headY, alpha){
 }
 // Nhãn trên đầu người xem ngồi: vòng tròn đại diện avatarPx, tên ngay dưới vòng tròn
 function getLabelBox(v, headY){
-  const LB = V3.labels, px = LB.avatarPx, fs = LB.nameFontPx, nm = String(v.name || '');
+  const LB = (V4 && V4.labels) ? V4.labels : (V3 ? V3.labels : { recentMax: 12, avatarPx: 28, nameMax: 10, nameFontPx: 14 });
+  const px = LB.avatarPx, fs = LB.nameFontPx, nm = String(v.name || '');
   const im = avatar(v.avatar), gold = v.coins >= 99, key = nm + '|' + (gold ? 1 : 0) + '|' + (im ? im.src : 'L');
   if (v._lbKey !== key){
     const name = Array.from(nm).length > LB.nameMax ? Array.from(nm).slice(0, LB.nameMax - 1).join('').trimEnd() + '…' : nm;
@@ -899,9 +904,24 @@ function renderStatic(){
   try {
     ctx=staticT1.getContext('2d'); ctx.clearRect(0,0,1080,1920);
     ctx=staticT2.getContext('2d'); ctx.clearRect(0,0,1080,1920);
-    if (!legacy){   // cảnh ảnh mới: sáu thầy ngồi hai bên (layout.v3.monks), rộng ≈ 1,1 × rộng bồ đoàn theo độ sâu, bên trái quay phải, bên phải quay trái
-      if (V3 && window.LayoutV3 && A.monk.naturalWidth){
-        ctx=bg;   // thầy vẽ thẳng vào lớp nền DOM (sau ảnh nền, trước mọi thứ động)
+    if (!legacy){   // cảnh ảnh mới: 2 trụ trì (v4) hoặc 6 thầy (v3), vẽ thẳng vào lớp nền DOM
+      if (V4 && V4.abbots && A.monk.naturalWidth){
+        ctx = bg;
+        const s = (V4.seatHeight || 115) / (A.monk.naturalHeight || 260);
+        for (const m of V4.abbots){
+          const im = A.monk;
+          if (m.flip){
+            ctx.save();
+            ctx.translate(m.x, 0);
+            ctx.scale(-1, 1);
+            sprite(im, 0, m.yFoot, s, 1);
+            ctx.restore();
+          } else {
+            sprite(im, m.x, m.yFoot, s, 1);
+          }
+        }
+      } else if (V3 && window.LayoutV3 && A.monk.naturalWidth){
+        ctx=bg;
         for (const m of [...V3.monkSpots].sort((a,b)=>a.y-b.y)){
           const im = A[m.skin] || A.monk, pl = window.LayoutV3.monkPlace(V3, m, im.naturalWidth, im.naturalHeight);
           if (m.flip){ ctx.save(); ctx.translate(pl.x,0); ctx.scale(-1,1); sprite(im,0,m.y,pl.s); ctx.restore(); }
@@ -979,7 +999,7 @@ function frame(now){
     lastProfileV3 = v3; ceremonyManager.reset(visitors); reseat();
     for (const v of visitors.values()) if (v.seat) v.assignSeat(v.seat, true, FLOOR, cols);
   }
-  if (now - activeAt > 500){ activeAt = now; refreshActive(V3 ? V3.labels.recentMax : 12); }
+  if (now - activeAt > 500){ activeAt = now; refreshActive((V4 && V4.labels && V4.labels.recentMax) || (V3 ? V3.labels.recentMax : 12)); }
   const list=[...visitors.values()].sort((a,b)=>a.y-b.y);
   for (const v of list){
     const effAlpha = v.getEffectiveAlpha();
@@ -1000,7 +1020,8 @@ function frame(now){
           seatedCandidates.push([v, headY, effAlpha]);
         }
       }
-      if (!isCeremony && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, headY - V3.labels.avatarPx - V3.labels.nameFontPx * 1.6 - 12, ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
+      const lbCfg = (V4 && V4.labels) ? V4.labels : (V3 ? V3.labels : { avatarPx: 28, nameFontPx: 14 });
+      if (!isCeremony && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, headY - lbCfg.avatarPx - lbCfg.nameFontPx * 1.6 - 12, ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
     } else if (!zoomedHideNormalTag){
       ctx.save();
       ctx.globalAlpha = effAlpha;
@@ -1017,12 +1038,15 @@ function frame(now){
     const b = drawCeremonyTag(cv, ch, ca);
     if (b) drawnTagBoxes.push(b);
   }
-  // Thẻ người xem ngồi: tối đa 12 thẻ tên, không chồng lấn (bỏ qua thẻ cắt thẻ đã vẽ)
+  // Thẻ người xem ngồi: tối đa 12 thẻ tên, không chồng lấn (bỏ qua thẻ cắt thẻ đã vẽ, không đè thảm lễ)
   seatedCandidates.sort((a, b) => (b[0].lastActive || 0) - (a[0].lastActive || 0));
   let seatedTagCount = 0;
+  const rugBox = V3?.rug || { x: 148, y: 1330, w: 784, h: 158 };
+  const maxTags = (V4 && V4.labels && V4.labels.recentMax) || V3?.labels?.recentMax || 12;
   for (const [lv, lh, la] of seatedCandidates){
-    if (seatedTagCount >= (V3?.labels?.recentMax || 12)) break;
+    if (seatedTagCount >= maxTags) break;
     const box = getLabelBox(lv, lh);
+    if (boxesIntersect(box, rugBox)) continue;
     if (drawnTagBoxes.some(b => boxesIntersect(box, b))) continue;
     drawLabelDirect(lv, box, la);
     drawnTagBoxes.push(box);

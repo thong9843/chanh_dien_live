@@ -122,5 +122,39 @@
     return { s, x: clampX(m.x, s * (imgW || cfg.baseW) / 2) };
   }
 
-  g.LayoutV3 = { aisleAt, buildSpots, buildSeats, route, pathLen, seatedScale, monkPlace };
+  // Lưới chỗ ngồi v4: 5 hàng đều, so le, tối đa 50 chỗ, chiều cao chuẩn seatHeight = 115 px (rộng ≈100 px).
+  // Đọc trực tiếp từ layout.v4.seats (rows: yFoot, xs[] cho trái/phải), không tự tính lại toạ độ.
+  // Thứ tự lấp chỗ: xen kẽ 2 PHẢI : 1 TRÁI (P, P, T, P, P, T…) cho đến khi một bên đầy 25 thì lấp tiếp bên còn lại.
+  // Trong mỗi bên: hàng 1 → hàng 5; trong mỗi hàng: từ sát lối đi ra mép ngoài.
+  function buildSeatsV4(v4) {
+    if (!v4 || !v4.seats || !Array.isArray(v4.seats.rows)) return [];
+    const seatHeight = v4.seatHeight || 115;
+    const scale = seatHeight / 260;
+    const rightSeats = [];
+    for (const row of v4.seats.rows) {
+      const xs = [...row.rightXs].sort((a, b) => a - b); // sát lối đi (690) -> mép ngoài (978)
+      for (const x of xs) {
+        rightSeats.push({ x, y: row.yFoot, scale, side: 'R', flip: true });
+      }
+    }
+    const leftSeats = [];
+    for (const row of v4.seats.rows) {
+      const xs = [...row.leftXs].sort((a, b) => b - a); // sát lối đi (354) -> mép ngoài (66)
+      for (const x of xs) {
+        leftSeats.push({ x, y: row.yFoot, scale, side: 'L', flip: false });
+      }
+    }
+    const seats = [];
+    let r = 0, l = 0;
+    while (r < rightSeats.length || l < leftSeats.length) {
+      if (r < rightSeats.length) seats.push(rightSeats[r++]);
+      if (r < rightSeats.length) seats.push(rightSeats[r++]);
+      if (l < leftSeats.length) seats.push(leftSeats[l++]);
+    }
+    seats.forEach((s, i) => { s.i = i; });
+    return seats;
+  }
+
+  g.LayoutV3 = { aisleAt, buildSpots, buildSeats, buildSeatsV4, route, pathLen, seatedScale, monkPlace };
+  g.LayoutV4 = { buildSeats: buildSeatsV4 };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

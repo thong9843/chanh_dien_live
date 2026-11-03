@@ -240,6 +240,44 @@ function loadContent(){
             labels: { recentMax: Math.round(num(lb, dlb, 'recentMax', 1, 100)), avatarPx: Math.round(num(lb, dlb, 'avatarPx', 16, 80)), nameMax: Math.round(num(lb, dlb, 'nameMax', 4, 20)), nameFontPx: Math.round(num(lb, dlb, 'nameFontPx', 10, 30)) },
           };
         })(),
+        v4: (() => {
+          const v = sub('v4'), dv = D.v4 || {};
+          const so = (src, k) => (src && src[k] && typeof src[k] === 'object' && !Array.isArray(src[k])) ? src[k] : {};
+          const num = (src, d, k, lo, hi) => cNum(src[k], lo, hi, d[k]);
+          const abbots = (Array.isArray(v.abbots) && v.abbots.length ? v.abbots : (dv.abbots || [])).slice(0, 4).map((a, i) => {
+            const da = (dv.abbots && dv.abbots[i]) || { x: 190, yFoot: 1480, flip: false };
+            const aa = (a && typeof a === 'object') ? a : {};
+            return {
+              x: cNum(aa.x, 0, 1080, da.x),
+              yFoot: cNum(aa.yFoot, 1000, 1920, da.yFoot),
+              flip: typeof aa.flip === 'boolean' ? aa.flip : !!da.flip
+            };
+          });
+          const se = so(v, 'seats'), dse = dv.seats || {};
+          const rows = (Array.isArray(se.rows) && se.rows.length ? se.rows : (dse.rows || [])).slice(0, 10).map((r, i) => {
+            const dr = (dse.rows && dse.rows[i]) || { yFoot: 1600, leftXs: [], rightXs: [] };
+            const rr = (r && typeof r === 'object') ? r : {};
+            const cleanXs = (arr, dArr) => (Array.isArray(arr) && arr.length ? arr : dArr).map(x => cNum(+x, 0, 1080, 540));
+            return {
+              yFoot: cNum(rr.yFoot, 1000, 1920, dr.yFoot),
+              leftXs: cleanXs(rr.leftXs, dr.leftXs),
+              rightXs: cleanXs(rr.rightXs, dr.rightXs)
+            };
+          });
+          const lb = so(v, 'labels'), dlb = dv.labels || {};
+          return {
+            seatHeight: num(v, dv, 'seatHeight', 50, 300),
+            maxVisible: Math.round(num(v, dv, 'maxVisible', 10, 100)),
+            abbots,
+            seats: { rows },
+            labels: {
+              recentMax: Math.round(num(lb, dlb, 'recentMax', 1, 100)),
+              avatarPx: Math.round(num(lb, dlb, 'avatarPx', 16, 80)),
+              nameMax: Math.round(num(lb, dlb, 'nameMax', 4, 20)),
+              nameFontPx: Math.round(num(lb, dlb, 'nameFontPx', 10, 30))
+            }
+          };
+        })(),
         safeZones: (Array.isArray(L.safeZones) && L.safeZones.length ? L.safeZones.slice(0, 8) : D.safeZones).map((z, i) => {
           const dz = D.safeZones[i] || D.safeZones[0], zz = (z && typeof z === 'object') ? z : {};
           return { label: cStr(zz.label, dz.label, 40), x: cNum(zz.x, 0, 1080, dz.x), y: cNum(zz.y, 0, 1920, dz.y), w: cNum(zz.w, 0, 1080, dz.w), h: cNum(zz.h, 0, 1920, dz.h) }; }),
@@ -263,10 +301,10 @@ const CONTENT = loadContent();
 // Bố cục v3 dùng chung với overlay (js/layout.js): 100 chỗ ngồi hai bên lối giữa, 8 bồ đoàn lễ, đường đi
 await import('./js/layout.js');
 const LV3 = globalThis.LayoutV3;
-const V3 = CONTENT.layout.v3, UI = CONTENT.layout.ui;
+const V3 = CONTENT.layout.v3, V4 = CONTENT.layout.v4, UI = CONTENT.layout.ui;
 const V3_SPOTS = LV3.buildSpots(V3);
-const V3_SEATS = LV3.buildSeats(V3, [UI.tips, UI.merit]);
-const MAX_SEATS = Math.min(V3.maxVisibleSeats || 30, V3_SEATS.length);
+const V3_SEATS = (V4 && LV3.buildSeatsV4) ? LV3.buildSeatsV4(V4) : LV3.buildSeats(V3, [UI.tips, UI.merit]);
+const MAX_SEATS = Math.min(V4?.maxVisible || 50, V3_SEATS.length);
 if (MAX_SEATS < (V3.maxVisibleSeats || 2 * V3.seats.perSide)) console.warn(`Bố cục chỉ xếp được ${MAX_SEATS}/${V3.maxVisibleSeats || 2 * V3.seats.perSide} chỗ ngồi, kiểm tra layout.v3.seats`);
 const CLIENT_CONTENT = {
   labels: CONTENT.labels, scene: CONTENT.scene, avatar: CONTENT.avatar, guide: CONTENT.guide, plaque: CONTENT.plaque, layout: CONTENT.layout, share: CONTENT.share,

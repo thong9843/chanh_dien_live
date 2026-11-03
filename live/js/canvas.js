@@ -668,7 +668,7 @@
 
       let topY = 260 * ws;
       // Tại altarSpot vẽ đúng tỉ lệ các thầy (không nhân scaleBoost 1.05)
-      const drawScale = ws * (this.atAltarSpot ? 1 : 1.05);
+      const drawScale = (this.state === 'sit' || this.atAltarSpot) ? ws : (ws * 1.05);
 
       // Ảnh đứng/đi bộ (mờ chéo với ảnh ngồi) khi lên lễ; kneel/prostrate tự dùng nếu có đủ file
       const mix = this.poseMix > 0.004 ? clamp(this.poseMix, 0, 1) : 0;

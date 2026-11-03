@@ -637,6 +637,57 @@
         "nameMax": 10,
         "nameFontPx": 15
       }
+    },
+    "v4": {
+      "seatHeight": 115,
+      "maxVisible": 50,
+      "abbots": [
+        {
+          "x": 190,
+          "yFoot": 1480,
+          "flip": false
+        },
+        {
+          "x": 890,
+          "yFoot": 1480,
+          "flip": true
+        }
+      ],
+      "seats": {
+        "rows": [
+          {
+            "yFoot": 1600,
+            "leftXs": [66, 138, 210, 282, 354],
+            "rightXs": [690, 762, 834, 906, 978]
+          },
+          {
+            "yFoot": 1672,
+            "leftXs": [102, 174, 246, 318, 390],
+            "rightXs": [726, 798, 870, 942, 1014]
+          },
+          {
+            "yFoot": 1744,
+            "leftXs": [66, 138, 210, 282, 354],
+            "rightXs": [690, 762, 834, 906, 978]
+          },
+          {
+            "yFoot": 1816,
+            "leftXs": [102, 174, 246, 318, 390],
+            "rightXs": [726, 798, 870, 942, 1014]
+          },
+          {
+            "yFoot": 1888,
+            "leftXs": [66, 138, 210, 282, 354],
+            "rightXs": [690, 762, 834, 906, 978]
+          }
+        ]
+      },
+      "labels": {
+        "recentMax": 12,
+        "avatarPx": 28,
+        "nameMax": 10,
+        "nameFontPx": 14
+      }
     }
   },
   "meritScroll": {
