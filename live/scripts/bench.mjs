@@ -1,6 +1,6 @@
-// Đo hiệu suất: server + Edge overlay (cửa sổ thật 540x960) với 100 bot.
-// Dùng:  node scripts/bench.mjs <số phút> <nhãn> [file kết quả]
-// Biến môi trường: BENCH_EDGE (đường dẫn msedge.exe), BENCH_EDGE_FLAGS (cờ Edge thêm, cách nhau bằng dấu cách).
+// Đo hiệu suất: server + Edge overlay (cửa sổ thật 540x960) với 100 bot (hoặc 300 bot: chế độ tải lớn, 100 người có chỗ + 200 người "đang thiền").
+// Dùng:  node scripts/bench.mjs <số phút> <nhãn> [file kết quả] [số bot 1–300, mặc định 100]
+// Biến môi trường: BENCH_EDGE (đường dẫn msedge.exe), BENCH_EDGE_FLAGS (cờ Edge thêm, cách nhau bằng dấu cách), BENCH_BOTS (số bot nếu không truyền tham số).
 // Mọi lệnh CDP có timeout 10s: treo thì bỏ mẫu, ghi log, và luôn đóng Edge + server sạch khi kết thúc.
 import { spawn, execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -14,6 +14,7 @@ const LIVE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MIN = Math.min(Math.max(+process.argv[2] || 10, 0.5), 240);
 const LABEL = String(process.argv[3] || 'run').replace(/[^\w.-]/g, '_');
 const OUT = process.argv[4] || path.join(os.tmpdir(), 'bench_' + LABEL + '.json');
+const BOTS = Math.min(Math.max(Math.round(+process.argv[5] || +process.env.BENCH_BOTS || 100), 1), 300);
 const EDGE = process.env.BENCH_EDGE || [
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
@@ -124,8 +125,9 @@ async function main() {
   });
   await new Promise((r, j) => { ctl.on('open', r); ctl.on('error', j); });
   const cmd = o => { try { ctl.send(JSON.stringify({ t: 'ctl', ...o })); } catch (e) { log('Gửi lệnh lỗi:', e.message); } };
-  cmd({ cmd: 'bots', on: true, n: 100, pace: 'fast' });
-  await sleep(15000);                               // cho 100 chỗ đầy
+  cmd({ cmd: 'bots', on: true, n: BOTS, pace: 'fast' });
+  log(`Chế độ ${BOTS} bot`);
+  await sleep(15000);                               // cho các chỗ ngồi đầy
   try { await pg.send('Page.bringToFront'); } catch (e) { log('bringToFront lỗi:', e.message); }   // một lần sau khi bot ngồi đủ (cửa sổ vừa mở có thể còn nằm sau)
 
   // CPU các tiến trình Edge của phiên đo lấy bằng PowerShell Get-Process theo PID (không qua CDP nên không treo theo trình duyệt).
@@ -186,7 +188,7 @@ async function main() {
       if (skipped >= 3 && rows.length === 0) throw new Error('Quá nhiều mẫu lỗi liên tiếp, dừng đo');
     }
   }
-  fs.writeFileSync(OUT, JSON.stringify({ label: LABEL, edgeFlags: EXTRA_FLAGS, skipped, rows }, null, 1));
+  fs.writeFileSync(OUT, JSON.stringify({ label: LABEL, bots: BOTS, edgeFlags: EXTRA_FLAGS, skipped, rows }, null, 1));
   const ok = rows.filter(r => r.fps >= 20 && r.msPerFrame != null);
   const avg = k => ok.length ? +(ok.reduce((s, r) => s + r[k], 0) / ok.length).toFixed(1) : null;
   log(`Xong. ${rows.length} mẫu, bỏ ${skipped}. Mẫu fps≥20: ${ok.length}; fps TB ${avg('fps')}, ms/khung TB ${avg('msPerFrame')}, CPU Edge TB ${avg('edgeCpuPctOfOneCore')}%, CPU Sidecar TB ${avg('sidecarCpuPctOfOneCore')}%, GPU TB ${avg('gpu')}%, Lỗi TTS: ${ttsFailures}. Ghi ${OUT}`);
