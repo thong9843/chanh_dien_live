@@ -8,6 +8,7 @@ Lắng nghe cục bộ tại 127.0.0.1, cổng mặc định 8765 (hoặc cấu 
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
 import io
 import logging
 import os
@@ -18,20 +19,43 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
-import soundfile as sf
+# Nạp biến môi trường từ .env (tìm ở tts_sidecar, live hoặc thư mục gốc) TRƯỚC khi nạp numpy/onnxruntime,
+# vì số luồng tính toán phải đặt trước khi các thư viện đó khởi tạo.
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 
-# Nạp biến môi trường từ .env (tìm ở tts_sidecar, live hoặc thư mục gốc)
 BASE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BASE_DIR.parent
 for env_path in [BASE_DIR / ".env", REPO_ROOT / ".env", REPO_ROOT / "live" / ".env"]:
     if env_path.is_file():
         load_dotenv(dotenv_path=env_path)
         break
+
+# VIENEU_THREADS (trong .env): số luồng CPU cho model, mặc định 2 để không tranh CPU với overlay/trình duyệt khi máy không có GPU.
+# Bỏ qua hoàn toàn khi đã cài bản GPU của onnxruntime (CUDA): GPU tự lo, không giới hạn luồng.
+try:
+    CPU_THREADS = max(1, min(32, int(os.getenv("VIENEU_THREADS", "2"))))
+except ValueError:
+    CPU_THREADS = 2
+
+
+def _gpu_runtime_installed() -> bool:
+    try:
+        importlib.metadata.version("onnxruntime-gpu")
+        return True
+    except importlib.metadata.PackageNotFoundError:
+        return False
+
+
+GPU_BUILD = _gpu_runtime_installed()
+if not GPU_BUILD:
+    for _k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        os.environ[_k] = str(CPU_THREADS)
+
+import numpy as np
+import soundfile as sf
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 # Cấu hình logging
 logging.basicConfig(
@@ -44,6 +68,50 @@ logger = logging.getLogger("vieneu_sidecar")
 HOST = "127.0.0.1"
 PORT = int(os.getenv("VIENEU_PORT", "8765"))
 TARGET_DEFAULT_VOICE = "Thiền Tâm Đức"
+
+
+def lower_process_priority() -> str:
+    """Hạ ưu tiên tiến trình xuống BelowNormal (Windows) / nice +10 (Linux, macOS): giọng đọc không bao giờ giành CPU của overlay đang phát."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            if ctypes.windll.kernel32.SetPriorityClass(handle, BELOW_NORMAL_PRIORITY_CLASS):
+                return "below_normal"
+            return "unchanged"
+        os.nice(10)
+        return "nice+10"
+    except Exception as exc:  # không đặt được ưu tiên thì vẫn chạy bình thường
+        logging.getLogger("vieneu_sidecar").warning("Không hạ được ưu tiên tiến trình: %s", exc)
+        return "unchanged"
+
+
+def limit_cpu_threads(n: int) -> None:
+    """Chỉ dùng khi chạy CPU: ép mọi phiên onnxruntime (và PyTorch nếu có) dùng tối đa n luồng."""
+    try:
+        import onnxruntime as ort
+
+        orig_init = ort.InferenceSession.__init__
+
+        def patched(self, path_or_bytes, sess_options=None, *args, **kwargs):
+            if sess_options is None:
+                sess_options = ort.SessionOptions()
+            if not getattr(sess_options, "intra_op_num_threads", 0):
+                sess_options.intra_op_num_threads = n
+                sess_options.inter_op_num_threads = 1
+            return orig_init(self, path_or_bytes, sess_options, *args, **kwargs)
+
+        ort.InferenceSession.__init__ = patched
+    except Exception as exc:
+        logging.getLogger("vieneu_sidecar").warning("Không giới hạn được luồng onnxruntime: %s", exc)
+    try:
+        import torch
+
+        torch.set_num_threads(n)
+    except Exception:
+        pass
 
 
 def strip_accents(s: str) -> str:
@@ -99,6 +167,8 @@ class TTSGlobalState:
         self.sample_rate: int = 48000
         self.preset_names: list[str] = []
         self.selected_voice: str = ""
+        self.threads: int = 0
+        self.priority: str = "unchanged"
         self.queue_lock = asyncio.Lock()
 
 
@@ -124,6 +194,14 @@ async def lifespan(_app: FastAPI):
         pass
 
     state.device = "cuda" if detected_gpu else "cpu"
+    state.priority = lower_process_priority()
+    if state.device == "cpu":
+        limit_cpu_threads(CPU_THREADS)
+        state.threads = CPU_THREADS
+        logger.info(f"Chạy CPU: giới hạn {CPU_THREADS} luồng (VIENEU_THREADS), ưu tiên tiến trình {state.priority}")
+    else:
+        state.threads = 0
+        logger.info(f"Chạy CUDA GPU: bỏ qua VIENEU_THREADS, ưu tiên tiến trình {state.priority}")
     logger.info(f"Khởi tạo VieNeu-TTS (thiết bị dự kiến: {state.device.upper()})...")
 
     from vieneu import Vieneu
@@ -221,6 +299,8 @@ def health():
     return {
         "ok": state.engine is not None,
         "device": state.device,
+        "threads": state.threads,
+        "priority": state.priority,
         "voice": state.selected_voice,
         "sample_rate": state.sample_rate,
         "available_voices": state.preset_names,
