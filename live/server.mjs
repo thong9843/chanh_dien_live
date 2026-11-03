@@ -68,7 +68,7 @@ function loadContent(){
   return {
     channel: { title: cStr(o('channel').title, D.channel.title, 40), subtitle: cStr(o('channel').subtitle, D.channel.subtitle, 60) },
     labels, gift, oracles,
-    guide: { lines: cArr(o('guide').lines, D.guide.lines, 160, 6) },
+    guide: { title: cStr(o('guide').title, D.guide.title, 60), lines: cArr(o('guide').lines, D.guide.lines, 160, 12) },
     prayers: cArr(r.prayers, D.prayers, 300, 100), chants: cArr(r.chants, D.chants, 400, 100),
     demo: { names: cArr(o('demo').names, D.demo.names, 18, 200), botLines: cArr(o('demo').botLines, D.demo.botLines, 120, 100) },
     member: { line: cStr(o('member').line, D.member.line, 240) },
@@ -154,10 +154,14 @@ function loadContent(){
         gift: { top: cNum(sub('gift').top, 0, 1800, D.gift.top) }, chant: { top: cNum(sub('chant').top, 0, 1800, D.chant.top) },
         // Đỉnh Sổ Vàng: không bao giờ cao hơn y 640 (vùng mặt tượng y 250–600 luôn được chừa trống)
         meritScroll: { top: cNum(sub('meritScroll').top, 640, 1700, D.meritScroll.top) },
-        ui: (() => { const u = sub('ui'), du = D.ui;
-          const ch = (u.chips && typeof u.chips === 'object') ? u.chips : {}, dch = du.chips;
+        ui: (() => { const u = sub('ui'), du = D.ui, sb = k => (u[k] && typeof u[k] === 'object' && !Array.isArray(u[k])) ? u[k] : {};
+          const ch = sb('chips'), dch = du.chips, tp = sb('tips'), dtp = du.tips, mr = sb('merit'), dmr = du.merit;
           return { chips: { top: cNum(ch.top, 0, 1800, dch.top), left: cNum(ch.left, 0, 540, dch.left), right: cNum(ch.right, 540, 1080, dch.right) },
-                   meritLeft: n(u, du, 'meritLeft', 0, 900), meritTop: n(u, du, 'meritTop', 0, 1800), meritW: n(u, du, 'meritW', 150, 500),
+                   // cột trái: gợi ý bình luận (x 16–290); cột phải: Công Đức (x ≥ 800, không bao giờ lấn x < 790)
+                   tips: { x: cNum(tp.x, 0, 400, dtp.x), y: cNum(tp.y, 0, 1800, dtp.y), w: cNum(tp.w, 120, 300, dtp.w), h: cNum(tp.h, 100, 1200, dtp.h),
+                           sec: cNum(tp.sec, 2, 60, dtp.sec), perPage: Math.round(cNum(tp.perPage, 1, 6, dtp.perPage)) },
+                   merit: { x: cNum(mr.x, 790, 1000, dmr.x), y: cNum(mr.y, 0, 1800, dmr.y), w: cNum(mr.w, 120, 290, dmr.w), h: cNum(mr.h, 100, 1200, dmr.h),
+                            max: Math.round(cNum(mr.max, 1, 8, dmr.max)), nameMax: Math.round(cNum(mr.nameMax, 4, 20, dmr.nameMax)) },
                    bannerLeft: n(u, du, 'bannerLeft', 0, 400), bannerRight: n(u, du, 'bannerRight', 680, 1080), giftMaxW: n(u, du, 'giftMaxW', 300, 900) }; })(),
         safeZones: (Array.isArray(L.safeZones) && L.safeZones.length ? L.safeZones.slice(0, 8) : D.safeZones).map((z, i) => {
           const dz = D.safeZones[i] || D.safeZones[0], zz = (z && typeof z === 'object') ? z : {};

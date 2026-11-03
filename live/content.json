@@ -20,12 +20,14 @@
     "enabled": false
   },
   "guide": {
+    "title": "💬 Bình luận để tương tác",
     "lines": [
-      "💬 **Bình luận bất kỳ** để bước vào thiền",
-      "Gõ **nam · nữ · sư · ni · tiểu · bà · cao tăng** đổi hình",
-      "🙏 Gõ **!thắp nhang · !cúng bái · !quỳ lạy** lên lễ Phật",
-      "📜 Gõ **!xinquẻ · Cầu an · Tĩnh tâm** nhận lời Phật dạy",
-      "🎁 Cúng dường được **xướng tên & ghi Sổ Vàng**"
+      "🙏 Gõ **Nam mô A Di Đà Phật** để vào thiền",
+      "🕯️ **!thắp nhang** để dâng hương",
+      "🙇 **!quỳ lạy** để lễ Phật",
+      "📜 **!xinquẻ** xin quẻ đầu ngày",
+      "🧑 Gõ **nam · nữ · sư · ni · tiểu · bà** để đổi hình",
+      "🪷 Tặng **Hoa sen** để được xướng tên hồi hướng"
     ]
   },
   "prayers": [
@@ -283,9 +285,8 @@
     },
     "ui": {
       "chips": { "top": 240, "left": 24, "right": 1056 },
-      "meritLeft": 656,
-      "meritTop": 630,
-      "meritW": 262,
+      "tips": { "x": 16, "y": 320, "w": 264, "h": 670, "sec": 8, "perPage": 3 },
+      "merit": { "x": 800, "y": 320, "w": 256, "h": 670, "max": 5, "nameMax": 10 },
       "bannerLeft": 162,
       "bannerRight": 918,
       "giftMaxW": 640

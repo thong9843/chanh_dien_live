@@ -38,13 +38,21 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #ambientPill{font-size:21px;padding:7px 18px;color:var(--gold2)}
 /* side cards */
 .card{background:var(--panel);border:2px solid var(--line);border-radius:22px;padding:18px 22px;font-size:24px;line-height:1.4;backdrop-filter:blur(4px)}
-#merit{left:656px;top:630px;width:262px;text-align:center}
-#merit h3{margin:0 0 8px;font-family:var(--display);font-size:30px;color:var(--gold2);letter-spacing:.06em}
-#merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:6px}
-#merit li{display:flex;justify-content:space-between;gap:10px}
-#merit li span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#merit li span:last-child{color:var(--gold2);font-variant-numeric:tabular-nums}
-#merit .empty{color:var(--muted);text-align:center}
+/* cột trái: gợi ý bình luận (xoay vòng); cột phải: Công Đức. Dài và hẹp, nằm ngoài vùng tượng (x 308–788) */
+#tips{left:16px;top:320px;width:264px;height:670px;box-sizing:border-box;padding:16px 18px;display:flex;flex-direction:column;text-align:left}
+#tips h3{margin:0 0 10px;font-family:var(--display);font-size:25px;line-height:1.25;color:var(--gold2);text-align:center}
+#tipsBody{position:relative;flex:1}
+#tipsBody .pg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-evenly;opacity:0;transition:opacity .5s}
+#tipsBody .pg.show{opacity:1}
+#tipsBody .pg div{font-size:25px;line-height:1.35}
+#tipsBody b{color:var(--gold2)}
+#merit{left:800px;top:320px;width:256px;height:670px;box-sizing:border-box;padding:16px 20px;text-align:center}
+#merit h3{margin:0 0 10px;font-family:var(--display);font-size:25px;color:var(--gold2);letter-spacing:.02em;white-space:nowrap}
+#merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:12px}
+#merit li{display:block;border-bottom:1px solid rgba(226,176,79,.25);padding-bottom:8px}
+#merit li .nm{display:block;font-size:26px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#merit li .pt{display:block;font-size:23px;color:var(--gold2);font-variant-numeric:tabular-nums}
+#merit .empty{color:var(--muted);text-align:center;border:0}
 /* chant banner + gift banner */
 #chant{left:162px;right:162px;top:980px;padding:22px 30px;text-align:center;border-radius:24px;border:2px solid var(--gold);
   background:rgba(40,18,8,.86);opacity:0;transform:translateY(20px);transition:opacity .6s,transform .6s;pointer-events:none}
@@ -112,6 +120,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
     <div class="pill">⏱ <span id="timer">00:00:00</span></div>
     <div class="pill" id="ambientPill">☀️ Ban ngày</div>
   </div>
+  <div id="tips" class="card ui"><h3 id="tipsTitle"></h3><div id="tipsBody"><div class="pg"></div><div class="pg"></div></div></div>
   <div id="merit" class="card ui"><h3 id="meritTitle">✦ Công Đức ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
   <div id="chant" class="ui"><h4 id="chantTitle">✦ TỤNG KINH ĐỊNH KỲ ✦</h4><p id="chantText"></p></div>
   <div id="toast" class="ui"></div>
@@ -261,6 +270,7 @@ function applyContent(c){
   document.getElementById('chantTitle').textContent = L('chant');
   document.getElementById('unmute')?.replaceChildren(document.createTextNode(L('unmute')));
   const w = document.getElementById('watchLbl'); w.replaceChildren(); L('watching','').split('|').forEach((p,i)=>{ if(i) w.append(document.createElement('br')); w.append(p); });
+  startTips(c.guide?.title, c.guide?.lines || [], c.layout?.ui?.tips?.perPage || 3, c.layout?.ui?.tips?.sec || 8);
   document.getElementById('plaque').classList.toggle('on', !!c.plaque?.enabled);   // tiêu đề thiền đường: mặc định tắt (content.json → plaque.enabled)
   Object.assign(credit, c.credit || {});
   meritScroll.configure(c.meritScroll ? { ...c.meritScroll, top: c.layout?.meritScroll?.top } : null);
@@ -285,7 +295,9 @@ function applyUiLayout(Lo){
   const ch = u.chips || { top: 240, left: 24, right: 1056 };
   $('chipCount').style.left = px(ch.left); $('chipCount').style.top = px(ch.top);
   $('chipsRight').style.right = px(1080 - ch.right); $('chipsRight').style.top = px(ch.top);
-  const m = $('merit'); m.style.left = px(u.meritLeft); m.style.top = px(u.meritTop); m.style.width = px(u.meritW);
+  const t = $('tips'), tp = u.tips, m = $('merit'), mr = u.merit;
+  if (tp){ t.style.left = px(tp.x); t.style.top = px(tp.y); t.style.width = px(tp.w); t.style.height = px(tp.h); }
+  if (mr){ m.style.left = px(mr.x); m.style.top = px(mr.y); m.style.width = px(mr.w); m.style.height = px(mr.h); MERIT_MAX = mr.max; MERIT_NAME_MAX = mr.nameMax; }
   for (const id of ['chant','oracleCard']){ const e = $(id); e.style.left = px(u.bannerLeft); e.style.right = px(1080 - u.bannerRight); }
   const gw = Math.min(u.giftMaxW, u.bannerRight - u.bannerLeft), g = $('gift');   // khung quà nhỏ: hẹp, căn giữa vùng nhìn thấy
   g.style.width = px(gw); g.style.left = px((u.bannerLeft + u.bannerRight) / 2 - gw / 2); g.style.right = 'auto';
@@ -298,6 +310,27 @@ function applyUiLayout(Lo){
   }
 }
 
+/* Cột trái: gợi ý bình luận, mỗi lượt hiện perPage dòng (guide.lines), đổi trang mỗi sec giây, mờ chéo 0,5s bằng hai lớp chồng nhau */
+let tipsTimer = null;
+function startTips(title, lines, perPage, sec){
+  clearInterval(tipsTimer);
+  document.getElementById('tipsTitle').textContent = title || '';
+  const els = [...document.querySelectorAll('#tipsBody .pg')];
+  els.forEach(e => { e.classList.remove('show'); e.replaceChildren(); });
+  if (!lines.length) return;
+  const pages = []; for (let i = 0; i < lines.length; i += perPage) pages.push(lines.slice(i, i + perPage));
+  const paint = (el, page) => { el.replaceChildren(); for (const line of page){ const d = document.createElement('div');
+    line.split('**').forEach((p,i)=>{ if (!p) return; if (i%2){ const b=document.createElement('b'); b.textContent=p; d.append(b); } else d.append(p); });   // **đậm** → <b>, còn lại textContent
+    el.append(d); } };
+  let idx = 0, front = 0;
+  paint(els[0], pages[0]); els[0].classList.add('show');
+  if (pages.length < 2) return;
+  tipsTimer = setInterval(() => {
+    const back = 1 - front; idx = (idx + 1) % pages.length;
+    paint(els[back], pages[idx]); els[front].classList.remove('show'); els[back].classList.add('show'); front = back;
+  }, Math.max(2, sec) * 1000);
+}
+
 /* ======================= HUD ======================= */
 let startedAt = Date.now();
 function updateCount(){ document.getElementById('count').textContent = `${visitors.size}/${cap}`; }
@@ -306,11 +339,13 @@ function updateAmbientBadge(){
   const pill = document.getElementById('ambientPill');
   if (pill) pill.textContent = isDay ? L('ambientDay','') : L('ambientNight','');
 }
+let MERIT_MAX = 5, MERIT_NAME_MAX = 10;   // ghi đè bởi content.json → layout.ui.merit
 function renderMerit(){
-  const top = [...visitors.values()].filter(v=>v.coins>0).sort((a,b)=>b.coins-a.coins).slice(0,5);
-  const ol = document.getElementById('meritList'); ol.innerHTML='';
+  const top = [...visitors.values()].filter(v=>v.coins>0).sort((a,b)=>b.coins-a.coins).slice(0,MERIT_MAX);
+  const ol = document.getElementById('meritList'); ol.replaceChildren();
   if (!top.length){ const li=document.createElement('li'); li.className='empty'; li.textContent=L('empty','Chưa có'); ol.append(li); return; }
-  top.forEach((v,i)=>{ const li=document.createElement('li'); const a=document.createElement('span'); a.textContent=`${i+1}. ${v.name}`; const b=document.createElement('span'); b.textContent=v.coins; li.append(a,b); ol.append(li); });
+  const cut = s => { s = String(s); return s.length > MERIT_NAME_MAX ? s.slice(0, MERIT_NAME_MAX - 1).trimEnd() + '…' : s; };   // mỗi người 2 dòng: tên rút gọn + điểm
+  top.forEach((v,i)=>{ const li=document.createElement('li'); const a=document.createElement('span'); a.className='nm'; a.textContent=`${i+1}. ${cut(v.name)}`; const b=document.createElement('span'); b.className='pt'; b.textContent=`${v.coins} ✧`; li.append(a,b); ol.append(li); });
 }
 setInterval(()=>{
   const s=Math.floor((Date.now()-startedAt)/1000);
