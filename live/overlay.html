@@ -469,11 +469,25 @@ function noticeEnqueue(it){
   noticeQ.splice(at, 0, it);
   return true;
 }
+function isSomeoneOnCushion(){
+  for (const v of visitors.values()){ if (v.atAltarSpot) return true; }
+  if (typeof ceremonyManager !== 'undefined' && ceremonyManager?.runs){
+    for (const d of ceremonyManager.runs.values()){
+      if (d.active && (d.atAltarSpot || d.phase === 'perform' || d.phase === 'kneel_down' || d.phase === 'kneel_bow' || d.phase === 'kneel_up' || d.phase === 'kneel_tail' || d.phase === 'fade_in_altar')) return true;
+    }
+  }
+  return false;
+}
 function noticeStep(){
   const now = performance.now();
   if (noticeCur){
     const c = noticeCur;
     if ((c.isDone && c.isDone(now)) || now >= c.endAt){ c.hide(); noticeCur = null; noticeNextAt = now + 450; }
+    return;
+  }
+  if (isSomeoneOnCushion()){
+    // Đang có người trên bồ đoàn lễ: hàng đợi thông báo (y 1080–1300) tạm dừng chờ người lễ xong
+    for (const it of noticeQ) it.at = now;
     return;
   }
   if (now < noticeNextAt) return;
@@ -745,24 +759,63 @@ function tag(text,x,y,s,style,av,maxW){
   if (av){ ctx.save(); ctx.beginPath(); ctx.arc(x-w/2+pad*.55+aw/2, y, fs*.5, 0, 6.29); ctx.clip(); ctx.drawImage(av, x-w/2+pad*.55+aw/2-fs*.5, y-fs*.5, fs, fs); ctx.restore(); }
   ctx.fillStyle = style==='gold'?'#ffd98a':'#f6e9cf'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(text, x+aw/2, y+1);
 }
-// Nhãn trên đầu (chỉ 12 người hoạt động gần nhất): vòng tròn đại diện avatarPx, tên ngay dưới vòng tròn, sát đỉnh đầu. Chữ rút gọn theo layout.v3.labels.nameMax.
-function drawLabel(v, headY, alpha){
-  // Nhãn dựng sẵn thành MỘT ảnh nhỏ cho mỗi người (đổi tên / ảnh đại diện / mốc quà mới dựng lại), mỗi khung chỉ một drawImage
+function boxesIntersect(a, b){
+  return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+}
+// Thẻ tên người lên lễ: thẻ tên nhỏ gọn (không có avatar) ngay sát đỉnh đầu
+function drawCeremonyTag(v, headY, alpha){
+  const LB = V3?.labels || { nameMax: 10, nameFontPx: 13 };
+  const fs = Math.min(13, LB.nameFontPx || 13);
+  const nm = String(v.name || '');
+  const name = Array.from(nm).length > LB.nameMax ? Array.from(nm).slice(0, LB.nameMax - 1).join('').trimEnd() + '…' : nm;
+  const key = 'cTag|' + name + '|' + (v.coins >= 99 ? 1 : 0);
+  if (v._cTagKey !== key){
+    const font = `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`;
+    const m = (v._cTagCan || (v._cTagCan = document.createElement('canvas'))), mx = m.getContext('2d');
+    mx.font = font;
+    const tw = mx.measureText(name).width, h = Math.round(fs * 1.4), w = Math.ceil(tw + 14);
+    m.width = w; m.height = h;
+    mx.fillStyle = 'rgba(18,9,5,.82)';
+    mx.beginPath(); if (mx.roundRect) mx.roundRect(0, 0, w, h, h / 2); else mx.rect(0, 0, w, h); mx.fill();
+    mx.strokeStyle = v.coins >= 99 ? '#e2b04f' : 'rgba(226,176,79,.5)';
+    mx.lineWidth = 1; mx.stroke();
+    mx.font = font; mx.fillStyle = v.coins >= 99 ? '#ffd98a' : '#f6e9cf';
+    mx.textAlign = 'center'; mx.textBaseline = 'middle'; mx.fillText(name, w / 2, h / 2 + 1);
+    v._cTagKey = key; v._cTagW = w; v._cTagH = h;
+  }
+  const tagX = Math.round(Math.max(8, Math.min(1072 - v._cTagW, v.x - v._cTagW / 2)));
+  const tagY = Math.round(headY - 4 - v._cTagH);
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.drawImage(v._cTagCan, tagX, tagY);
+  ctx.restore();
+  return { x: tagX, y: tagY, w: v._cTagW, h: v._cTagH };
+}
+// Nhãn trên đầu người xem ngồi: vòng tròn đại diện avatarPx, tên ngay dưới vòng tròn
+function getLabelBox(v, headY){
   const LB = V3.labels, px = LB.avatarPx, fs = LB.nameFontPx, nm = String(v.name || '');
   const im = avatar(v.avatar), gold = v.coins >= 99, key = nm + '|' + (gold ? 1 : 0) + '|' + (im ? im.src : 'L');
   if (v._lbKey !== key){
     const name = Array.from(nm).length > LB.nameMax ? Array.from(nm).slice(0, LB.nameMax - 1).join('').trimEnd() + '…' : nm;
     const font = `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`, m = (v._lbCan || (v._lbCan = document.createElement('canvas'))), mx = m.getContext('2d');
     mx.font = font; const tw = mx.measureText(name).width, h = Math.round(fs * 1.4), w = Math.ceil(Math.max(px, tw + 12)) + 2, H = px + 3 + h;
-    m.width = w; m.height = H;                                   // đổi kích thước canvas tự xoá nội dung
+    m.width = w; m.height = H;
     mx.drawImage(avatarCircle(v, px), (w - px) / 2, 0, px, px);
     mx.fillStyle = 'rgba(18,9,5,.74)'; mx.beginPath(); if (mx.roundRect) mx.roundRect((w - tw - 12) / 2, px + 3, tw + 12, h, h / 2); else mx.rect((w - tw - 12) / 2, px + 3, tw + 12, h); mx.fill();
     mx.font = font; mx.fillStyle = gold ? '#ffd98a' : '#f6e9cf'; mx.textAlign = 'center'; mx.textBaseline = 'middle'; mx.fillText(name, w / 2, px + 3 + h / 2 + 1);
     v._lbKey = key; v._lbH = H; v._lbW = w;
   }
+  const x = Math.round(Math.max(8, Math.min(1072 - v._lbW, v.x - v._lbW / 2)));
+  const y = Math.round(headY - 4 - v._lbH);
+  return { x, y, w: v._lbW, h: v._lbH };
+}
+function drawLabelDirect(v, box, alpha){
   ctx.save(); ctx.globalAlpha = alpha;
-  ctx.drawImage(v._lbCan, Math.round(Math.max(8, Math.min(1072 - v._lbW, v.x - v._lbW / 2))), Math.round(headY - 4 - v._lbH));   // thẻ tên không bao giờ vượt mép 8–1072
+  ctx.drawImage(v._lbCan, box.x, box.y);
   ctx.restore();
+}
+function drawLabel(v, headY, alpha){
+  const box = getLabelBox(v, headY);
+  drawLabelDirect(v, box, alpha);
 }
 function bubble(text,x,y,s){
   const fs=Math.max(18,Math.round(26*s/.4)); ctx.font=`500 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`;
@@ -920,7 +973,7 @@ function frame(now){
   }
 
   // 5. Phật tử ngồi thiền & hành lễ (cập nhật Lerp + Perspective Scaling + 12-Frame Bowing + Lotus Aura 5 phút)
-  const bubbles=[], labels=[], v3=!legacy;
+  const bubbles=[], ceremonyLabels=[], seatedCandidates=[], v3=!legacy;
   if (v3 !== lastProfileV3){   // đổi giữa Chánh điện cũ ↔ cảnh ảnh mới: đặt lại các lượt lễ, xếp lại chỗ ngồi tức thì
     lastProfileV3 = v3; ceremonyManager.reset(visitors); reseat();
     for (const v of visitors.values()) if (v.seat) v.assignSeat(v.seat, true, FLOOR, cols);
@@ -933,16 +986,20 @@ function frame(now){
     cameraZoom.drawCharacterAuraRing(ctx, v, t);
     const topY = v.draw(ctx, t, now, A);
     const ws = v.scale;
-    // Người ở altarSpot: thẻ tên đặt dưới bồ đoàn (không che thẻ các thầy / đầu người lễ)
     const ty = v.atAltarSpot ? v.y + 16 * ws / .4 + 0.75 * Math.max(15, Math.round(30 * ws / .4)) : v.y - topY - 14 * ws / .4;
     const avImg = (!v3 || cameraZoom.isHighlighting(v)) ? avatar(v.avatar) : null;
     const zoomedHideNormalTag = cameraZoom.drawZoomedNameplate(ctx, v, topY, t, avImg);
     if (v3){
-      if (!zoomedHideNormalTag && activeSet.has(v.id)){
-        const headY = v.y - topY;
-        labels.push([v, headY, effAlpha]);
-        if (!v.atAltarSpot && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, headY - V3.labels.avatarPx - V3.labels.nameFontPx * 1.6 - 12, ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
-      } else if (v.bubble && now>=v.bubble.until) v.bubble=null;
+      const headY = v.y - topY;
+      const isCeremony = v.inCeremony || v.atAltarSpot || v.walkControlled;
+      if (!zoomedHideNormalTag){
+        if (isCeremony) {
+          ceremonyLabels.push([v, headY, effAlpha]);
+        } else if (activeSet.has(v.id)) {
+          seatedCandidates.push([v, headY, effAlpha]);
+        }
+      }
+      if (!isCeremony && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, headY - V3.labels.avatarPx - V3.labels.nameFontPx * 1.6 - 12, ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
     } else if (!zoomedHideNormalTag){
       ctx.save();
       ctx.globalAlpha = effAlpha;
@@ -953,7 +1010,23 @@ function frame(now){
     }
     if (!v3){ if (!v.atAltarSpot && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null; }
   }
-  for (const [lv, lh, la] of labels) drawLabel(lv, lh, la);
+  // Thẻ tên người lên lễ: thẻ tên nhỏ (không avatar) ngay sát đỉnh đầu
+  const drawnTagBoxes = [];
+  for (const [cv, ch, ca] of ceremonyLabels){
+    const b = drawCeremonyTag(cv, ch, ca);
+    if (b) drawnTagBoxes.push(b);
+  }
+  // Thẻ người xem ngồi: tối đa 12 thẻ tên, không chồng lấn (bỏ qua thẻ cắt thẻ đã vẽ)
+  seatedCandidates.sort((a, b) => (b[0].lastActive || 0) - (a[0].lastActive || 0));
+  let seatedTagCount = 0;
+  for (const [lv, lh, la] of seatedCandidates){
+    if (seatedTagCount >= (V3?.labels?.recentMax || 12)) break;
+    const box = getLabelBox(lv, lh);
+    if (drawnTagBoxes.some(b => boxesIntersect(box, b))) continue;
+    drawLabelDirect(lv, box, la);
+    drawnTagBoxes.push(box);
+    seatedTagCount++;
+  }
   for (const [bt, bx, by, bs, ba] of bubbles){ ctx.save(); ctx.globalAlpha = ba; bubble(bt, bx, by, bs); ctx.restore(); }
 
   // 6. Vật phẩm cúng dường bay lên, cánh sen & tim (hạt hết hạn trả về pool)
