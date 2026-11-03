@@ -174,7 +174,9 @@ function loadContent(){
     plaque: {
       enabled: typeof o('plaque').enabled === 'boolean' ? o('plaque').enabled : D.plaque.enabled,
       text: cStr(o('plaque').text, D.plaque.text, 60),
-      top: cNum(o('plaque').top, 120, 270, D.plaque.top)
+      top: cNum(o('plaque').top, 40, 270, D.plaque.top),
+      width: cNum(o('plaque').width, 200, 760, D.plaque.width),
+      height: cNum(o('plaque').height, 36, 140, D.plaque.height)
     },
     layout: (() => {
       const L = o('layout'), D = DEFAULT_CONTENT.layout, sub = k => (L[k] && typeof L[k] === 'object' && !Array.isArray(L[k])) ? L[k] : {};

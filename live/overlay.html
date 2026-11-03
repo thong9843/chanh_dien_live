@@ -21,12 +21,21 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 /* Nền tĩnh (ảnh cảnh + sáu thầy) là hai canvas DOM riêng, mờ chéo bằng CSS: canvas chính chỉ vẽ phần động nên GPU không phải xoá + vẽ lại cả khung 1080x1920 mỗi khung hình */
 .bgl{position:absolute;inset:0;width:1080px;height:1920px;opacity:0;transform-origin:0 0;pointer-events:none}
 .ui{position:absolute;z-index:3}
-/* title plaque: dòng chữ Nam Mô A Di Đà Phật mạ vàng chạm khắc thanh tịnh trên cùng */
-#plaque{display:none;position:absolute;left:50%;transform:translateX(-50%);top:185px;width:100%;max-width:440px;text-align:center;pointer-events:none;z-index:2}
-#plaque.on{display:block}
-#plaqueText{font-family:var(--display), "Noto Serif", Georgia, serif;font-weight:700;font-size:30px;color:#F3D58A;
-  letter-spacing:2px;white-space:nowrap;display:inline-block;line-height:1.2;
-  text-shadow:0 0 10px rgba(243,213,138,0.65), 0 0 22px rgba(212,168,75,0.35), 0 2px 4px rgba(0,0,0,0.85)}
+/* Hoành phi Nam Mô A Di Đà Phật: tấm biển ngang sơn mài đỏ sẫm, viền vàng kép mảnh, bốn góc có hoa văn vàng nhỏ, chữ Noto Serif vàng.
+   Vị trí/kích thước từ content.json → plaque (top, width, height); căn giữa x 540, nằm trên hào quang và đầu tượng. */
+#plaque{display:none;position:absolute;left:540px;transform:translateX(-50%);top:118px;width:420px;height:56px;box-sizing:border-box;pointer-events:none;z-index:2;
+  background:linear-gradient(180deg,#5a1410 0%,#3a0b09 55%,#2b0705 100%);border:2px solid #d9b45a;border-radius:4px;
+  box-shadow:inset 0 0 0 4px #3a0b09,inset 0 0 0 5px rgba(217,180,90,.85),0 6px 14px rgba(0,0,0,.55),inset 0 2px 6px rgba(255,160,120,.18);
+  align-items:center;justify-content:center}
+#plaque.on{display:flex}
+#plaque i{position:absolute;width:9px;height:9px;border:2px solid #e9c872;box-sizing:border-box}
+#plaque i::after{content:"";position:absolute;width:3px;height:3px;border-radius:50%;background:#e9c872}
+#plaque i.tl{left:5px;top:5px;border-right:0;border-bottom:0;border-top-left-radius:3px}#plaque i.tl::after{left:3px;top:3px}
+#plaque i.tr{right:5px;top:5px;border-left:0;border-bottom:0;border-top-right-radius:3px}#plaque i.tr::after{right:3px;top:3px}
+#plaque i.bl{left:5px;bottom:5px;border-right:0;border-top:0;border-bottom-left-radius:3px}#plaque i.bl::after{left:3px;bottom:3px}
+#plaque i.br{right:5px;bottom:5px;border-left:0;border-top:0;border-bottom-right-radius:3px}#plaque i.br::after{right:3px;bottom:3px}
+#plaqueText{font-family:var(--display),"Noto Serif",Georgia,serif;font-weight:700;font-size:28px;color:#F3D58A;letter-spacing:2px;white-space:nowrap;line-height:1;
+  text-shadow:0 1px 0 rgba(60,20,0,.9),0 0 8px rgba(243,213,138,.35)}
 /* pills */
 /* chip trạng thái: số người ở góc trên-trái, đồng hồ + ngày/đêm ở góc trên-phải (xếp dọc, không chip nào nằm trên đầu/hào quang tượng) */
 #chipCount{left:24px;top:240px}
@@ -82,7 +91,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   <canvas id="bgA" class="bgl" width="1080" height="1920"></canvas>
   <canvas id="bgB" class="bgl" width="1080" height="1920"></canvas>
   <canvas id="c" width="1080" height="1920"></canvas>
-  <div id="plaque" class="ui"><span id="plaqueText">Nam Mô A Di Đà Phật</span></div>
+  <div id="plaque" class="ui"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i><span id="plaqueText">Nam Mô A Di Đà Phật</span></div>
   <div id="chipCount" class="pill ui"><span class="dot"></span><span id="count">0/24</span><small id="watchLbl">đang<br>thiền</small></div>
   <div id="chipMore" class="pill ui" hidden></div>
   <div id="chipsRight" class="ui">
@@ -345,6 +354,8 @@ function applyContent(c){
   if (plq) {
     plq.classList.toggle('on', !!c.plaque?.enabled);
     if (Number.isFinite(c.plaque?.top)) plq.style.top = c.plaque.top + 'px';
+    if (Number.isFinite(c.plaque?.width)) plq.style.width = c.plaque.width + 'px';
+    if (Number.isFinite(c.plaque?.height)) plq.style.height = c.plaque.height + 'px';
   }
   const plqText = document.getElementById('plaqueText');
   if (plqText && c.plaque?.text) plqText.textContent = c.plaque.text;

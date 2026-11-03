@@ -46,7 +46,9 @@ export default {
   "plaque": {
     "enabled": true,
     "text": "Nam Mô A Di Đà Phật",
-    "top": 185
+    "top": 118,
+    "width": 420,
+    "height": 56
   },
   "guide": {
     "title": "💬 Bình luận để tương tác",
