@@ -707,7 +707,10 @@ let ws=null;
 function connect(){
   ws = new WebSocket(`ws://${location.host}/ws?role=overlay`);
   const st=document.getElementById('conn');
-  ws.onopen=()=>{ st.textContent=''; };
+  ws.onopen=()=>{
+    st.textContent='';
+    try { ws.send(JSON.stringify({ t: 'overlay_status', status: isPreparing ? 'preparing' : 'ready' })); } catch {}
+  };
   ws.onclose=()=>{ st.textContent=L('lost','mất kết nối server… đang thử lại'); setTimeout(connect,2000); };
   ws.onmessage=e=>{ let m; try { m=JSON.parse(e.data); } catch { return; } handleMsg(m); };
 }
@@ -784,6 +787,11 @@ function finishPrep(){
   if (!isPreparing) return;
   isPreparing = false;
   clearTimeout(prepTimeout);
+  try {
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ t: 'overlay_status', status: 'ready' }));
+    }
+  } catch {}
   const el = document.getElementById('prepScreen');
   if (el){
     el.classList.add('dismissed');

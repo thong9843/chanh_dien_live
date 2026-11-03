@@ -87,8 +87,9 @@ button.red{background:var(--red);border-color:#b84a33}
   <div class="status">
     <span class="chip" id="srv">Server: …</span>
     <span class="chip warn" id="silentChip" hidden>🧘 Thiền im lặng: 05:00</span>
-    <span class="chip" id="vnChip">VieNeu: …</span>
     <span class="chip" id="tt">TikTok: chưa kết nối</span>
+    <span class="chip" id="vnChip">VieNeu: …</span>
+    <span class="chip" id="ovChip">Overlay: chưa kết nối</span>
     <span class="chip" id="cnt">0 người</span>
   </div>
 </header>
@@ -299,9 +300,27 @@ let ttState = null;
 function setTT(st){
   ttState = st;
   const retrying = st.status==='reconnecting';
-  const left = retrying ? Math.max(0, Math.ceil((+st.retryAt - Date.now()) / 1000)) : 0;   // server và bảng điều khiển cùng máy nên dùng chung đồng hồ
-  const el=$('tt'); el.className='chip ' + (st.status==='connected'?'ok':st.status==='error'?'bad':retrying?'warn':'');
-  el.textContent = st.status==='connected' ? `TikTok: @${st.uniqueId} ✓` : st.status==='connecting' ? `TikTok: đang kết nối @${st.uniqueId}…` : retrying ? `TikTok: đang nối lại @${st.uniqueId} (lần ${st.attempt}, còn ${left} giây)` : st.status==='error' ? (st.fatal ? 'TikTok: lỗi — đã dừng, không tự nối lại' : 'TikTok: lỗi kết nối') : 'TikTok: chưa kết nối';
+  const connecting = st.status==='connecting';
+  const connected = st.status==='connected';
+  const error = st.status==='error' || (!connected && !connecting && !retrying && st.status!=='idle' && st.status!=='disconnected' && st.error);
+  const left = retrying ? Math.max(0, Math.ceil((+st.retryAt - Date.now()) / 1000)) : 0;
+  const el=$('tt');
+  if (connected) {
+    el.className = 'chip ok';
+    el.textContent = `TikTok: @${st.uniqueId || ''} · đã kết nối ✓`;
+  } else if (connecting) {
+    el.className = 'chip warn';
+    el.textContent = `TikTok: đang kết nối @${st.uniqueId || ''}…`;
+  } else if (retrying) {
+    el.className = 'chip warn';
+    el.textContent = `TikTok: đang kết nối lại @${st.uniqueId || ''} (${left}s)…`;
+  } else if (error) {
+    el.className = 'chip bad';
+    el.textContent = `TikTok: lỗi ${st.error ? '(' + String(st.error).slice(0, 30) + ')' : ''}`;
+  } else {
+    el.className = 'chip';
+    el.textContent = 'TikTok: chưa kết nối';
+  }
   const er=$('ttErr'); const bad = (st.status==='error' || retrying) && st.error;
   er.style.display = bad ? '' : 'none'; er.textContent = bad ? `Lỗi${st.step ? ' ở bước "'+st.step+'"' : ''}: ${st.error}${st.fatal ? ' — Đã dừng, không tự nối lại. Sửa xong hãy bấm Kết nối.' : ''}` : '';
   if (st.key !== undefined) $('ttKey').textContent = st.key ? 'EulerStream: đã có API key (live/.env).' : 'EulerStream: chưa có API key — dùng mức miễn phí không key, dễ hết lượt. Thêm EULER_API_KEY vào live/.env.';
@@ -333,25 +352,51 @@ function showTTSError(reason){
   const el = $('ttsErr'); el.textContent = `Không tạo được giọng đọc: ${reason}`; el.style.display = '';
   clearTimeout(ttsErrTimer); ttsErrTimer = setTimeout(() => { el.style.display = 'none'; }, 20000);
 }
+
+function setOverlayStatus(st){
+  const el = $('ovChip');
+  if (!el) return;
+  const status = st?.status || 'offline';
+  if (status === 'ready') {
+    el.className = 'chip ok';
+    el.textContent = 'Overlay: sẵn sàng ✓';
+  } else if (status === 'preparing') {
+    el.className = 'chip warn';
+    el.textContent = 'Overlay: đang chuẩn bị…';
+  } else {
+    el.className = 'chip bad';
+    el.textContent = 'Overlay: chưa kết nối';
+  }
+}
+
+let lastVNState = null;
+let ttsQueueLen = 0;
 function setVN(st){
   if (!st) return;
+  lastVNState = Object.assign(lastVNState || {}, st);
+  if (typeof st.queueLen === 'number') ttsQueueLen = st.queueLen;
   const chip = $('vnChip');
-  const isOnline = !!st.online;
-  const dev = (st.device || 'CPU').toUpperCase();
-  const voice = st.voice || 'Thiền Tâm Đức';
+  const isOnline = !!lastVNState.online;
+  const dev = String(lastVNState.device || 'cpu').toLowerCase();
+  const qStr = `Hàng đợi: ${ttsQueueLen}`;
   if (chip){
-    chip.className = 'chip ' + (isOnline ? 'ok' : 'bad');
-    chip.textContent = isOnline ? `VieNeu: ${dev} · ${voice}` : 'VieNeu: chưa chạy';
+    if (isOnline) {
+      chip.className = 'chip ok';
+      chip.textContent = `VieNeu: ${dev.toUpperCase()} · ${qStr}`;
+    } else {
+      chip.className = 'chip bad';
+      chip.textContent = `VieNeu: offline · ${qStr}`;
+    }
   }
   const statusEl = $('vnStatus');
   if (statusEl){
-    statusEl.textContent = isOnline ? 'Đang chạy' : 'Chưa chạy';
+    statusEl.textContent = isOnline ? `Đang chạy (${dev.toUpperCase()})` : 'Chưa chạy';
     statusEl.style.color = isOnline ? '#9fe0b4' : '#f3a3a3';
   }
   const devEl = $('vnDevice');
-  if (devEl) devEl.textContent = isOnline ? dev : '—';
+  if (devEl) devEl.textContent = isOnline ? dev.toUpperCase() : '—';
   const voiceEl = $('vnVoice');
-  if (voiceEl) voiceEl.textContent = voice;
+  if (voiceEl && lastVNState.voice) voiceEl.textContent = lastVNState.voice;
 }
 function onPreviewVieNeu(m){
   $('btnTestVieNeu').disabled = false;
@@ -400,12 +445,14 @@ function connect(){
   ws.onclose = () => { $('srv').textContent='Server: mất kết nối'; $('srv').className='chip bad'; setTimeout(connect, 2000); };
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
-    if (m.t==='state'){ fillSettings(m.settings); if (m.vieneu) setVN(m.vieneu); setTT(m.tiktok); silentUntil=m.silentUntil||0; updateSilentUI(); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
+    if (m.t==='state'){ fillSettings(m.settings); if (m.overlay) setOverlayStatus(m.overlay); if (m.vieneu) setVN(m.vieneu); setTT(m.tiktok); silentUntil=m.silentUntil||0; updateSilentUI(); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
     else if (m.t==='settings') fillSettings(m.settings);   // đổi từ nơi khác (vd. Bài tiếp ở chế độ chọn bài)
     else if (m.t==='silent'){ silentUntil=m.silentUntil||0; updateSilentUI(); }
     else if (m.t==='preview_tts') onPreviewTTS(m);
     else if (m.t==='preview_vieneu') onPreviewVieNeu(m);
+    else if (m.t==='overlay_status') setOverlayStatus(m);
     else if (m.t==='vieneu') setVN(m);
+    else if (m.t==='tts_queue') { ttsQueueLen = m.queueLen || 0; if (lastVNState) setVN({ ...lastVNState, queueLen: ttsQueueLen }); else setVN({ queueLen: ttsQueueLen }); }
     else if (m.t==='tts_error') showTTSError(m.reason);
     else if (m.t==='logs'){ $('log').textContent=''; m.lines.forEach(logLine); }
     else if (m.t==='log') logLine(m.line);

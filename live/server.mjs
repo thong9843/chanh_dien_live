@@ -144,7 +144,7 @@ function loadContent(){
         const allowed = ['vieneu', 'edge', 'cached'];
         const raw = Array.isArray(o('tts')?.order) ? o('tts').order : D.tts?.order;
         const filtered = (raw || []).filter(x => allowed.includes(x));
-        return filtered.length ? filtered : ['vieneu', 'edge', 'cached'];
+        return filtered.length ? filtered : ['vieneu', 'cached'];
       })(),
       vieneuVoice: cStr(o('tts')?.vieneuVoice, D.tts?.vieneuVoice || 'Thiền Tâm Đức', 80),
       vieneuSpeed: cNum(o('tts')?.vieneuSpeed, 0.7, 1.2, D.tts?.vieneuSpeed || 0.9),
@@ -409,6 +409,7 @@ function recordStartupMilestone(name, ms, extra = '') {
 let lastRecordedError = null;
 let eventCountWindow = 0;
 let overlayStats = { fps: 30, heapMb: null, domNodes: null, updatedAt: 0 };
+let overlayState = { status: 'offline', clients: 0 };
 function trackEvent() { eventCountWindow++; }
 
 const pad2 = n => String(n).padStart(2, '0');
@@ -572,7 +573,7 @@ function safeAvatar(u){
   } catch { return ''; }
 }
 function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo, seat:v.seat }; }
-function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), more: overflow.size, cap: capacity(), startedAt, ttsWarmupDone, silentUntil, tiktok: tiktokState, vieneu: vieneuState, content: CLIENT_CONTENT }; }
+function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), more: overflow.size, cap: capacity(), startedAt, ttsWarmupDone, silentUntil, tiktok: tiktokState, vieneu: { ...vieneuState, queueLen: ttsQueue.length }, overlay: overlayState, content: CLIENT_CONTENT }; }
 
 /* ------------------------------------------- Silent mode, Altar Ceremony & Camera Zoom */
 const zoomQueue = [];
@@ -1081,40 +1082,93 @@ const VIENEU_PORT = process.env.VIENEU_PORT || '8765';
 const VIENEU_BASE = (process.env.VIENEU_URL || `http://127.0.0.1:${VIENEU_PORT}`).replace(/\/+$/, '');
 
 let ttsWarmupDone = false;
+let isWarmingUp = false;
+
 async function warmupTTS() {
-  const maxWait = 60_000;
+  if (isWarmingUp || ttsWarmupDone) return;
+  isWarmingUp = true;
+  const pollHealthMax = 180_000;
   const t0 = Date.now();
-  addLog('🎙️ Đang khởi động ấm VieNeu TTS sidecar (chờ tối đa 60s)...');
-  while (Date.now() - t0 < maxWait) {
+  let device = 'unknown';
+  let healthOk = false;
+
+  addLog('🎙️ Đang đợi VieNeu TTS sidecar sẵn sàng (poll /health mỗi 2s, tối đa 180s)...');
+
+  // Bước 1: Trước tiên chỉ poll GET /health mỗi 2 s (timeout 2 s) tới khi ok:true, tối đa 180 s
+  while (Date.now() - t0 < pollHealthMax) {
     try {
-      const res = await fetch(`${VIENEU_BASE}/tts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: 'Nam Mô A Di Đà Phật',
-          voice: CONTENT.tts?.vieneuVoice || 'Thiền Tâm Đức',
-          speed: 0.9,
-        }),
-        signal: AbortSignal.timeout(3000),
-      });
+      const res = await fetch(`${VIENEU_BASE}/health`, { signal: AbortSignal.timeout(2000) });
       if (res.ok) {
-        const buf = await res.arrayBuffer();
-        if (buf && buf.byteLength > 0) {
+        const data = await res.json().catch(() => ({}));
+        if (data && data.ok) {
+          healthOk = true;
+          device = String(data.device || 'cpu').toLowerCase();
+          vieneuState = {
+            online: true,
+            device,
+            voice: String(data.voice || CONTENT.tts?.vieneuVoice || 'Thiền Tâm Đức'),
+            url: VIENEU_BASE,
+          };
+          broadcast({ t: 'vieneu', ...vieneuState, queueLen: ttsQueue.length }, 'control');
           const elapsed = Date.now() - startedAt;
-          recordStartupMilestone('sidecar TTS trả lời lần đầu', elapsed);
-          ttsWarmupDone = true;
-          broadcast({ t: 'warmup_done', ok: true, ms: elapsed });
-          addLog(`🎙️ VieNeu TTS warm-up thành công sau ${Date.now() - t0}ms (không phát tiếng)`);
-          return;
+          recordStartupMilestone('sidecar health ok', elapsed, `(${device})`);
+          addLog(`🎙️ VieNeu sidecar health OK (${device.toUpperCase()}) sau ${Date.now() - t0}ms`);
+          break;
         }
       }
     } catch {}
-    await sleep(1000);
+    await sleep(2000);
   }
-  addLog('⚠️ VieNeu TTS sidecar không phản hồi warm-up sau 60s (offline/chưa khởi động)');
-  recordStartupMilestone('sidecar TTS trả lời lần đầu', 60000, '(quá hạn 60s)');
-  ttsWarmupDone = true;
-  broadcast({ t: 'warmup_done', ok: false, ms: 60000 });
+
+  if (!healthOk) {
+    addLog('⚠️ VieNeu TTS sidecar quá hạn 180s kiểm tra health (offline/chưa khởi động), KHÔNG gửi thêm request');
+    recordStartupMilestone('sidecar health ok', 180_000, '(quá hạn 180s, offline)');
+    ttsWarmupDone = true;
+    isWarmingUp = false;
+    broadcast({ t: 'warmup_done', ok: false, ms: 180_000 });
+    return;
+  }
+
+  // Bước 2: Sau đó gửi ĐÚNG 1 request POST /tts warm-up, timeout 60 s. Không lặp lại khi đang có request warm-up chưa xong.
+  addLog(`🎙️ Gửi đúng 1 request POST /tts warm-up (${device.toUpperCase()}, timeout 60s)...`);
+  const tWarmupStart = Date.now();
+  try {
+    const res = await fetch(`${VIENEU_BASE}/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: 'Nam Mô A Di Đà Phật',
+        voice: CONTENT.tts?.vieneuVoice || 'Thiền Tâm Đức',
+        speed: 0.9,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (res.ok) {
+      const buf = await res.arrayBuffer();
+      if (buf && buf.byteLength > 0) {
+        const elapsed = Date.now() - startedAt;
+        const dur = Date.now() - tWarmupStart;
+        recordStartupMilestone('sidecar warm-up xong', elapsed, `(${device}, ${dur}ms)`);
+        ttsWarmupDone = true;
+        isWarmingUp = false;
+        broadcast({ t: 'warmup_done', ok: true, ms: elapsed });
+        addLog(`🎙️ VieNeu TTS warm-up xong sau ${dur}ms (${device.toUpperCase()}, không phát tiếng)`);
+        return;
+      } else {
+        throw new Error('Dữ liệu âm thanh trả về rỗng');
+      }
+    } else {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`VieNeu HTTP ${res.status}: ${errText.slice(0, 150)}`);
+    }
+  } catch (err) {
+    const elapsed = Date.now() - startedAt;
+    addLog(`⚠️ VieNeu TTS warm-up thất bại: ${err?.message || err}`);
+    recordStartupMilestone('sidecar warm-up xong', elapsed, `(thất bại: ${err?.message || err}, ${device})`);
+    ttsWarmupDone = true;
+    isWarmingUp = false;
+    broadcast({ t: 'warmup_done', ok: false, ms: elapsed });
+  }
 }
 
 let vieneuState = {
@@ -1139,7 +1193,7 @@ async function checkVieNeuHealth() {
       if (!wasOnline) {
         addLog(`🎙️ VieNeu TTS Sidecar kết nối thành công (${vieneuState.device.toUpperCase()} · ${vieneuState.voice})`);
       }
-      broadcast({ t: 'vieneu', ...vieneuState }, 'control');
+      broadcast({ t: 'vieneu', ...vieneuState, queueLen: ttsQueue.length }, 'control');
       return true;
     }
   } catch {}
@@ -1153,7 +1207,7 @@ async function checkVieNeuHealth() {
   if (wasOnline) {
     addLog(`⚠️ VieNeu TTS Sidecar mất kết nối (${VIENEU_BASE})`);
   }
-  broadcast({ t: 'vieneu', ...vieneuState }, 'control');
+  broadcast({ t: 'vieneu', ...vieneuState, queueLen: ttsQueue.length }, 'control');
   return false;
 }
 setInterval(checkVieNeuHealth, 8000);
@@ -1263,27 +1317,49 @@ function mergeSmallGifts(){
   addLog(`Gộp ${idx.length} câu quà nhỏ thành 1 (${names.length} người)`);
 }
 
-// 1. Backend VieNeu: gọi sidecar với timeout 15s
+// 1. Backend VieNeu: timeout 30s cho 3 câu đầu sau khởi động, sau đó 15s
+let vieneuSentCount = 0;
 async function synthesizeViaVieNeu(text){
   const clean = String(text || '').slice(0, 300).trim();
-  const res = await fetch(`${VIENEU_BASE}/tts`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text: clean,
-      voice: CONTENT.tts?.vieneuVoice || 'Thiền Tâm Đức',
-      speed: CONTENT.tts?.vieneuSpeed || 0.9,
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
+  const timeoutMs = (vieneuSentCount < 3) ? 30_000 : 15_000;
+  vieneuSentCount++;
+
+  let res;
+  try {
+    res = await fetch(`${VIENEU_BASE}/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: clean,
+        voice: CONTENT.tts?.vieneuVoice || 'Thiền Tâm Đức',
+        speed: CONTENT.tts?.vieneuSpeed || 0.9,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    const reason = `VieNeu TTS lỗi mạng/timeout (${timeoutMs / 1000}s): ${err?.message || err}`;
+    console.error(`[VieNeu] ${reason}`);
+    addLog(`⚠️ ${reason}`);
+    throw err;
+  }
+
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`VieNeu HTTP ${res.status}: ${errText}`);
+    const reason = `VieNeu HTTP ${res.status}: ${errText.slice(0, 200)}`;
+    console.error(`[VieNeu] ${reason}`);
+    addLog(`⚠️ ${reason}`);
+    throw new Error(reason);
   }
+
   const ct = res.headers.get('content-type') || '';
   const ext = ct.includes('wav') ? 'wav' : 'mp3';
   const buf = Buffer.from(await res.arrayBuffer());
-  if (!buf.length) throw new Error('VieNeu không trả về dữ liệu âm thanh');
+  if (!buf.length) {
+    const reason = 'VieNeu không trả về dữ liệu âm thanh';
+    console.error(`[VieNeu] ${reason}`);
+    addLog(`⚠️ ${reason}`);
+    throw new Error(reason);
+  }
   return { buf, ext };
 }
 
@@ -1381,7 +1457,7 @@ function pruneTtsFiles(){
 
 // Tổng hợp giọng đọc theo thứ tự tts.order: vieneu -> edge -> cached (với fallback không tên)
 async function synthesizeForQueue(text, meta){
-  const order = CONTENT.tts?.order || ['vieneu', 'edge', 'cached'];
+  const order = CONTENT.tts?.order || ['vieneu', 'cached'];
   let lastError = null;
   if (meta?.fixed){                                  // câu cố định (kinh, câu chung): đã có trên đĩa thì phát luôn, không tạo lại
     const hit = getCachedTtsFile(text);
@@ -1391,8 +1467,11 @@ async function synthesizeForQueue(text, meta){
   for (const backend of order){
     if (backend === 'vieneu'){
       try {
+        const t0 = performance.now();
         const res = await synthesizeViaVieNeu(text);
-        return { buf: res.buf, ext: res.ext, backend: 'vieneu' };
+        const ms = Math.round(performance.now() - t0);
+        addLog(`🎙️ VieNeu tổng hợp thành công (${ms}ms): "${text.slice(0, 30)}…"`);
+        return { buf: res.buf, ext: res.ext, backend: 'vieneu', durationMs: ms };
       } catch (e) {
         lastError = e;
       }
@@ -1441,6 +1520,7 @@ async function pumpTTS(){
   }
 
   const { text, meta } = ttsQueue.shift();
+  broadcast({ t: 'tts_queue', queueLen: ttsQueue.length }, 'control');
   try {
     const res = await synthesizeForQueue(text, meta);
     let file = '';
@@ -1928,6 +2008,24 @@ wss.on('connection', (ws, req) => {
   ws.on('error', e => console.error('[ws client] lỗi:', e?.message));            // không có listener thì lỗi socket làm sập tiến trình
   ws.role = req.kind === 'local' && new URL(req.url, 'http://x').searchParams.get('role') === 'control' ? 'control' : 'overlay';
   ws.live = false;                                             // chưa nhận gói gom cho tới khi đã nhận snapshot
+  if (ws.role === 'overlay') {
+    let count = 0;
+    for (const c of wss.clients) if (c.readyState === 1 && c.role === 'overlay') count++;
+    overlayState.clients = count;
+    if (overlayState.status === 'offline') overlayState.status = 'preparing';
+    broadcast({ t: 'overlay_status', ...overlayState }, 'control');
+  }
+  ws.on('close', () => {
+    if (ws.role === 'overlay') {
+      let count = 0;
+      for (const c of wss.clients) if (c !== ws && c.readyState === 1 && c.role === 'overlay') count++;
+      overlayState.clients = count;
+      if (count === 0) {
+        overlayState.status = 'offline';
+        broadcast({ t: 'overlay_status', ...overlayState }, 'control');
+      }
+    }
+  });
   try {
     flushBatch();                                              // gói cũ gửi cho các client khác trước, để snapshot không bị sự kiện cũ chồng lên
     ws.send(JSON.stringify(snapshot()));
@@ -1939,6 +2037,11 @@ wss.on('connection', (ws, req) => {
       const m = JSON.parse(buf);
       if (m && m.t === 'startup_metric') {
         recordStartupMilestone(m.name, m.ms, m.extra || '');
+        return;
+      }
+      if (m && m.t === 'overlay_status') {
+        overlayState = { status: m.status || 'ready', clients: Math.max(1, overlayState.clients) };
+        broadcast({ t: 'overlay_status', ...overlayState }, 'control');
         return;
       }
       if (m && m.t === 'overlay_stats') {
@@ -1961,3 +2064,5 @@ server.listen(PORT, HOST, () => {
   addLog(`Server chạy tại http://localhost:${PORT}  ·  Bảng điều khiển: http://localhost:${PORT}/live/control.html  ·  Overlay: http://localhost:${PORT}/live/overlay.html`);
   setTimeout(warmupTTS, 100);
 });
+
+export { onChat, onGift, viewers, ttsQueue, server, warmupTTS, ceremonies, ceremonyQueue };
