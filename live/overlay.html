@@ -45,21 +45,21 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 .dot{width:16px;height:16px;border-radius:50%;background:#46d36b;box-shadow:0 0 12px #46d36b}
 #chipMore[hidden]{display:none}
 #ambientPill{font-size:19px;padding:4px 14px;color:var(--gold2)}
-/* Hai thẻ ở chân màn hình (y 1520–1700): gợi ý bình luận (trái, x 16–330) và Tri Ân (phải, x 750–1064). Gọn, không làm mờ nền bằng backdrop-filter (tốn CPU khi không có GPU). */
-.card{background:var(--panel);border:2px solid var(--line);border-radius:16px;padding:10px 14px;font-size:20px;line-height:1.3}
-#tips{left:16px;top:1520px;width:314px;height:auto;box-sizing:border-box;display:flex;flex-direction:column;text-align:left;overflow:hidden}
-#tips h3{margin:0 0 6px;font-family:var(--display);font-size:17px;line-height:1.2;color:var(--gold2);text-align:center;white-space:nowrap}
+/* Thẻ gợi ý bình luận (trái x 16–280, y 560–800) và Tri Ân (phải x 800–1064, y 560–800): ngoài vùng bình luận TikTok, gọn, bán trong suốt */
+.card{background:rgba(20,10,6,.75);border:1.5px solid var(--line);border-radius:14px;padding:8px 12px;font-size:16px;line-height:1.25}
+#tips{left:16px;top:560px;width:264px;height:240px;box-sizing:border-box;display:flex;flex-direction:column;text-align:left;overflow:hidden}
+#tips h3{margin:0 0 4px;font-family:var(--display);font-size:15px;line-height:1.2;color:var(--gold2);text-align:center;white-space:nowrap}
 #tipsBody{display:grid}
-#tipsBody .pg{grid-area:1/1;display:flex;flex-direction:column;gap:5px;opacity:0;transition:opacity .5s;pointer-events:none}
+#tipsBody .pg{grid-area:1/1;display:flex;flex-direction:column;gap:4px;opacity:0;transition:opacity .5s;pointer-events:none}
 #tipsBody .pg.show{opacity:1;pointer-events:auto}
-#tipsBody .pg div{font-size:18px;line-height:1.28}
+#tipsBody .pg div{font-size:15px;line-height:1.24}
 #tipsBody b{color:var(--gold2)}
-#merit{left:750px;top:1520px;width:314px;height:auto;box-sizing:border-box;text-align:center;overflow:hidden}
-#merit h3{margin:0 0 6px;font-family:var(--display);font-size:20px;line-height:1.2;color:var(--gold2);letter-spacing:.02em;white-space:nowrap}
-#merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:5px}
-#merit li{display:block;border-bottom:1px solid rgba(226,176,79,.25);padding-bottom:4px}
-#merit li .nm{display:block;font-size:22px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#merit .empty{color:var(--muted);text-align:center;border:0;font-size:20px}
+#merit{left:800px;top:560px;width:264px;height:240px;box-sizing:border-box;text-align:center;overflow:hidden}
+#merit h3{margin:0 0 4px;font-family:var(--display);font-size:16px;line-height:1.2;color:var(--gold2);letter-spacing:.02em;white-space:nowrap}
+#merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:4px}
+#merit li{display:block;border-bottom:1px solid rgba(226,176,79,.25);padding-bottom:3px}
+#merit li .nm{display:block;font-size:16px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#merit .empty{color:var(--muted);text-align:center;border:0;font-size:15px}
 /* Thông báo: MỘT hàng đợi duy nhất, mọi thẻ dùng chung vùng #noticeBox (y 1000–1214, rộng ≤ 600, căn giữa x 540). Không bao giờ hai thẻ cùng lúc. */
 #noticeBox{left:240px;top:1080px;width:600px;height:220px;display:grid;place-items:center;pointer-events:none;z-index:5}
 #noticeBox > div{grid-area:1/1;width:100%;box-sizing:border-box;text-align:center;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s}
@@ -81,7 +81,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #safe{position:absolute;inset:0;z-index:30;pointer-events:none;display:none}
 #safe .z{position:absolute;box-sizing:border-box;background:rgba(255,40,40,.32);border:2px dashed rgba(255,150,150,.9);color:#fff;font:600 22px var(--body);padding:6px 10px;text-shadow:0 1px 3px #000}
 /* enable sound (needed once: browsers block autoplay) */
-#unmute{position:absolute;z-index:9;left:50%;top:1540px;transform:translateX(-50%);font:600 36px var(--body);padding:22px 44px;border-radius:24px;border:3px solid var(--gold2);background:var(--red);color:#fff4dc;cursor:pointer}
+#unmute{position:absolute;z-index:9;left:50%;top:960px;transform:translateX(-50%);font:600 36px var(--body);padding:22px 44px;border-radius:24px;border:3px solid var(--gold2);background:var(--red);color:#fff4dc;cursor:pointer}
 #conn{position:absolute;z-index:4;right:16px;bottom:12px;font-size:20px;color:var(--muted);opacity:.6}
 @media (prefers-reduced-motion:reduce){#noticeBox > div{transition:none}}
 </style>
@@ -382,8 +382,8 @@ function applyUiLayout(Lo){
   $('chipsRight').style.right = px(1080 - ch.right); $('chipsRight').style.top = px(ch.top);
   $('chipMore').style.left = px(ch.left); $('chipMore').style.top = px(ch.top + 54);
   const t = $('tips'), tp = u.tips, m = $('merit'), mr = u.merit;
-  if (tp){ t.style.left = px(tp.x); t.style.top = px(tp.y); t.style.width = px(tp.w); t.style.height = 'auto'; if (tp.h) t.style.maxHeight = px(tp.h); }
-  if (mr){ m.style.left = px(mr.x); m.style.top = px(mr.y); m.style.width = px(mr.w); m.style.height = 'auto'; if (mr.h) m.style.maxHeight = px(mr.h); MERIT_MAX = mr.max; MERIT_NAME_MAX = mr.nameMax; }
+  if (tp){ t.style.left = px(tp.x); t.style.top = px(tp.y); t.style.width = px(tp.w); if (tp.h) t.style.height = px(tp.h); }
+  if (mr){ m.style.left = px(mr.x); m.style.top = px(mr.y); m.style.width = px(mr.w); if (mr.h) m.style.height = px(mr.h); MERIT_MAX = mr.max; MERIT_NAME_MAX = mr.nameMax; }
   const nt = u.notice;   // vùng thông báo chung: căn giữa x 540
   if (nt){ const nb = $('noticeBox'); nb.style.width = px(nt.w); nb.style.left = px(540 - nt.w / 2); nb.style.top = px(nt.top); nb.style.height = px(nt.h); }
   const safe = $('safe'); safe.replaceChildren();
