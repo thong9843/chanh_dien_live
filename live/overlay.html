@@ -454,6 +454,7 @@ function playTTS(){
 
 /* ======================= effects ======================= */
 const fx=[], petals=[];
+const FACE={x0:400,x1:680,y1:620};   // vùng mặt tượng: cánh hoa không được qua
 const FX_MAX=40, PETAL_MAX=260, freeFx=[], freePetals=[];   // object pool có trần: quá trần thì bỏ bớt hiệu ứng mới, hết hạn thì tái sử dụng
 function addFx(kind,x,y,life,scale){ if (fx.length>=FX_MAX) return; const f=freeFx.pop()||{}; f.kind=kind; f.x=x; f.y=y; f.t=0; f.life=life; f.scale=scale; fx.push(f); }
 function addPetal(x,y,vx,vy,life,s,heart){ if (petals.length>=PETAL_MAX) return; const p=freePetals.pop()||{}; p.x=x; p.y=y; p.vx=vx; p.vy=vy; p.t=0; p.life=life; p.s=s; p.heart=!!heart; p.ph=Math.random()*20; petals.push(p); }
@@ -473,7 +474,7 @@ function giftFx(v, m){
   const kind = tier>=3?'bell':tier>=2?'lotus':'incense', s=v.scale||.4;
   addFx(kind, v.x, v.y-220*s, tier>=3?3.4:2.4, s*(tier>=3?1.5:1.1));
   for (let i=0;i<(tier>=3?22:tier>=2?12:5);i++) addPetal(v.x+(Math.random()-.5)*120, v.y-80, (Math.random()-.5)*40, -(70+Math.random()*90), 2.6+Math.random(), .16+Math.random()*.14);
-  if (tier>=3){ bell(true); for (let i=0;i<30;i++) addPetal(540+(Math.random()-.5)*600, 300+Math.random()*250, (Math.random()-.5)*40, 30+Math.random()*50, 5, .2+Math.random()*.15); }
+  if (tier>=3){ bell(true); for (let i=0;i<30;i++){ const side=Math.random()<.5; addPetal(side ? 60+Math.random()*320 : 700+Math.random()*320, 300+Math.random()*250, (side?-1:1)*Math.random()*30, 30+Math.random()*50, 5, .2+Math.random()*.15); } }   // mưa hoa rơi hai bên, không qua vùng mặt tượng
 }
 function hearts(v,n){ for (let i=0;i<Math.min(6,n);i++) addPetal(v.x+(Math.random()-.5)*60, v.y-140*(v.scale||.4), (Math.random()-.5)*20, -(50+Math.random()*40), 1.6, .08, true); }
 
@@ -654,6 +655,7 @@ function frame(now){
   fx.length=wf;
   let wp=0;
   for (let i=0;i<petals.length;i++){ const p=petals[i]; p.t+=dt; if(p.t>p.life){ freePetals.push(p); continue; } p.x+=p.vx*dt+Math.sin(p.t*3+p.ph)*20*dt; p.y+=p.vy*dt;
+    if (p.y<FACE.y1 && p.x>FACE.x0 && p.x<FACE.x1){ p.x = p.x<540 ? FACE.x0 : FACE.x1; p.vx = (p.x<540?-1:1)*Math.abs(p.vx); }   // cánh hoa không bay qua vùng mặt (x 400–680, y 240–620)
     ctx.save(); ctx.globalAlpha=Math.min(1,p.life-p.t); ctx.translate(p.x,p.y);
     if (p.heart){ ctx.fillStyle='#ff5a7a'; ctx.font='34px serif'; ctx.textAlign='center'; ctx.fillText('♥',0,0); } else { ctx.rotate(Math.sin(p.t*2+p.ph)*.6); sprite(A.petal,0,0,p.s,.5); }
     ctx.restore(); petals[wp++]=p; }
