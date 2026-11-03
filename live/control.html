@@ -134,6 +134,12 @@ button.red{background:var(--red);border-color:#b84a33}
       <label>Nhịp mõ (BPM)<input id="moBpm" type="number" min="20" max="120" value="52"></label>
       <label>Đọc kinh mỗi (phút)<input id="chantEveryMin" type="number" min="1" max="60" value="3"></label>
     </div>
+    <div class="row">
+      <label>Chọn bài nhạc nền
+        <select id="musicTrack"><option value="shuffle">🔀 Ngẫu nhiên (không lặp tới khi hết 5 bài)</option><option value="1">music1</option><option value="2">music2</option><option value="3">music3</option><option value="4">music4</option><option value="5">music5</option></select>
+      </label>
+      <button id="btnMusicNext" style="flex:0 0 auto">⏭ Bài tiếp</button>
+    </div>
     <div class="row"><button id="btnBell">🔔 Thỉnh chuông</button><button id="btnMo">Gõ mõ</button></div>
     <h2>Cảnh &amp; Ánh sáng Chánh Điện</h2>
     <div class="row">
@@ -180,7 +186,7 @@ function logLine(s){ const el=$('log'); el.textContent += s + '\n'; el.scrollTop
 const SETTING_IDS = [
   'voice','pitch','rate',
   'music','mo','autoChant','moBpm','chantEveryMin',
-  'lightingMode','zoomEnabled','safeZone','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
+  'lightingMode','zoomEnabled','safeZone','musicTrack','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
 ];
 function syncGiftUI(){ $('giftMin').disabled = $('giftReadAll').checked; }
 function fillSettings(s){
@@ -300,6 +306,7 @@ $('btnSay').onclick = () => send('say', { text: $('sayText').value });
 $('btnChant').onclick = () => send('chant');
 $('btnBell').onclick = () => send('bell');
 $('btnMo').onclick = () => send('mo');
+$('btnMusicNext').onclick = () => send('music_next');
 for (const k of [...SETTING_IDS, 'giftReadAll', 'giftMin']) $(k).addEventListener('change', () => { syncGiftUI(); send('settings', { settings: readSettings() }); });
 </script>
 </body>

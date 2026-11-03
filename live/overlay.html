@@ -380,9 +380,19 @@ function enqueueOracle(m){
 }
 
 /* ======================= audio ======================= */
-let AC=null, master=null, musicGain=null, sfx=null, settings={ music:true, mo:true, moBpm:52, lightingMode:'auto', zoomEnabled:true };
+let AC=null, master=null, musicGain=null, sfx=null, settings={ music:true, mo:true, moBpm:52, lightingMode:'auto', zoomEnabled:true, musicTrack:'shuffle' };
 const TRACKS=['/assets/music/music1.mp3','/assets/music/music2.mp3','/assets/music/music3.mp3','/assets/music/music4.mp3','/assets/music/music5.mp3'];
-let trackIdx=Math.floor(Math.random()*TRACKS.length), musicEl=null;
+let musicEl=null, trackMode='shuffle', bag=[], lastTrack=-1;
+// Phát ngẫu nhiên không lặp: "túi" các bài xáo trộn, lấy hết túi mới xáo lại (bài đầu túi mới khác bài vừa phát). Chế độ chọn bài: lặp đúng bài đó.
+function pickTrack(){
+  if (settings.musicTrack && settings.musicTrack!=='shuffle'){ const i=(+settings.musicTrack)-1; if (i>=0 && i<TRACKS.length) return i; }
+  if (!bag.length){
+    bag=TRACKS.map((_,i)=>i);
+    for (let i=bag.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [bag[i],bag[j]]=[bag[j],bag[i]]; }
+    if (bag.length>1 && bag[bag.length-1]===lastTrack) [bag[0],bag[bag.length-1]]=[bag[bag.length-1],bag[0]];
+  }
+  return bag.pop();
+}
 document.getElementById('unmute').onclick = e => { e.currentTarget.remove(); startAudio(); };
 function startAudio(){
   AC = new (window.AudioContext||window.webkitAudioContext)();
@@ -399,7 +409,8 @@ function nextTrack(){
     musicEl = new Audio(); const src=AC.createMediaElementSource(musicEl); src.connect(musicGain);
     musicEl.onended = nextTrack;
   }
-  musicEl.src = TRACKS[trackIdx++ % TRACKS.length]; musicEl.play().catch(()=>{});
+  const i=pickTrack(); lastTrack=i; trackMode=settings.musicTrack||'shuffle';
+  musicEl.src = TRACKS[i]; musicEl.play().catch(()=>{});
 }
 function duck(on){ if(!musicGain) return; const t=AC.currentTime, target = !settings.music ? 0 : on ? .14 : .5; musicGain.gain.cancelScheduledValues(t); musicGain.gain.setValueAtTime(musicGain.gain.value,t); musicGain.gain.linearRampToValueAtTime(target,t+.5); }
 let haloPulse=0;
@@ -515,6 +526,7 @@ function connect(){
       case 'tts': queueTTS(m.url); break;
       case 'chant': showChant(m.text); bell(); break;
       case 'bell': bell(true); break;
+      case 'music_next': if (musicEl && (settings.musicTrack||'shuffle')==='shuffle') nextTrack(); break;
       case 'mo1': mo(); break;
       case 'follow': { const v=visitors.get(m.id); if(v){ v.glow=1; v.triggerBow(1,0); } for (let i=0;i<3;i++) setTimeout(mo, i*520); } break;
       case 'share': bell(false); showToast(fillTpl(CONTENT?.share?.text ?? '🙏 {name} đã chia sẻ', {name:m.name}), CONTENT?.share?.showSec ?? 4); break;
@@ -527,6 +539,7 @@ function applySettings(){
   document.getElementById('subtitle').textContent=settings.subtitle||'Nam Mô A Di Đà Phật';
   updateAmbientBadge();
   document.getElementById('safe').style.display = settings.safeZone ? 'block' : 'none';
+  if (musicEl && (settings.musicTrack||'shuffle')!==trackMode){ bag=[]; nextTrack(); }   // đổi chế độ/bài từ bảng điều khiển: chuyển ngay
   duck(false); scheduleMo();
 }
 connect();

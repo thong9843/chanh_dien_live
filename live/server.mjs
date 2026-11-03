@@ -211,6 +211,7 @@ const settings = {
   autoChant: true, chantEveryMin: 3,
   seatMode: 'auto',                  // auto | 24 | 36 | 64 | 100
   lightingMode: 'auto',              // auto (theo giờ thực) | day | night
+  musicTrack: 'shuffle',             // 'shuffle' (ngẫu nhiên, không lặp tới khi hết 5 bài) | '1'…'5' (lặp một bài)
   safeZone: false,                   // phủ đỏ các vùng TikTok che (chỉ để canh bố cục, không dùng khi phát)
   zoomEnabled: CONTENT.zoom.enabled, // bật/tắt zoom vào Phật tử khi quà ≥99 xu hoặc follow
   joinOnEnter: false,                // also seat viewers who only enter the room
@@ -1038,6 +1039,10 @@ function onControl(m, ws){
     case 'fill': fillDemo(clamp(m.n, 1, 100)); addLog(`Đổ người mẫu: ${viewers.size} người`); break;
     case 'clear': clearSeats(); break;
     case 'bell': broadcast({ t:'bell' }); break;
+    case 'music_next':     // Bài tiếp: chế độ ngẫu nhiên thì overlay lấy bài kế trong túi; chế độ chọn bài thì chuyển sang bài số kế (vòng 1→5)
+      if (settings.musicTrack !== 'shuffle'){ settings.musicTrack = String(+settings.musicTrack % 5 + 1); broadcast({ t:'settings', settings, cap: capacity() }); }
+      else broadcast({ t:'music_next' });
+      break;
     case 'mo': broadcast({ t:'mo1' }); break;
     case 'chant': chant(); break;
     case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }, 4); break;
@@ -1056,6 +1061,7 @@ const SETTING_RULES = {
   voice: v => ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'].includes(v) ? v : settings.voice,
   pitch: v => clamp(v, -50, 50), rate: v => clamp(v, -50, 50), moBpm: v => clamp(v, 20, 120), chantEveryMin: v => clamp(v, 1, 60),
   music: Boolean, mo: Boolean, autoChant: Boolean, zoomEnabled: Boolean, joinOnEnter: Boolean, readMemberJoin: Boolean, safeZone: Boolean,
+  musicTrack: v => ['shuffle', '1', '2', '3', '4', '5'].includes(String(v)) ? String(v) : 'shuffle',
   lightingMode: v => ['auto', 'day', 'night'].includes(v) ? v : 'auto',
   gifts: v => ({ readAll: !!(v && v.readAll), minDiamonds: clamp(v && v.minDiamonds, 1, 50000) }),
   seatMode: v => ['auto', '24', '36', '64', '100'].includes(String(v)) ? String(v) : 'auto',
