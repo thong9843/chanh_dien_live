@@ -230,6 +230,7 @@ function loadContent(){
                      x: cNum(mm.x, -100, 1180, dm.x), y: cNum(mm.y, 900, 1920, dm.y), flip: typeof mm.flip === 'boolean' ? mm.flip : dm.flip, master: !!mm.master }; });
           return {
             baseW: num(v, dv, 'baseW', 100, 400), baseH: num(v, dv, 'baseH', 100, 500), spriteK: num(v, dv, 'spriteK', 0.3, 2), monkWidthK: num(v, dv, 'monkWidthK', 0.5, 2),
+            maxVisibleSeats: Math.round(num(v, dv, 'maxVisibleSeats', 10, 100)),
             monkSpots: monks, cushions, footDy: num(v, dv, 'footDy', -40, 80),
             rug: { x: num(rg, drg, 'x', 0, 1080), y: num(rg, drg, 'y', 900, 1800), w: num(rg, drg, 'w', 100, 1080), h: num(rg, drg, 'h', 20, 600) },
             aisle: { yTop, yBottom, topX0: num(ai, dai, 'topX0', 0, 540), topX1: num(ai, dai, 'topX1', 540, 1080), bottomX0: num(ai, dai, 'bottomX0', 0, 540), bottomX1: num(ai, dai, 'bottomX1', 540, 1080) },
@@ -265,8 +266,8 @@ const LV3 = globalThis.LayoutV3;
 const V3 = CONTENT.layout.v3, UI = CONTENT.layout.ui;
 const V3_SPOTS = LV3.buildSpots(V3);
 const V3_SEATS = LV3.buildSeats(V3, [UI.tips, UI.merit]);
-const MAX_SEATS = V3_SEATS.length;
-if (MAX_SEATS < 2 * V3.seats.perSide) console.warn(`Bố cục chỉ xếp được ${MAX_SEATS}/${2 * V3.seats.perSide} chỗ ngồi, kiểm tra layout.v3.seats`);
+const MAX_SEATS = Math.min(V3.maxVisibleSeats || 30, V3_SEATS.length);
+if (MAX_SEATS < (V3.maxVisibleSeats || 2 * V3.seats.perSide)) console.warn(`Bố cục chỉ xếp được ${MAX_SEATS}/${V3.maxVisibleSeats || 2 * V3.seats.perSide} chỗ ngồi, kiểm tra layout.v3.seats`);
 const CLIENT_CONTENT = {
   labels: CONTENT.labels, scene: CONTENT.scene, avatar: CONTENT.avatar, guide: CONTENT.guide, plaque: CONTENT.plaque, layout: CONTENT.layout, share: CONTENT.share,
   milestone: { text: CONTENT.milestone.text, showSec: CONTENT.milestone.showSec },

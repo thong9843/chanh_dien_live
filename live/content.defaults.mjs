@@ -462,6 +462,7 @@ export default {
     "v3": {
       "baseW": 227,
       "baseH": 260,
+      "maxVisibleSeats": 30,
       "spriteK": 0.9,
       "monkWidthK": 1.05,
       "monkSpots": [
@@ -605,15 +606,15 @@ export default {
         ]
       },
       "seats": {
-        "perSide": 50,
-        "gapK": 0.8,
+        "perSide": 15,
+        "gapK": 0.65,
         "seatScaleFar": {
-          "y": 1570,
-          "s": 0.26
+          "y": 1500,
+          "s": 0.72
         },
         "seatScaleNear": {
           "y": 1900,
-          "s": 0.36
+          "s": 0.95
         }
       },
       "route": {

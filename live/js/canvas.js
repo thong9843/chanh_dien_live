@@ -2128,12 +2128,10 @@
       this.path = { pts, len: Math.max(1, len), y0: v.y, ds0: v.scale * 1.05 };
     }
 
-    // Một hàm scale theo y cho cả đường đi (phối cảnh): ds(y) nội suy giữa kích thước ở ghế và ở altarSpot
+    // Một hàm scale theo y cho cả đường đi (phối cảnh): nội suy từ 0,95 tại y1900 tới 0,74 tại y1348
     _scaleAtY(y) {
-      const { y0, ds0 } = this.path;
-      const span = y0 - this.altarY;
-      const t = span > 1 ? clamp((y0 - y) / span, -0.5, 1) : 1;
-      return lerp(ds0, this.altarScale, t);
+      const t = clamp((y - 1348) / (1900 - 1348), 0, 1);
+      return lerp(0.74, 0.95, t);
     }
 
     _pointAt(s) {
