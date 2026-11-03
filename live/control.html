@@ -87,6 +87,7 @@ button.red{background:var(--red);border-color:#b84a33}
   <div class="status">
     <span class="chip" id="srv">Server: …</span>
     <span class="chip warn" id="silentChip" hidden>🧘 Thiền im lặng: 05:00</span>
+    <span class="chip" id="vnChip">VieNeu: …</span>
     <span class="chip" id="tt">TikTok: chưa kết nối</span>
     <span class="chip" id="cnt">0 người</span>
   </div>
@@ -154,6 +155,13 @@ button.red{background:var(--red);border-color:#b84a33}
 
   <section class="card">
     <h2>3 · Giọng đọc · Nhạc · Ánh sáng</h2>
+    <div class="row" style="align-items:center;background:#1a201c;padding:10px 14px;border-radius:8px;border:1px solid var(--line);margin-bottom:12px">
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:14px;color:#d5e8db">VieNeu TTS (Giọng chính)</div>
+        <div class="hint" style="margin-top:2px">Trạng thái: <b id="vnStatus" style="color:#f3a3a3">Chưa chạy</b> · Thiết bị: <span id="vnDevice">—</span> · Giọng: <span id="vnVoice">Thiền Tâm Đức</span></div>
+      </div>
+      <button class="gold" id="btnTestVieNeu" style="flex:0 0 auto">🔊 Nghe thử</button>
+    </div>
     <div class="row">
       <label>Giọng<select id="voice"><option value="vi-VN-NamMinhNeural">Nam Minh (nam)</option><option value="vi-VN-HoaiMyNeural">Hoài My (nữ)</option></select></label>
       <label>Độ trầm (Hz)<input id="pitch" type="number" step="1" value="-18"></label>
@@ -319,6 +327,39 @@ function showTTSError(reason){
   const el = $('ttsErr'); el.textContent = `Không tạo được giọng đọc: ${reason}`; el.style.display = '';
   clearTimeout(ttsErrTimer); ttsErrTimer = setTimeout(() => { el.style.display = 'none'; }, 20000);
 }
+function setVN(st){
+  if (!st) return;
+  const chip = $('vnChip');
+  const isOnline = !!st.online;
+  const dev = (st.device || 'CPU').toUpperCase();
+  const voice = st.voice || 'Thiền Tâm Đức';
+  if (chip){
+    chip.className = 'chip ' + (isOnline ? 'ok' : 'bad');
+    chip.textContent = isOnline ? `VieNeu: ${dev} · ${voice}` : 'VieNeu: chưa chạy';
+  }
+  const statusEl = $('vnStatus');
+  if (statusEl){
+    statusEl.textContent = isOnline ? 'Đang chạy' : 'Chưa chạy';
+    statusEl.style.color = isOnline ? '#9fe0b4' : '#f3a3a3';
+  }
+  const devEl = $('vnDevice');
+  if (devEl) devEl.textContent = isOnline ? dev : '—';
+  const voiceEl = $('vnVoice');
+  if (voiceEl) voiceEl.textContent = voice;
+}
+function onPreviewVieNeu(m){
+  $('btnTestVieNeu').disabled = false;
+  $('btnTestVieNeu').textContent = '🔊 Nghe thử';
+  if (m.error){
+    showTTSError(m.error);
+    return;
+  }
+  if (previewAudio){ try { previewAudio.pause(); } catch {} }
+  previewAudio = new Audio(m.url);
+  previewAudio.play().catch(err => {
+    showTTSError(`Trình duyệt chặn phát âm thanh: ${err.message}`);
+  });
+}
 function onPreviewTTS(m){
   $('btnTestName').disabled = false;
   $('btnTestName').textContent = '🔊 Nghe thử';
@@ -353,10 +394,12 @@ function connect(){
   ws.onclose = () => { $('srv').textContent='Server: mất kết nối'; $('srv').className='chip bad'; setTimeout(connect, 2000); };
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
-    if (m.t==='state'){ fillSettings(m.settings); setTT(m.tiktok); silentUntil=m.silentUntil||0; updateSilentUI(); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
+    if (m.t==='state'){ fillSettings(m.settings); if (m.vieneu) setVN(m.vieneu); setTT(m.tiktok); silentUntil=m.silentUntil||0; updateSilentUI(); people.clear(); for (const v of m.viewers) people.set(v.id,v); renderPeople(); }
     else if (m.t==='settings') fillSettings(m.settings);   // đổi từ nơi khác (vd. Bài tiếp ở chế độ chọn bài)
     else if (m.t==='silent'){ silentUntil=m.silentUntil||0; updateSilentUI(); }
     else if (m.t==='preview_tts') onPreviewTTS(m);
+    else if (m.t==='preview_vieneu') onPreviewVieNeu(m);
+    else if (m.t==='vieneu') setVN(m);
     else if (m.t==='tts_error') showTTSError(m.reason);
     else if (m.t==='logs'){ $('log').textContent=''; m.lines.forEach(logLine); }
     else if (m.t==='log') logLine(m.line);
@@ -392,6 +435,11 @@ function triggerTestName(){
   send('test_name', { name: $('testName').value });
 }
 $('btnTestName').onclick = triggerTestName;
+$('btnTestVieNeu').onclick = () => {
+  $('btnTestVieNeu').disabled = true;
+  $('btnTestVieNeu').textContent = '⏳ Đang tạo...';
+  send('test_vieneu');
+};
 $('testName').onkeydown = e => { if (e.key === 'Enter') triggerTestName(); };
 $('btnSay').onclick = () => send('say', { text: $('sayText').value });
 $('btnChant').onclick = () => send('chant');
