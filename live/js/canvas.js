@@ -1119,8 +1119,8 @@
 
         // 4. Ấn Triện Đỏ "PHƯỚC BÁU" đóng xuống góc phải cuộn thư pháp
         if (sealProgress > 0.01) {
-          const sealScale = (1.65 - 0.65 * easeOutCubic(sealProgress)) * 0.78;
-          const sx = cx + maxHalfW - 50;
+          const sealScale = (1.65 - 0.65 * easeOutCubic(sealProgress)) * 0.72;
+          const sx = cx + maxHalfW - 38;
           const sy = cy + 4;
           ctx.save();
           ctx.translate(sx, sy);
