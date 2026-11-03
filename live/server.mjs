@@ -680,7 +680,8 @@ function onGift(id, name, giftName, count, diamonds, avatar){
   const scrollMerit = tier >= 3;               // quà ≥ 99 xu: chỉ hiện Sổ Vàng; quà nhỏ: chỉ khung #gift
 
   const spokenName = spoken(v.rawName || name || v.name);
-  const line = fill(CONTENT.gift.line, {
+  const giftTpl = scrollMerit ? (CONTENT.gift.bigLine || CONTENT.gift.line) : (CONTENT.gift.smallLine || CONTENT.gift.line);
+  const line = fill(giftTpl, {
     name: spokenName,
     gift: cleanGift,
     count,

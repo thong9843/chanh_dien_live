@@ -1,11 +1,13 @@
-// Giá trị dự phòng khi content.json thiếu hoặc lỗi. Chỉnh nội dung trong content.json, không sửa file này.
+// Giá trị mặc định khi content.json bị thiếu khóa hoặc hỏng cú pháp.
+// Tránh sập server bằng cách luôn có giá trị an toàn dự phòng.
+
 export default {
   "channel": {
     "title": "Chánh Điện Tịnh Tâm",
     "subtitle": "Nam Mô A Di Đà Phật"
   },
   "labels": {
-    "merit": "✦ Công Đức ✦",
+    "merit": "✦ Tri Ân ✦",
     "empty": "Chưa có",
     "chant": "✦ TỤNG KINH ĐỊNH KỲ ✦",
     "watching": "đang|thiền",
@@ -23,12 +25,10 @@ export default {
   "guide": {
     "title": "💬 Bình luận để tương tác",
     "lines": [
-      "🙏 Gõ **Nam mô A Di Đà Phật** để vào thiền",
-      "🕯️ **!thắp nhang** để dâng hương",
-      "🙇 **!quỳ lạy** để lễ Phật",
-      "📜 **!xinquẻ** xin quẻ đầu ngày",
-      "🧑 Gõ **nam · nữ · sư · ni · tiểu · bà** để đổi hình",
-      "🪷 Tặng **Hoa sen** để được xướng tên hồi hướng"
+      "Gõ **Nam mô A Di Đà Phật** để vào thiền",
+      "**!xinquẻ** nhận pháp ngữ hôm nay",
+      "**!thắp nhang** dâng hương",
+      "**!quỳ lạy** lễ Phật"
     ]
   },
   "prayers": [
@@ -47,80 +47,134 @@ export default {
   ],
   "oracles": [
     {
-      "title": "Quẻ Thượng Cát · Tâm Bất Động",
-      "verse": "Tâm tịnh tức cõi Phật tịnh, lòng an vạn sự tự khắc bình yên.",
-      "advice": "Giữ hơi thở chậm rãi, buông nhẹ ưu phiền, phúc lành đang đến gần."
+      "topic": "Từ Bi",
+      "teaching": "Hận thù không làm hận thù nguôi, chỉ có tình thương mới hóa giải được hận thù.",
+      "title": "Pháp ngữ hôm nay · Từ Bi",
+      "verse": "Hận thù không làm hận thù nguôi, chỉ có tình thương mới hóa giải được hận thù.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Đại An · Hoa Sen Nở",
-      "verse": "Gần bùn mà chẳng hôi tanh, giữa đời biến động giữ mình thanh cao.",
-      "advice": "Kiên trì với thiện tâm hiện tại, mọi trắc trở sẽ hóa thành duyên lành."
+      "topic": "Tâm",
+      "teaching": "Tâm dẫn đầu mọi việc; tâm thanh tịnh thì an lạc theo như bóng theo hình.",
+      "title": "Pháp ngữ hôm nay · Tâm",
+      "verse": "Tâm dẫn đầu mọi việc; tâm thanh tịnh thì an lạc theo như bóng theo hình.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Cát Tường · Từ Bi Hỷ Xả",
-      "verse": "Một niệm từ bi khởi, ngàn điều oán kết tan.",
-      "advice": "Mỉm cười tha thứ cho chuyện đã qua, lòng nhẹ tênh đón vận may mới."
+      "topic": "Tự Thắng",
+      "teaching": "Thắng ngàn quân không bằng tự thắng chính mình.",
+      "title": "Pháp ngữ hôm nay · Tự Thắng",
+      "verse": "Thắng ngàn quân không bằng tự thắng chính mình.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Phước Huệ · Tri Túc Thường Lạc",
-      "verse": "Biết đủ là giàu sang bậc nhất, bình an là phước báu vô biên.",
-      "advice": "Trân quý những người thương quanh mình, gia đạo thêm ấm êm hòa thuận."
+      "topic": "Thiện Nhỏ",
+      "teaching": "Chớ xem thường điều thiện nhỏ; giọt nước nhỏ dần cũng làm đầy bình.",
+      "title": "Pháp ngữ hôm nay · Thiện Nhỏ",
+      "verse": "Chớ xem thường điều thiện nhỏ; giọt nước nhỏ dần cũng làm đầy bình.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Thanh Tịnh · Trăng Sáng Giữa Hồ",
-      "verse": "Nước lặng mới soi tỏ ánh trăng, tâm tĩnh mới thấu rõ con đường.",
-      "advice": "Đừng vội vàng quyết định lúc nóng giận; tĩnh lặng một nhịp sẽ thấy lối đi."
+      "topic": "Tỉnh Thức",
+      "teaching": "Một ngày sống tỉnh thức quý hơn trăm năm sống buông lung.",
+      "title": "Pháp ngữ hôm nay · Tỉnh Thức",
+      "verse": "Một ngày sống tỉnh thức quý hơn trăm năm sống buông lung.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Thiện Duyên · Gieo Nhân Lành",
-      "verse": "Gieo một hạt giống thiện, gặt cả mùa bình an.",
-      "advice": "Một lời nói ấm áp hôm nay sẽ kết thành quý nhân giúp đỡ mai sau."
+      "topic": "Hiện Tại",
+      "teaching": "Trở về với hơi thở, an trú trong giây phút hiện tại.",
+      "title": "Pháp ngữ hôm nay · Hiện Tại",
+      "verse": "Trở về với hơi thở, an trú trong giây phút hiện tại.",
+      "advice": ""
     },
     {
-      "title": "Quẻ An Lạc · Quán Chiếu Hiện Tại",
-      "verse": "Quá khứ đã qua, tương lai chưa tới, an trú trọn vẹn từng phút giây này.",
-      "advice": "Thả lỏng đôi vai, hít sâu thanh khí, sức khỏe và tinh thần đều khởi sắc."
+      "topic": "Biết Đủ",
+      "teaching": "Biết đủ là giàu, buông xả là an.",
+      "title": "Pháp ngữ hôm nay · Biết Đủ",
+      "verse": "Biết đủ là giàu, buông xả là an.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Trí Tuệ · Đèn Tâm Chiếu Rọi",
-      "verse": "Ngàn năm bóng tối cũng tan khi một ngọn đèn trí tuệ thắp lên.",
-      "advice": "Học hỏi điều hay, giữ tâm sáng suốt, công việc sắp tới sẽ hanh thông."
+      "topic": "Ái Ngữ",
+      "teaching": "Lời nói dịu dàng là món quà không tốn kém mà quý giá.",
+      "title": "Pháp ngữ hôm nay · Ái Ngữ",
+      "verse": "Lời nói dịu dàng là món quà không tốn kém mà quý giá.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Hiếu Hạnh · cội Nguồn Phước Đức",
-      "verse": "Tâm hiếu là tâm Phật, hạnh hiếu là hạnh Phật.",
-      "advice": "Hãy dành một lời hỏi thăm đấng sinh thành, phước đức gia tiên luôn che chở."
+      "topic": "Hiếu Hạnh",
+      "teaching": "Hiếu kính cha mẹ là ruộng phước lớn nhất đời người.",
+      "title": "Pháp ngữ hôm nay · Hiếu Hạnh",
+      "verse": "Hiếu kính cha mẹ là ruộng phước lớn nhất đời người.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Vô Ưu · Mây Trắng Thong Dong",
-      "verse": "Việc đến thì ứng, việc qua không giữ, tự tại như mây trắng giữa trời.",
-      "advice": "Đừng ôm đồm lo âu chưa tới, cứ làm hết sức với tâm bình thản."
+      "topic": "Nhân Quả",
+      "teaching": "Gieo nhân lành hôm nay, an vui sẽ đến ngày mai.",
+      "title": "Pháp ngữ hôm nay · Nhân Quả",
+      "verse": "Gieo nhân lành hôm nay, an vui sẽ đến ngày mai.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Viên Mãn · Hương Đức Bay Xa",
-      "verse": "Hương các loài hoa không bay ngược gió, hương người đức hạnh tỏa khắp muôn phương.",
-      "advice": "Sống chân thành ngay thẳng, uy tín và tài lộc tự nhiên hội tụ."
+      "topic": "Tự Soi",
+      "teaching": "Thấy được lỗi mình là bước đầu của tu tập.",
+      "title": "Pháp ngữ hôm nay · Tự Soi",
+      "verse": "Thấy được lỗi mình là bước đầu của tu tập.",
+      "advice": ""
     },
     {
-      "title": "Quẻ Tỉnh Thức · Tiếng Chuông Chùa",
-      "verse": "Nghe tiếng chuông phiền não nhẹ, trí huệ lớn, bồ đề sanh.",
-      "advice": "Tạm gác âu lo thường nhật, cho tâm hồn nghỉ ngơi để tái tạo năng lượng mới."
+      "topic": "Vô Thường",
+      "teaching": "Mọi sự đều vô thường; hãy trân quý người bên cạnh khi còn có thể.",
+      "title": "Pháp ngữ hôm nay · Vô Thường",
+      "verse": "Mọi sự đều vô thường; hãy trân quý người bên cạnh khi còn có thể.",
+      "advice": ""
+    },
+    {
+      "topic": "Nhẫn Nhục",
+      "teaching": "Giữ giận trong lòng như cầm than nóng, người bỏng trước là chính mình.",
+      "title": "Pháp ngữ hôm nay · Nhẫn Nhục",
+      "verse": "Giữ giận trong lòng như cầm than nóng, người bỏng trước là chính mình.",
+      "advice": ""
+    },
+    {
+      "topic": "Bình An",
+      "teaching": "Tâm bình thì thế giới bình.",
+      "title": "Pháp ngữ hôm nay · Bình An",
+      "verse": "Tâm bình thì thế giới bình.",
+      "advice": ""
+    },
+    {
+      "topic": "Chuyển Hóa",
+      "teaching": "Nhìn sâu vào khổ đau là bắt đầu chuyển hóa khổ đau.",
+      "title": "Pháp ngữ hôm nay · Chuyển Hóa",
+      "verse": "Nhìn sâu vào khổ đau là bắt đầu chuyển hóa khổ đau.",
+      "advice": ""
+    },
+    {
+      "topic": "Tùy Hỷ",
+      "teaching": "Vui với niềm vui của người khác cũng là một công hạnh.",
+      "title": "Pháp ngữ hôm nay · Tùy Hỷ",
+      "verse": "Vui với niềm vui của người khác cũng là một công hạnh.",
+      "advice": ""
     }
   ],
   "gift": {
-    "line": "Cảm ơn phật tử {name} đã cúng dường {gift}{times}. {prayer}.",
+    "line": "Nam mô A Di Đà Phật. Tùy hỷ Phật tử {name} đã dâng {gift}. Nguyện Phật tử thân tâm an lạc.",
     "defaultPrayer": "Nguyện cầu bình an, phước báu vô lượng",
     "timesSpoken": ", {count} lần",
-    "what": "thành tâm cúng dường {gift}{times} · công đức {total}",
+    "what": "tùy hỷ dâng {gift}{times}",
     "timesShown": " ×{count}",
-    "merged": "Nam mô A Di Đà Phật. Xin tùy hỷ công đức cúng dường của {names} và {more} Phật tử khác. Nguyện cầu bình an, phước báu vô lượng.",
-    "mergedAll": "Nam mô A Di Đà Phật. Xin tùy hỷ công đức cúng dường của {names}. Nguyện cầu bình an, phước báu vô lượng."
+    "merged": "Nam mô A Di Đà Phật. Tùy hỷ Phật tử {names} và {more} Phật tử khác đã dâng quà. Nguyện cầu bình an, phước báu vô lượng.",
+    "mergedAll": "Nam mô A Di Đà Phật. Tùy hỷ Phật tử {names} đã dâng quà. Nguyện cầu bình an, phước báu vô lượng.",
+    "smallLine": "Nam mô A Di Đà Phật. Tùy hỷ Phật tử {name} đã dâng {gift}. Nguyện Phật tử thân tâm an lạc.",
+    "bigLine": "Nam mô A Di Đà Phật. Tùy hỷ tâm thành của Phật tử {name}. Nguyện hồi hướng công đức này đến gia quyến và khắp pháp giới chúng sinh."
   },
   "member": {
     "line": "Hoan hỷ chào đón phật tử {name} bước vào chánh điện tịnh tâm. Nguyện cầu thân tâm thường an lạc."
   },
   "follow": {
-    "line": "Nam mô A Di Đà Phật. Cảm ơn Phật tử {name} đã theo dõi kênh. Nguyện cầu cho Phật tử thân tâm thường an lạc."
+    "line": "Hoan hỷ đón Phật tử {name} về chánh điện."
   },
   "share": {
     "text": "🙏 {name} đã chia sẻ duyên lành",
@@ -132,19 +186,11 @@ export default {
     "text": "♥ {n} trái tim tịnh tâm ♥",
     "showSec": 5
   },
-  "tts": {
-    "minGapMs": 2000
-  },
-  "oracle": {
-    "userCooldownSec": 600,
-    "globalCooldownSec": 20,
-    "tts": "Pháp ngữ gửi Phật tử {name}."
-  },
   "zoom": {
     "enabled": true,
     "minCoins": 99,
     "onFollow": true,
-    "scaleFrom": 1.0,
+    "scaleFrom": 1,
     "scaleTo": 1.6,
     "holdSec": 5,
     "outSec": 1.5,
@@ -163,7 +209,7 @@ export default {
     "cooldownSec": 300,
     "bow": {
       "dropPct": 0.11,
-      "squashPct": 0.10,
+      "squashPct": 0.1,
       "leanPx": 2,
       "downSec": 0.9,
       "holdSec": 0.6,
@@ -182,9 +228,13 @@ export default {
     },
     "stand": {
       "dropPct": 0.09,
-      "squashPct": 0.10,
+      "squashPct": 0.1,
       "waistRatio": 0.46,
-      "headRatio": { "man": 0.17, "woman": 0.17, "granny": 0.24 }
+      "headRatio": {
+        "man": 0.17,
+        "woman": 0.17,
+        "granny": 0.24
+      }
     },
     "kneel": {
       "downSec": 0.4,
@@ -192,7 +242,11 @@ export default {
       "prostrateFadeSec": 0.35,
       "scale": 0.9
     },
-    "prostrateExtraDrop": { "man": 0, "woman": 0.04, "granny": 0.08 }
+    "prostrateExtraDrop": {
+      "man": 0,
+      "woman": 0.04,
+      "granny": 0.08
+    }
   },
   "demo": {
     "names": [
@@ -262,12 +316,55 @@ export default {
       "y": 990
     },
     "teachers": [
-      { "name": "Thầy Minh Đạo", "skin": "monk", "x": 165, "y": 1345, "s": 0.4, "flip": false },
-      { "name": "Thầy Thiện Hạnh", "skin": "monk", "x": 275, "y": 1335, "s": 0.4, "flip": false },
-      { "name": "Sư Trụ Trì", "skin": "monk", "x": 385, "y": 1325, "s": 0.4, "flip": false, "master": true },
-      { "name": "Thầy Tâm Từ", "skin": "monk", "x": 695, "y": 1325, "s": 0.4, "flip": true },
-      { "name": "Thầy Giác Tâm", "skin": "monk", "x": 805, "y": 1335, "s": 0.4, "flip": true },
-      { "name": "Thầy Pháp Duyên", "skin": "monk", "x": 915, "y": 1345, "s": 0.4, "flip": true }
+      {
+        "name": "Thầy Minh Đạo",
+        "skin": "monk",
+        "x": 165,
+        "y": 1345,
+        "s": 0.4,
+        "flip": false
+      },
+      {
+        "name": "Thầy Thiện Hạnh",
+        "skin": "monk",
+        "x": 275,
+        "y": 1335,
+        "s": 0.4,
+        "flip": false
+      },
+      {
+        "name": "Sư Trụ Trì",
+        "skin": "monk",
+        "x": 385,
+        "y": 1325,
+        "s": 0.4,
+        "flip": false,
+        "master": true
+      },
+      {
+        "name": "Thầy Tâm Từ",
+        "skin": "monk",
+        "x": 695,
+        "y": 1325,
+        "s": 0.4,
+        "flip": true
+      },
+      {
+        "name": "Thầy Giác Tâm",
+        "skin": "monk",
+        "x": 805,
+        "y": 1335,
+        "s": 0.4,
+        "flip": true
+      },
+      {
+        "name": "Thầy Pháp Duyên",
+        "skin": "monk",
+        "x": 915,
+        "y": 1345,
+        "s": 0.4,
+        "flip": true
+      }
     ],
     "floor": {
       "yTop": 1430,
@@ -282,36 +379,96 @@ export default {
     },
     "teacherTagGap": 6,
     "buddhaGlow": {
-      "head": { "x": 540, "y": 355, "r": 175, "alpha": 0.38 },
-      "body": { "x": 540, "y": 625, "rx": 195, "ry": 285, "alpha": 0.26 },
+      "head": {
+        "x": 540,
+        "y": 355,
+        "r": 175,
+        "alpha": 0.38
+      },
+      "body": {
+        "x": 540,
+        "y": 625,
+        "rx": 195,
+        "ry": 285,
+        "alpha": 0.26
+      },
       "breathSec": 7,
       "breathAmp": 0.22,
       "nightBoost": 1.35,
-      "vignette": { "alpha": 0.18, "size": 260 }
+      "vignette": {
+        "alpha": 0.18,
+        "size": 260
+      }
     },
     "meritScroll": {
       "top": 1040
     },
     "ui": {
-      "chips": { "top": 240, "left": 24, "right": 1056 },
-      "tips": { "x": 16, "y": 320, "w": 264, "h": 670, "sec": 8, "perPage": 3 },
-      "merit": { "x": 800, "y": 320, "w": 256, "h": 670, "max": 5, "nameMax": 10 },
-      "notice": { "top": 1000, "h": 214, "w": 600 }
+      "chips": {
+        "top": 240,
+        "left": 24,
+        "right": 1056
+      },
+      "tips": {
+        "x": 16,
+        "y": 320,
+        "w": 264,
+        "h": 670,
+        "sec": 8,
+        "perPage": 3
+      },
+      "merit": {
+        "x": 800,
+        "y": 320,
+        "w": 256,
+        "h": 670,
+        "max": 5,
+        "nameMax": 10
+      },
+      "notice": {
+        "top": 1000,
+        "h": 214,
+        "w": 600
+      }
     },
     "safeZones": [
-      { "label": "Thanh trên TikTok", "x": 0, "y": 0, "w": 1080, "h": 230 },
-      { "label": "Cột phải TikTok", "x": 918, "y": 230, "w": 162, "h": 1500 },
-      { "label": "Bình luận + nút (dưới-trái)", "x": 0, "y": 1248, "w": 810, "h": 482 },
-      { "label": "Dải dưới", "x": 0, "y": 1730, "w": 1080, "h": 190 }
+      {
+        "label": "Thanh trên TikTok",
+        "x": 0,
+        "y": 0,
+        "w": 1080,
+        "h": 230
+      },
+      {
+        "label": "Cột phải TikTok",
+        "x": 918,
+        "y": 230,
+        "w": 162,
+        "h": 1500
+      },
+      {
+        "label": "Bình luận + nút (dưới-trái)",
+        "x": 0,
+        "y": 1248,
+        "w": 810,
+        "h": 482
+      },
+      {
+        "label": "Dải dưới",
+        "x": 0,
+        "y": 1730,
+        "w": 1080,
+        "h": 190
+      }
     ]
   },
   "meritScroll": {
-    "title": "✦  SỔ VÀNG CÔNG ĐỨC  ✦",
+    "title": "✦  SỔ VÀNG TRI ÂN  ✦",
     "namePrefix": "Phật tử",
-    "offering": "dâng {gift}{times} · công đức {total}",
+    "offering": "tùy hỷ dâng {gift}",
     "blessing": "Nguyện cầu bình an · Phước báu vô lượng",
-    "sealTop": "PHƯỚC",
-    "sealBottom": "BÁU",
+    "sealTop": "TÙY",
+    "sealBottom": "HỶ",
     "x": 540,
     "halfW": 280,
     "height": 150
@@ -326,5 +483,14 @@ export default {
     "showSec": 7,
     "y": 1222,
     "fontPx": 22
+  },
+  "tts": {
+    "minGapMs": 2000
+  },
+  "oracle": {
+    "title": "Pháp ngữ hôm nay",
+    "userCooldownSec": 600,
+    "globalCooldownSec": 20,
+    "tts": "Pháp ngữ gửi Phật tử {name}."
   }
 };

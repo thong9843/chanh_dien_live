@@ -89,7 +89,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
     <div class="pill" id="ambientPill">☀️ Ban ngày</div>
   </div>
   <div id="tips" class="card ui"><h3 id="tipsTitle"></h3><div id="tipsBody"><div class="pg"></div><div class="pg"></div></div></div>
-  <div id="merit" class="card ui"><h3 id="meritTitle">✦ Công Đức ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
+  <div id="merit" class="card ui"><h3 id="meritTitle">✦ Tri Ân ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
   <!-- Thông báo: một hàng đợi duy nhất (xem noticeEnqueue), mọi thẻ xếp chồng trong cùng một vùng -->
   <div id="noticeBox" class="ui">
     <div id="gift" class="ui"></div>
@@ -300,8 +300,15 @@ function renderMerit(){
   const top = [...visitors.values()].filter(v=>v.coins>0).sort((a,b)=>b.coins-a.coins).slice(0,MERIT_MAX);
   const ol = document.getElementById('meritList'); ol.replaceChildren();
   if (!top.length){ const li=document.createElement('li'); li.className='empty'; li.textContent=L('empty','Chưa có'); ol.append(li); return; }
-  const cut = s => { s = String(s); return s.length > MERIT_NAME_MAX ? s.slice(0, MERIT_NAME_MAX - 1).trimEnd() + '…' : s; };   // mỗi người 2 dòng: tên rút gọn + điểm
-  top.forEach((v,i)=>{ const li=document.createElement('li'); const a=document.createElement('span'); a.className='nm'; a.textContent=`${i+1}. ${cut(v.name)}`; const b=document.createElement('span'); b.className='pt'; b.textContent=`${v.coins} ✧`; li.append(a,b); ol.append(li); });
+  const cut = s => { s = String(s); return s.length > MERIT_NAME_MAX ? s.slice(0, MERIT_NAME_MAX - 1).trimEnd() + '…' : s; };
+  top.forEach((v)=>{
+    const li=document.createElement('li');
+    const a=document.createElement('span');
+    a.className='nm';
+    a.textContent=cut(v.name);
+    li.append(a);
+    ol.append(li);
+  });
 }
 setInterval(()=>{
   const s=Math.floor((Date.now()-startedAt)/1000);
@@ -413,7 +420,7 @@ function showChant(text){
 function enqueueOracle(m){
   const el = $el('oracleCard');
   noticeEnqueue({ type:'oracle', prio:2, dur:Math.max(4, +(m.showSec || 8)) * 1000, maxWait:30000,
-    show(){ $el('oracleTitle').textContent = m.title || 'Quẻ Đại An · Tâm Tịnh'; $el('oracleVerse').textContent = '“' + (m.verse || '') + '”'; el.classList.add('show'); chimeOracle(); },
+    show(){ $el('oracleTitle').textContent = m.title || 'Pháp ngữ hôm nay'; $el('oracleVerse').textContent = '“' + (m.verse || '') + '”'; el.classList.add('show'); chimeOracle(); },
     hide(){ el.classList.remove('show'); } });
 }
 
