@@ -900,16 +900,17 @@ function explainTikTokError(e, step, hasKey){
 }
 /* Tự nối lại: người dùng bấm "Kết nối" thì ttDesired = username và server giữ kết nối đó; mất kết nối hoặc lần nối thất bại (kể cả lần đầu)
    thì thử lại với thời gian chờ tăng dần 5→10→20→40→60 giây (giữ ở 60). Bấm "Ngắt" thì dừng hẳn. ttGen đánh số lần nối để bỏ kết quả của lần đã bị thay thế/ngắt. */
-let ttDesired = null, ttGen = 0, ttAttempt = 0, ttRetryTimer = null;
+let ttDesired = null, ttGen = 0, ttAttempt = 0, ttUnknownAttempt = 0, ttRetryTimer = null;
 const TT_BACKOFF_SEC = [5, 10, 20, 40, 60];
-function scheduleTikTokReconnect(uniqueId, gen, extra = {}){
+function scheduleTikTokReconnect(uniqueId, gen, extra = {}, delaySec = null){
   if (gen !== ttGen || ttDesired !== uniqueId) return;
   clearTimeout(ttRetryTimer);
   ttAttempt++;
-  const sec = TT_BACKOFF_SEC[Math.min(ttAttempt - 1, TT_BACKOFF_SEC.length - 1)];
+  const sec = delaySec != null ? delaySec : TT_BACKOFF_SEC[Math.min(ttAttempt - 1, TT_BACKOFF_SEC.length - 1)];
   tiktokState = { ...extra, status: 'reconnecting', uniqueId, attempt: ttAttempt, retryAt: Date.now() + sec * 1000 };
   broadcast({ t:'tiktok', ...tiktokState });
-  addLog(`🔁 TikTok: nối lại lần ${ttAttempt} sau ${sec} giây`);
+  const retryLabel = extra.unknownAttempt ? ` (lỗi lạ lần ${extra.unknownAttempt}/5)` : '';
+  addLog(`🔁 TikTok: nối lại lần ${ttAttempt}${retryLabel} sau ${sec} giây`);
   ttRetryTimer = setTimeout(() => { ttRetryTimer = null; bg('Nối lại TikTok lỗi', connectTikTok(uniqueId, { auto: true })); }, sec * 1000);
 }
 async function teardownTikTok(){
@@ -918,22 +919,26 @@ async function teardownTikTok(){
   try { c.removeAllListeners?.(); } catch {}
   try { await c.disconnect(); } catch {}
 }
-// Chỉ thử lại khi mất mạng hoặc kênh chưa live (backoff 5→60s). Lỗi khoá/xác thực/hết quota/gói dịch vụ thì DỪNG và báo rõ để chủ kênh sửa,
-// vì thử lại liên tục chỉ đốt thêm lượt và không bao giờ tự hết lỗi. Lỗi lạ không rõ nguyên nhân cũng dừng (an toàn hơn vòng lặp vô tận).
-function isRetryableTikTokError(e){
+// Phân loại lỗi TikTok:
+// - 'fatal': Auth/key/quota/rate-limit error: dừng ngay lập tức, không thử lại
+// - 'network': mất mạng hoặc kênh chưa live: thử lại theo backoff (5→60s)
+// - 'unknown': lỗi lạ khác: thử lại tối đa 5 lần cách nhau 60s; nếu vẫn thất bại thì dừng hẳn
+function categorizeTikTokError(e){
   const name = e?.constructor?.name || e?.name || '', msg = String(e?.message || e);
-  if (name === 'SignatureRateLimitError' || name === 'PremiumFeatureError') return false;
-  if (/rate.?limit|too many|429|quota|premium|402|payment|upgrade|Business plan|401|403|unauthor|forbidden|invalid.*key|api key/i.test(msg)) return false;
-  if (name === 'UserOfflineError' || /isn't online|not online/i.test(msg)) return true;
-  if (/ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|network|socket|fetch failed|getaddrinfo|timed? ?out/i.test(msg)) return true;
-  if (/Failed to retrieve Room ID|Room ID/i.test(msg)) return true;   // kênh chưa live hoặc TikTok chặn tạm thời
-  return false;
+  if (name === 'SignatureRateLimitError' || name === 'PremiumFeatureError') return 'fatal';
+  if (/rate.?limit|too many|\b429\b|quota|premium|\b402\b|payment|upgrade|Business plan|\b401\b|\b403\b|unauthor|forbidden|invalid.*key|api key/i.test(msg)) {
+    return 'fatal';
+  }
+  if (name === 'UserOfflineError' || /isn't online|not online/i.test(msg)) return 'network';
+  if (/ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|network|socket|fetch failed|getaddrinfo|timed? ?out/i.test(msg)) return 'network';
+  if (/Failed to retrieve Room ID|Room ID/i.test(msg)) return 'network';
+  return 'unknown';
 }
 async function connectTikTok(uniqueId, opts = {}){
   uniqueId = String(uniqueId || '').trim().replace(/^.*tiktok\.com\/@?/i, '').replace(/^@/, '').replace(/\/.*$/, '');
   if (!uniqueId) return;
   if (opts.auto){ if (ttDesired !== uniqueId) return; }          // lần tự nối lại: chỉ chạy khi người dùng vẫn muốn kết nối kênh này
-  else { ttDesired = uniqueId; ttAttempt = 0; resetSession(); }  // người dùng bấm Kết nối: phiên mới
+  else { ttDesired = uniqueId; ttAttempt = 0; ttUnknownAttempt = 0; resetSession(); }  // người dùng bấm Kết nối: phiên mới
   clearTimeout(ttRetryTimer); ttRetryTimer = null;
   const gen = ++ttGen;
   await teardownTikTok();
@@ -993,7 +998,8 @@ async function connectTikTok(uniqueId, opts = {}){
     if (gen !== ttGen) return await abandon();
     tiktok = conn;
     ttAttempt = 0;
-    tiktokState = { status: 'connected', uniqueId, error: '', roomId: st?.roomId || roomId || '', key: tiktokState.key };
+    ttUnknownAttempt = 0;
+    tiktokState = { status: 'connected', uniqueId, error: '', roomId: st?.roomId || roomId || '', key: tiktokState.key, stopped: false };
     addLog(`✅ [3/3] Đã kết nối live @${uniqueId}`);
   } catch (e) {
     await abandon();
@@ -1002,14 +1008,27 @@ async function connectTikTok(uniqueId, opts = {}){
     const err = { error: explainTikTokError(e, step, hasKey), step, key: hasKey };
     addLog(`❌ Không kết nối được @${uniqueId} (bước: ${step}): ${err.error}`);
     if (e?.message && err.error !== String(e.message).slice(0, 300)) addLog(`   chi tiết gốc: ${String(e.message).replace(/\s+/g, ' ').slice(0, 200)}`);
-    if (isRetryableTikTokError(e)){
-      tiktokState = { status: 'error', uniqueId, ...err };
-      scheduleTikTokReconnect(uniqueId, gen, err);                  // mất mạng / kênh chưa live (kể cả lần đầu): tự thử lại, tới khi bấm Ngắt
-    } else {
-      ttDesired = null; ttAttempt = 0;                              // lỗi khoá / xác thực / hết quota: dừng hẳn, không tự nối lại
-      tiktokState = { status: 'error', uniqueId, ...err, fatal: true };
-      addLog(`⛔ Đã dừng, không tự nối lại: ${err.error} Sửa xong hãy bấm Kết nối lại.`);
+    const cat = categorizeTikTokError(e);
+    if (cat === 'fatal') {
+      ttDesired = null; ttAttempt = 0; ttUnknownAttempt = 0;
+      tiktokState = { status: 'error', uniqueId, ...err, fatal: true, stopped: true };
+      addLog(`⛔ Lỗi xác thực/quota/rate-limit: dừng ngay, không tự nối lại: ${err.error}`);
       broadcast({ t:'tiktok', ...tiktokState });
+    } else if (cat === 'unknown') {
+      ttUnknownAttempt++;
+      if (ttUnknownAttempt > 5) {
+        ttDesired = null; ttAttempt = 0; ttUnknownAttempt = 0;
+        tiktokState = { status: 'error', uniqueId, ...err, fatal: true, stopped: true };
+        addLog(`⛔ Lỗi lạ đã thử lại 5 lần cách nhau 60s vẫn thất bại. Đã dừng hẳn: ${err.error}`);
+        broadcast({ t:'tiktok', ...tiktokState });
+      } else {
+        tiktokState = { status: 'error', uniqueId, ...err, unknownAttempt: ttUnknownAttempt };
+        scheduleTikTokReconnect(uniqueId, gen, { ...err, unknownAttempt: ttUnknownAttempt }, 60);
+      }
+    } else {
+      // network / offline
+      tiktokState = { status: 'error', uniqueId, ...err };
+      scheduleTikTokReconnect(uniqueId, gen, err);
     }
     return;
   }
@@ -1017,9 +1036,9 @@ async function connectTikTok(uniqueId, opts = {}){
 }
 // Người dùng bấm Ngắt: dừng hẳn, không tự nối lại.
 async function disconnectTikTok(){
-  ttDesired = null; ttGen++; ttAttempt = 0; clearTimeout(ttRetryTimer); ttRetryTimer = null;
+  ttDesired = null; ttGen++; ttAttempt = 0; ttUnknownAttempt = 0; clearTimeout(ttRetryTimer); ttRetryTimer = null;
   await teardownTikTok();
-  tiktokState = { status:'idle', uniqueId:'', error:'' }; broadcast({ t:'tiktok', ...tiktokState });
+  tiktokState = { status:'idle', uniqueId:'', error:'', stopped: false }; broadcast({ t:'tiktok', ...tiktokState });
 }
 
 /* ------------------------------------------------------------- test data */

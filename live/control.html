@@ -42,6 +42,43 @@ button.red{background:var(--red);border-color:#b84a33}
 #people td{padding:5px 8px;border-bottom:1px solid #2e1c10}
 #people td:last-child{text-align:right;color:var(--gold);font-variant-numeric:tabular-nums}
 #log{height:220px;overflow:auto;background:#0b0604;border:1px solid var(--line);border-radius:10px;padding:8px;font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+@keyframes blink-red {
+  0%, 100% {
+    background: #5c0f0f;
+    border-color: #ff4d4f;
+    box-shadow: 0 0 16px rgba(255, 77, 79, 0.75);
+  }
+  50% {
+    background: #2b0808;
+    border-color: #a81c1c;
+    box-shadow: 0 0 4px rgba(180, 30, 30, 0.3);
+  }
+}
+.card-stopped {
+  animation: blink-red 1.2s infinite ease-in-out !important;
+  border: 2px solid #ff4d4f !important;
+}
+#ttStopAlert {
+  background: #4a0d0d;
+  border: 2px solid #ff4d4f;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: blink-red 1.2s infinite ease-in-out;
+}
+#ttStopAlert h3 {
+  margin: 0 0 4px 0;
+  color: #ff7875;
+  font-size: 15px;
+}
+#ttStopAlert p {
+  margin: 0;
+  color: #ffd8d8;
+  font-size: 13px;
+}
 </style>
 </head>
 <body>
@@ -56,8 +93,15 @@ button.red{background:var(--red);border-color:#b84a33}
 </header>
 
 <div class="grid">
-  <section class="card">
+  <section class="card" id="ttCard">
     <h2>1 · Kết nối TikTok LIVE</h2>
+    <div id="ttStopAlert" style="display:none;">
+      <span style="font-size:24px;">🚨</span>
+      <div>
+        <h3>TIKTOK ĐÃ DỪNG KẾT NỐI!</h3>
+        <p id="ttStopAlertMsg">Kết nối TikTok LIVE đã dừng. Vui lòng kiểm tra lại.</p>
+      </div>
+    </div>
     <label for="uid">Username kênh đang live</label>
     <div class="row"><input id="uid" placeholder="@tenkenhcuaban" autocomplete="off"><button class="primary" id="btnConnect">Kết nối</button><button id="btnDisconnect">Ngắt</button></div>
     <p class="hint">Chỉ đọc sự kiện công khai của phòng live (bình luận, quà, tim). Không cần mật khẩu hay cookie TikTok. Phải bật LIVE trước rồi mới kết nối.</p>
@@ -212,6 +256,31 @@ function renderPeople(){
   list.forEach((p,i)=>{ const tr=document.createElement('tr'); const a=document.createElement('td'); a.textContent=`${String(i+1).padStart(2,'0')}  ${p.name}`; const b=document.createElement('td'); b.textContent=p.coins? p.coins+' ✧':''; tr.append(a,b); tb.append(tr); });
   $('cnt').textContent = `${people.size} người`;
 }
+let tingCtx = null;
+function playTingSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!tingCtx) tingCtx = new AudioCtx();
+    if (tingCtx.state === 'suspended') tingCtx.resume();
+    const now = tingCtx.currentTime;
+    const osc = tingCtx.createOscillator();
+    const gain = tingCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1760, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.35);
+    gain.gain.setValueAtTime(0.6, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(gain);
+    gain.connect(tingCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.36);
+  } catch (e) {
+    console.warn('Ting sound error:', e);
+  }
+}
+let hasPlayedStopTing = false;
+
 let ttState = null;
 function setTT(st){
   ttState = st;
@@ -222,6 +291,27 @@ function setTT(st){
   const er=$('ttErr'); const bad = (st.status==='error' || retrying) && st.error;
   er.style.display = bad ? '' : 'none'; er.textContent = bad ? `Lỗi${st.step ? ' ở bước "'+st.step+'"' : ''}: ${st.error}${st.fatal ? ' — Đã dừng, không tự nối lại. Sửa xong hãy bấm Kết nối.' : ''}` : '';
   if (st.key !== undefined) $('ttKey').textContent = st.key ? 'EulerStream: đã có API key (live/.env).' : 'EulerStream: chưa có API key — dùng mức miễn phí không key, dễ hết lượt. Thêm EULER_API_KEY vào live/.env.';
+
+  const isStopped = !!(st.stopped || (st.status === 'error' && st.fatal));
+  const stopAlert = $('ttStopAlert');
+  const ttCard = $('ttCard');
+  if (isStopped) {
+    if (stopAlert) {
+      stopAlert.style.display = 'flex';
+      $('ttStopAlertMsg').textContent = st.error ? (`Lỗi: ${st.error}`) : 'Đã dừng kết nối TikTok LIVE.';
+    }
+    if (ttCard) ttCard.classList.add('card-stopped');
+    if (!hasPlayedStopTing) {
+      playTingSound();
+      hasPlayedStopTing = true;
+    }
+  } else {
+    if (stopAlert) stopAlert.style.display = 'none';
+    if (ttCard) ttCard.classList.remove('card-stopped');
+    if (st.status === 'connecting' || st.status === 'connected' || st.status === 'idle') {
+      hasPlayedStopTing = false;
+    }
+  }
 }
 let previewAudio = null;
 let ttsErrTimer = null;
