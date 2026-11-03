@@ -1230,12 +1230,37 @@
     // Lớp phủ đêm thâm nghiêm viền ngoài (giữ sáng ấm vùng bàn thờ trung tâm). Tĩnh: overlay vẽ sẵn vào lớp nền (opts.shadeBaked).
     drawNightShade(ctx) {
       ctx.save();
-      const nightShade = ctx.createRadialGradient(540, 960, 260, 540, 960, 1120);
-      nightShade.addColorStop(0.0, 'rgba(10, 8, 20, 0.06)');
-      nightShade.addColorStop(0.65, 'rgba(8, 6, 18, 0.28)');
-      nightShade.addColorStop(1.0, 'rgba(5, 4, 14, 0.48)');
+      // 1. Quầng tối toàn cảnh tâm tượng Phật (540, 520) giúp tượng Phật nổi bật và sáng nhất cảnh
+      const nightShade = ctx.createRadialGradient(540, 520, 260, 540, 520, 1100);
+      nightShade.addColorStop(0.0, 'rgba(10, 8, 20, 0.04)');
+      nightShade.addColorStop(0.60, 'rgba(8, 6, 18, 0.26)');
+      nightShade.addColorStop(1.0, 'rgba(5, 4, 14, 0.46)');
       ctx.fillStyle = nightShade;
       ctx.fillRect(0, 0, 1080, 1920);
+
+      // 2. Làm tối hai bên hông ~30% (x: 0..360 và 1080..720)
+      const leftShade = ctx.createLinearGradient(0, 0, 360, 0);
+      leftShade.addColorStop(0.0, 'rgba(4, 3, 10, 0.32)');
+      leftShade.addColorStop(0.6, 'rgba(4, 3, 10, 0.16)');
+      leftShade.addColorStop(1.0, 'rgba(4, 3, 10, 0)');
+      ctx.fillStyle = leftShade;
+      ctx.fillRect(0, 0, 360, 1920);
+
+      const rightShade = ctx.createLinearGradient(1080, 0, 720, 0);
+      rightShade.addColorStop(0.0, 'rgba(4, 3, 10, 0.32)');
+      rightShade.addColorStop(0.6, 'rgba(4, 3, 10, 0.16)');
+      rightShade.addColorStop(1.0, 'rgba(4, 3, 10, 0)');
+      ctx.fillStyle = rightShade;
+      ctx.fillRect(720, 0, 360, 1920);
+
+      // 3. Làm tối mặt sàn chánh điện ~30% (y: 1920..1260)
+      const floorShade = ctx.createLinearGradient(0, 1920, 0, 1260);
+      floorShade.addColorStop(0.0, 'rgba(4, 3, 10, 0.34)');
+      floorShade.addColorStop(0.65, 'rgba(4, 3, 10, 0.18)');
+      floorShade.addColorStop(1.0, 'rgba(4, 3, 10, 0)');
+      ctx.fillStyle = floorShade;
+      ctx.fillRect(0, 1260, 1080, 660);
+
       ctx.restore();
     }
 
