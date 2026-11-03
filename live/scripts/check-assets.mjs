@@ -89,8 +89,22 @@ const files = new Set(fs.readdirSync(DIR));
 console.log('Tên file');
 const need = ['hall.jpg', ...Object.keys(CHARS).map(n => n + '.png'), ...FX.map(n => n + '.png')];
 for (const n of need) files.has(n) ? ok(n) : bad('thiếu ' + n);
-const known = new Set([...need, 'music', 'README.md']);
+const known = new Set([...need, 'music', 'fonts', 'README.md']);
 for (const n of files) if (!known.has(n) && !isPoseFile(n)) warn(n.startsWith('anim_') ? `${n}: sprite cũ, nên xoá (code tự hiện tư thế ngồi)` : `file lạ: ${n}`);
+
+console.log('Phông chữ tự lưu (assets/fonts)');
+{
+  const FD = path.join(DIR, 'fonts');
+  if (!fs.existsSync(path.join(FD, 'fonts.css'))) bad('thiếu fonts/fonts.css');
+  else {
+    const css = fs.readFileSync(path.join(FD, 'fonts.css'), 'utf8');
+    const urls = [...new Set([...css.matchAll(/url\("([^"]+\.woff2)"\)/g)].map(m => m[1]))];
+    let missing = 0; for (const u of urls) if (!fs.existsSync(path.join(FD, u))) { bad('fonts.css trỏ tới file không có: ' + u); missing++; }
+    if (!missing) ok(urls.length + ' file woff2 có đủ');
+    if (/https?:\/\//i.test(css.replace(/\/\*[\s\S]*?\*\//g, ''))) bad('fonts.css không được gọi tài nguyên ngoài');
+  }
+  for (const f of ['OFL-NotoSerif.txt', 'OFL-BeVietnamPro.txt']) fs.existsSync(path.join(FD, f)) ? ok(f) : bad('thiếu giấy phép ' + f);
+}
 
 console.log('PNG nhân vật (cao đúng, rộng hợp lý, có alpha, 4 góc trong suốt)');
 for (const [name, H] of Object.entries(CHARS)){
