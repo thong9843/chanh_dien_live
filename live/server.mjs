@@ -133,7 +133,6 @@ function loadContent(){
       })(),
       maxQueue: Math.round(cNum(ce.maxQueue, 1, 20, dce.maxQueue)),
       cooldownSec: cNum(ce.cooldownSec, 0, 3600, dce.cooldownSec),
-      bannerTop: cNum(ce.bannerTop, 0, 1850, dce.bannerTop),
     },
     plaque: { enabled: typeof o('plaque').enabled === 'boolean' ? o('plaque').enabled : D.plaque.enabled },   // tiêu đề thiền đường trên overlay: mặc định tắt
     layout: (() => {
@@ -151,8 +150,7 @@ function loadContent(){
         teachers: tl.map((t, i) => { const dt = D.teachers[i] || D.teachers[0], tt = (t && typeof t === 'object') ? t : {};
           return { name: cStr(tt.name, dt.name, 30), skin: ['monk','nun','granny','man','woman','child'].includes(tt.skin) ? tt.skin : dt.skin,
                    x: cNum(tt.x, 0, 1080, dt.x), y: cNum(tt.y, 0, 1920, dt.y), s: cNum(tt.s, .05, 5, dt.s), master: !!tt.master, flip: !!tt.flip }; }),
-        toast: { top: cNum(sub('toast').top, 0, 1800, D.toast.top) },
-        gift: { top: cNum(sub('gift').top, 0, 1800, D.gift.top) }, chant: { top: cNum(sub('chant').top, 0, 1800, D.chant.top) },
+        teacherTagGap: cNum(L.teacherTagGap, 0, 60, D.teacherTagGap),   // khoảng cách thẻ tên thầy tới đỉnh đầu
         // Đỉnh Sổ Vàng: không bao giờ cao hơn y 640 (vùng mặt tượng y 250–600 luôn được chừa trống)
         meritScroll: { top: cNum(sub('meritScroll').top, 640, 1700, D.meritScroll.top) },
         ui: (() => { const u = sub('ui'), du = D.ui, sb = k => (u[k] && typeof u[k] === 'object' && !Array.isArray(u[k])) ? u[k] : {};
@@ -163,7 +161,8 @@ function loadContent(){
                            sec: cNum(tp.sec, 2, 60, dtp.sec), perPage: Math.round(cNum(tp.perPage, 1, 6, dtp.perPage)) },
                    merit: { x: cNum(mr.x, 790, 1000, dmr.x), y: cNum(mr.y, 0, 1800, dmr.y), w: cNum(mr.w, 120, 290, dmr.w), h: cNum(mr.h, 100, 1200, dmr.h),
                             max: Math.round(cNum(mr.max, 1, 8, dmr.max)), nameMax: Math.round(cNum(mr.nameMax, 4, 20, dmr.nameMax)) },
-                   bannerLeft: n(u, du, 'bannerLeft', 0, 400), bannerRight: n(u, du, 'bannerRight', 680, 1080), giftMaxW: n(u, du, 'giftMaxW', 300, 900) }; })(),
+                   // vùng thông báo chung (hàng đợi duy nhất): rộng ≤ 600, căn giữa x 540, nằm dưới vùng tượng
+                   notice: (() => { const nt = sb('notice'), dnt = du.notice; return { top: cNum(nt.top, 900, 1500, dnt.top), h: cNum(nt.h, 100, 400, dnt.h), w: cNum(nt.w, 300, 600, dnt.w) }; })() }; })(),
         safeZones: (Array.isArray(L.safeZones) && L.safeZones.length ? L.safeZones.slice(0, 8) : D.safeZones).map((z, i) => {
           const dz = D.safeZones[i] || D.safeZones[0], zz = (z && typeof z === 'object') ? z : {};
           return { label: cStr(zz.label, dz.label, 40), x: cNum(zz.x, 0, 1080, dz.x), y: cNum(zz.y, 0, 1920, dz.y), w: cNum(zz.w, 0, 1080, dz.w), h: cNum(zz.h, 0, 1920, dz.h) }; }),

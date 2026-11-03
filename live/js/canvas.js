@@ -933,6 +933,7 @@
         count: donation.count || 1,
         coins: donation.coins || 1,
         total: donation.total || donation.coins || 1,
+        prayer: String(donation.prayer || '').slice(0, 80),
       });
     }
 
@@ -1060,7 +1061,8 @@
           ctx.restore();
         }
 
-        // 3. Hiệu ứng viết chữ Thư Pháp bằng cọ mực tàu & nhũ vàng (Progressive Brush Reveal)
+        // 3. Hiệu ứng viết chữ Thư Pháp bằng cọ mực tàu & nhũ vàng (Progressive Brush Reveal). Tối đa 3 dòng:
+        //    tên (≤ 18 ký tự), "dâng <quà> · công đức <n>", lời nguyện (chỉ khi ≤ 40 ký tự, 1 dòng, cắt "…" nếu quá bề rộng)
         if (writeProgress > 0.01) {
           const revealW = (halfW * 2 - 48) * easeOutCubic(writeProgress);
           const leftTextEdge = cx - maxHalfW + 24;
@@ -1070,47 +1072,46 @@
           ctx.rect(leftTextEdge, topY + 14, revealW, scrollH - 28);
           ctx.clip();
 
-          // Dòng tiêu đề Sổ Vàng Công Đức
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = '700 24px "Noto Serif", Georgia, serif';
-          ctx.fillStyle = '#8b1e12';
-          ctx.fillText(C.title, cx, topY + 42);
-
-          // Tên Phật tử phong cách thư pháp trang trọng
-          ctx.font = 'italic 700 42px "Noto Serif", Georgia, serif';
+          const nm = this.current.name.length > 18 ? this.current.name.slice(0, 17).trimEnd() + '…' : this.current.name;
+          ctx.font = 'italic 700 38px "Noto Serif", Georgia, serif';
           ctx.fillStyle = '#241006';
-          ctx.fillText(`${C.namePrefix} ${this.current.name}`.trim(), cx, cy - 2);
+          ctx.fillText(`${C.namePrefix} ${nm}`.trim(), cx, cy - 26);
 
-          // Lễ vật & Điểm công đức
           const timesTxt = this.current.count > 1 ? ` ×${this.current.count}` : '';
-          ctx.font = '600 25px "Be Vietnam Pro", system-ui, sans-serif';
+          ctx.font = '600 24px "Be Vietnam Pro", system-ui, sans-serif';
           ctx.fillStyle = '#6b2410';
           ctx.fillText(
             C.offering.replace(/\{(\w+)\}/g, (m, k) => ({ gift: this.current.giftName, times: timesTxt, total: this.current.total })[k] ?? m),
             cx,
-            cy + 44
+            cy + 14
           );
 
-          // Lời chúc hồi hướng ngắn
-          ctx.font = 'italic 20px "Noto Serif", Georgia, serif';
-          ctx.fillStyle = '#5c3d1e';
-          ctx.fillText(C.blessing, cx, botY - 30);
+          let pr = (this.current.prayer || '').trim();
+          if (pr && pr.length <= 40) {
+            ctx.font = 'italic 19px "Noto Serif", Georgia, serif';
+            ctx.fillStyle = '#5c3d1e';
+            pr = '“' + pr + '”';
+            const maxW = maxHalfW * 2 - 190;                      // chừa chỗ cho dấu triện bên phải
+            while (pr.length > 4 && ctx.measureText(pr).width > maxW) pr = pr.slice(0, -2).trimEnd() + '…';
+            ctx.fillText(pr, cx, cy + 46);
+          }
 
           ctx.restore();
 
           // Điểm sáng đầu bút lông đang viết chữ
           if (writeProgress < 0.99) {
             const brushX = clamp(leftTextEdge + revealW, cx - halfW + 16, cx + halfW - 16);
-            const brushY = cy + Math.sin(writeProgress * 22) * 18;
+            const brushY = cy + Math.sin(writeProgress * 22) * 14;
             ctx.save();
             ctx.globalCompositeOperation = 'lighter';
-            const bg = ctx.createRadialGradient(brushX, brushY, 2, brushX, brushY, 26);
+            const bg = ctx.createRadialGradient(brushX, brushY, 2, brushX, brushY, 22);
             bg.addColorStop(0, 'rgba(255, 215, 110, 0.95)');
             bg.addColorStop(1, 'rgba(255, 160, 40, 0)');
             ctx.fillStyle = bg;
             ctx.beginPath();
-            ctx.arc(brushX, brushY, 26, 0, Math.PI * 2);
+            ctx.arc(brushX, brushY, 22, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
           }
@@ -1118,9 +1119,9 @@
 
         // 4. Ấn Triện Đỏ "PHƯỚC BÁU" đóng xuống góc phải cuộn thư pháp
         if (sealProgress > 0.01) {
-          const sealScale = 1.65 - 0.65 * easeOutCubic(sealProgress);
-          const sx = cx + maxHalfW - 82;
-          const sy = cy + 6;
+          const sealScale = (1.65 - 0.65 * easeOutCubic(sealProgress)) * 0.78;
+          const sx = cx + maxHalfW - 50;
+          const sy = cy + 4;
           ctx.save();
           ctx.translate(sx, sy);
           ctx.rotate(-0.08);

@@ -53,54 +53,22 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #merit li .nm{display:block;font-size:26px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #merit li .pt{display:block;font-size:23px;color:var(--gold2);font-variant-numeric:tabular-nums}
 #merit .empty{color:var(--muted);text-align:center;border:0}
-/* chant banner + gift banner */
-#chant{left:162px;right:162px;top:980px;padding:22px 30px;text-align:center;border-radius:24px;border:2px solid var(--gold);
-  background:rgba(40,18,8,.86);opacity:0;transform:translateY(20px);transition:opacity .6s,transform .6s;pointer-events:none}
-#chant.show{opacity:1;transform:none}
-#chant h4{margin:0 0 8px;font-family:var(--display);color:var(--gold2);font-size:30px;letter-spacing:.1em}
-#chant p{margin:0;font-family:var(--display);font-style:italic;font-size:30px;line-height:1.45}
-#toast{left:50%;top:870px;z-index:5;max-width:756px;overflow:hidden;text-overflow:ellipsis;padding:12px 34px;border-radius:40px;border:2px solid var(--gold2);white-space:nowrap;
-  font-family:var(--display);font-size:34px;color:var(--gold2);background:rgba(40,16,6,.9);opacity:0;transform:translate(-50%,10px);transition:opacity .4s,transform .4s;pointer-events:none}
-#toast.show{opacity:1;transform:translate(-50%,0)}
-#ceremonyInvite{left:50%;top:1172px;z-index:5;max-width:756px;overflow:hidden;text-overflow:ellipsis;padding:13px 38px;border-radius:999px;border:2.5px solid var(--gold2);white-space:nowrap;
-  font-family:var(--display);font-weight:700;font-size:33px;color:#fff2cc;
-  background:linear-gradient(180deg,rgba(88,30,10,.94),rgba(38,14,6,.94));
-  box-shadow:0 10px 30px rgba(0,0,0,.6),0 0 28px rgba(255,204,102,.32);
-  opacity:0;transform:translate(-50%,10px);transition:opacity .45s,transform .45s;pointer-events:none}
-#ceremonyInvite.show{opacity:1;transform:translate(-50%,0)}
-#gift{left:220px;width:640px;box-sizing:border-box;top:940px;z-index:5;padding:24px 30px;overflow-wrap:anywhere;text-align:center;border-radius:28px;border:3px solid var(--gold2);
-  background:radial-gradient(ellipse at 50% 0%,rgba(150,40,20,.95),rgba(50,14,6,.95));box-shadow:0 0 60px rgba(255,190,90,.45);
-  opacity:0;transform:scale(.85);transition:opacity .45s,transform .45s cubic-bezier(.2,1.4,.4,1);pointer-events:none}
-#gift.show{opacity:1;transform:none}
-#gift .who{font-family:var(--display);font-weight:700;font-size:44px;line-height:1.2;color:var(--gold2)}
-#gift .what{font-size:30px;margin-top:6px}
-#gift .pray{font-family:var(--display);font-style:italic;font-size:27px;color:var(--fg);margin-top:10px;opacity:.95}
-
-/* Thẻ Thư Pháp "Rút Quẻ Cầu An & Lời Phật Dạy" (3.4 - Hiển thị 8 giây) */
-#oracleCard{
-  left:162px;right:162px;top:860px;z-index:6;padding:26px 34px 28px;text-align:center;
-  border-radius:22px;border:4px solid #8c2015;
-  background:linear-gradient(180deg,#fbf1d8 0%,#efe0ba 52%,#f7ebd0 100%);
-  color:#2b1206;
-  box-shadow:0 18px 55px rgba(0,0,0,.72),0 0 0 3px #e5b553,0 0 42px rgba(255,208,110,.38);
-  opacity:0;transform:translateY(26px) scale(.92);
-  transition:opacity .55s ease,transform .55s cubic-bezier(.2,1.25,.35,1);
-  pointer-events:none;
-}
-#oracleCard.show{opacity:1;transform:translateY(0) scale(1)}
-#oracleCard::before{
-  content:"";position:absolute;inset:8px;border:1.5px solid rgba(140,32,21,.42);border-radius:15px;pointer-events:none;
-}
-#oracleCrest{font-family:var(--display);font-weight:700;font-size:23px;letter-spacing:.14em;color:#8c2015;text-transform:uppercase}
-#oracleFor{font-size:26px;font-weight:600;color:#5c2b12;margin-top:6px}
-#oracleTitle{font-family:var(--display);font-weight:700;font-size:40px;color:#7a180e;margin:10px 0 10px;text-shadow:0 1px 0 rgba(255,255,255,.7)}
-#oracleVerse{font-family:var(--display);font-style:italic;font-weight:700;font-size:32px;line-height:1.42;color:#220e05;margin:0;padding:0 10px}
-#oracleAdvice{font-size:25px;line-height:1.4;color:#523218;margin-top:12px;padding-top:10px;border-top:1px dashed rgba(140,32,21,.35)}
-#oracleStamp{
-  position:absolute;right:26px;bottom:20px;width:58px;height:58px;border:2.5px solid rgba(178,28,18,.78);
-  border-radius:6px;color:rgba(178,28,18,.82);font:700 14px/1.15 var(--display);
-  display:flex;align-items:center;justify-content:center;transform:rotate(-8deg);background:rgba(178,28,18,.06);
-}
+/* Thông báo: MỘT hàng đợi duy nhất, mọi thẻ dùng chung vùng #noticeBox (y 1000–1214, rộng ≤ 600, căn giữa x 540). Không bao giờ hai thẻ cùng lúc. */
+#noticeBox{left:240px;top:1000px;width:600px;height:214px;display:grid;place-items:center;pointer-events:none;z-index:5}
+#noticeBox > div{grid-area:1/1;width:100%;box-sizing:border-box;text-align:center;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s}
+#noticeBox > div.show{opacity:1;transform:none}
+#gift,#toast,#ceremonyInvite{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:999px;padding:14px 30px;font-family:var(--display)}
+#gift{border:2.5px solid var(--gold2);font-weight:700;font-size:31px;color:var(--gold2);background:radial-gradient(ellipse at 50% 0%,rgba(150,40,20,.95),rgba(50,14,6,.95));box-shadow:0 0 40px rgba(255,190,90,.4)}
+#toast{border:2px solid var(--gold2);font-size:30px;color:var(--gold2);background:rgba(40,16,6,.9)}
+#ceremonyInvite{border:2.5px solid var(--gold2);font-weight:700;font-size:30px;color:#fff2cc;background:linear-gradient(180deg,rgba(88,30,10,.94),rgba(38,14,6,.94));box-shadow:0 10px 30px rgba(0,0,0,.6),0 0 28px rgba(255,204,102,.32)}
+#chant{padding:14px 28px;border-radius:24px;border:2px solid var(--gold);background:rgba(40,18,8,.88)}
+#chant h4{margin:0 0 6px;font-family:var(--display);color:var(--gold2);font-size:22px;letter-spacing:.1em;white-space:nowrap}
+#chant p{margin:0;font-family:var(--display);font-style:italic;font-size:26px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* thẻ quẻ: tối đa 3 dòng (tên quẻ 1 dòng + lời quẻ 2 dòng) */
+#oracleCard{padding:14px 30px;border-radius:22px;border:4px solid #8c2015;background:linear-gradient(180deg,#fbf1d8 0%,#efe0ba 52%,#f7ebd0 100%);color:#2b1206;
+  box-shadow:0 18px 55px rgba(0,0,0,.72),0 0 0 3px #e5b553,0 0 42px rgba(255,208,110,.38)}
+#oracleTitle{font-family:var(--display);font-weight:700;font-size:31px;color:#7a180e;margin:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 0 rgba(255,255,255,.7)}
+#oracleVerse{font-family:var(--display);font-style:italic;font-weight:700;font-size:26px;line-height:1.35;color:#220e05;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
 /* lớp phủ vùng an toàn TikTok (bật từ bảng điều khiển, chỉ để canh bố cục) */
 #safe{position:absolute;inset:0;z-index:30;pointer-events:none;display:none}
@@ -108,7 +76,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 /* enable sound (needed once: browsers block autoplay) */
 #unmute{position:absolute;z-index:9;left:50%;top:1540px;transform:translateX(-50%);font:600 36px var(--body);padding:22px 44px;border-radius:24px;border:3px solid var(--gold2);background:var(--red);color:#fff4dc;cursor:pointer}
 #conn{position:absolute;z-index:4;right:16px;bottom:12px;font-size:20px;color:var(--muted);opacity:.6}
-@media (prefers-reduced-motion:reduce){#chant,#gift,#oracleCard{transition:none}}
+@media (prefers-reduced-motion:reduce){#noticeBox > div{transition:none}}
 </style>
 </head>
 <body>
@@ -122,19 +90,13 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   </div>
   <div id="tips" class="card ui"><h3 id="tipsTitle"></h3><div id="tipsBody"><div class="pg"></div><div class="pg"></div></div></div>
   <div id="merit" class="card ui"><h3 id="meritTitle">✦ Công Đức ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
-  <div id="chant" class="ui"><h4 id="chantTitle">✦ TỤNG KINH ĐỊNH KỲ ✦</h4><p id="chantText"></p></div>
-  <div id="toast" class="ui"></div>
-  <div id="ceremonyInvite" class="ui" aria-live="polite"></div>
-  <div id="gift" class="ui"><div class="who" id="giftWho"></div><div class="what" id="giftWhat"></div><div class="pray" id="giftPray"></div></div>
-
-  <!-- Card Thư Pháp Rút Quẻ Cầu An & Lời Phật Dạy (8 giây) -->
-  <div id="oracleCard" class="ui" aria-live="polite">
-    <div id="oracleCrest">☸ Quẻ Cầu An · Lời Phật Dạy ☸</div>
-    <div id="oracleFor"></div>
-    <div id="oracleTitle"></div>
-    <p id="oracleVerse"></p>
-    <div id="oracleAdvice"></div>
-    <div id="oracleStamp">BÌNH<br>AN</div>
+  <!-- Thông báo: một hàng đợi duy nhất (xem noticeEnqueue), mọi thẻ xếp chồng trong cùng một vùng -->
+  <div id="noticeBox" class="ui">
+    <div id="gift" class="ui"></div>
+    <div id="toast" class="ui"></div>
+    <div id="ceremonyInvite" class="ui" aria-live="polite"></div>
+    <div id="chant" class="ui"><h4 id="chantTitle">✦ TỤNG KINH ĐỊNH KỲ ✦</h4><p id="chantText"></p></div>
+    <div id="oracleCard" class="ui" aria-live="polite"><div id="oracleTitle"></div><p id="oracleVerse"></p></div>
   </div>
 
   <div id="safe"></div>
@@ -277,12 +239,8 @@ function applyContent(c){
   if (c.ceremony?.bow) setBowConfig(c.ceremony.bow);
   if (c.ceremony?.stand) setStandConfig(c.ceremony.stand);
   if (c.layout){
-    document.getElementById('gift').style.top = c.layout.gift.top + 'px';
-    document.getElementById('toast').style.top = c.layout.toast.top + 'px';
-    document.getElementById('chant').style.top = c.layout.chant.top + 'px';
-    if (c.ceremony?.bannerTop != null) document.getElementById('ceremonyInvite').style.top = c.ceremony.bannerTop + 'px';
     applyUiLayout(c.layout);
-    FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers; layoutVer++;
+    FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers; TAG_GAP = c.layout.teacherTagGap ?? 22; layoutVer++;
     layout(cap);
   }
   renderMerit();
@@ -298,10 +256,8 @@ function applyUiLayout(Lo){
   const t = $('tips'), tp = u.tips, m = $('merit'), mr = u.merit;
   if (tp){ t.style.left = px(tp.x); t.style.top = px(tp.y); t.style.width = px(tp.w); t.style.height = px(tp.h); }
   if (mr){ m.style.left = px(mr.x); m.style.top = px(mr.y); m.style.width = px(mr.w); m.style.height = px(mr.h); MERIT_MAX = mr.max; MERIT_NAME_MAX = mr.nameMax; }
-  for (const id of ['chant','oracleCard']){ const e = $(id); e.style.left = px(u.bannerLeft); e.style.right = px(1080 - u.bannerRight); }
-  const gw = Math.min(u.giftMaxW, u.bannerRight - u.bannerLeft), g = $('gift');   // khung quà nhỏ: hẹp, căn giữa vùng nhìn thấy
-  g.style.width = px(gw); g.style.left = px((u.bannerLeft + u.bannerRight) / 2 - gw / 2); g.style.right = 'auto';
-  for (const id of ['toast','ceremonyInvite']) $(id).style.maxWidth = px(u.bannerRight - u.bannerLeft);
+  const nt = u.notice;   // vùng thông báo chung: căn giữa x 540
+  if (nt){ const nb = $('noticeBox'); nb.style.width = px(nt.w); nb.style.left = px(540 - nt.w / 2); nb.style.top = px(nt.top); nb.style.height = px(nt.h); }
   const safe = $('safe'); safe.replaceChildren();
   for (const z of (Lo.safeZones || [])){
     const d = document.createElement('div'); d.className = 'z'; d.textContent = z.label;
@@ -353,71 +309,74 @@ setInterval(()=>{
   updateAmbientBadge();
 }, 1000);
 
-let toastHide=null;
-function showToast(text, sec){
-  const el=document.getElementById('toast'); el.textContent=text; el.classList.add('show');
-  clearTimeout(toastHide); toastHide=setTimeout(()=>el.classList.remove('show'), sec*1000);
+/* ======================= hàng đợi thông báo duy nhất =======================
+   Mọi thông báo (Sổ Vàng quà ≥ 99 xu, quà nhỏ, tụng kinh, thẻ quẻ, mời lễ, toast tim/share) đi qua một hàng đợi và dùng chung một vùng:
+   tại mọi thời điểm chỉ MỘT thẻ hiện, thẻ sau chờ thẻ trước tắt xong (+0,45s). Thứ tự: ưu tiên rồi đến lượt đến; thẻ chờ quá lâu thì bỏ. */
+const noticeQ = []; let noticeCur = null, noticeNextAt = 0;
+const NOTICE_MAX = 14;
+function noticeEnqueue(it){
+  it.at = performance.now();
+  if (noticeQ.length >= NOTICE_MAX){                    // đầy: bỏ thẻ ưu tiên thấp nhất (mới nhất); thẻ mới thấp hơn nữa thì bỏ luôn
+    let lo = 99, idx = -1; noticeQ.forEach((q,i)=>{ if (q.prio <= lo){ lo = q.prio; idx = i; } });
+    if (it.prio <= lo) return false;
+    noticeQ.splice(idx, 1);
+  }
+  let at = noticeQ.length; while (at > 0 && noticeQ[at-1].prio < it.prio) at--;
+  noticeQ.splice(at, 0, it);
+  return true;
 }
-let ceremonyInviteHide=null;
-function showCeremonyInvite(text, sec=3){
-  const el=document.getElementById('ceremonyInvite'); el.textContent=text; el.classList.add('show');
-  clearTimeout(ceremonyInviteHide); ceremonyInviteHide=setTimeout(()=>el.classList.remove('show'), sec*1000);
-}
-let giftHide=null;
-function showGift(m){
-  document.getElementById('giftWho').textContent = m.name;
-  document.getElementById('giftWhat').textContent = fillTpl(CONTENT?.gift?.what ?? 'thành tâm cúng dường {gift}{times} · công đức {total}', { gift:m.giftName, total:m.total, count:m.count, times: m.count>1 ? fillTpl(CONTENT?.gift?.timesShown ?? ' ×{count}', {count:m.count}) : '' });
-  document.getElementById('giftPray').textContent = '“' + m.prayer + '”';
-  document.getElementById('chant').classList.remove('show');
-  document.getElementById('oracleCard').classList.remove('show');
-  const el=document.getElementById('gift'); el.classList.add('show'); clearTimeout(giftHide); giftHide=setTimeout(()=>el.classList.remove('show'), m.tier>=3?9000:6500);
-}
-let chantHide=null;
-function showChant(text){
-  if (document.getElementById('gift').classList.contains('show') || meritScroll.current) return;
-  document.getElementById('chantText').textContent=text;
-  const el=document.getElementById('chant'); el.classList.add('show');
-  clearTimeout(chantHide); chantHide=setTimeout(()=>el.classList.remove('show'), 14000);
-}
-
-/* ======================= Rút Quẻ Cầu An & Lời Phật Dạy (8 giây) ======================= */
-const oracleQueue = [];
-let oracleActive = false, oracleTimer = null;
-
-function enqueueOracle(m){
-  if (oracleQueue.length >= 6) return;
-  oracleQueue.push(m);
-  pumpOracle();
-}
-function pumpOracle(){
-  if (oracleActive || !oracleQueue.length) return;
-  // Nếu đang hiện banner quà lớn thì chờ thêm 1.5s cho trang trọng
-  if (document.getElementById('gift').classList.contains('show') || meritScroll.current || meritScroll.queue.length) {
-    setTimeout(pumpOracle, 1500);
+function noticeStep(){
+  const now = performance.now();
+  if (noticeCur){
+    const c = noticeCur;
+    if ((c.isDone && c.isDone(now)) || now >= c.endAt){ c.hide(); noticeCur = null; noticeNextAt = now + 450; }
     return;
   }
-  oracleActive = true;
-  const m = oracleQueue.shift();
-  const durMs = Math.max(4, +(m.showSec || 8)) * 1000;
+  if (now < noticeNextAt) return;
+  while (noticeQ.length){
+    const it = noticeQ.shift();
+    if (now - it.at > it.maxWait) continue;             // chờ quá lâu: bỏ
+    noticeCur = it; it.startAt = now; it.endAt = now + it.dur; it.show();
+    return;
+  }
+}
+setInterval(noticeStep, 100);
+const $el = id => document.getElementById(id);
+const simpleCard = (el, text) => ({ show(){ el.textContent = text; el.classList.add('show'); }, hide(){ el.classList.remove('show'); } });
 
-  document.getElementById('oracleFor').textContent = `Duyên lành gửi Phật tử ${m.name}`;
-  document.getElementById('oracleTitle').textContent = m.title || 'Quẻ Đại An · Tâm Tịnh';
-  document.getElementById('oracleVerse').textContent = '“' + (m.verse || '') + '”';
-  document.getElementById('oracleAdvice').textContent = m.advice || '';
-  document.getElementById('chant').classList.remove('show');
-
-  const card = document.getElementById('oracleCard');
-  card.classList.add('show');
-  chimeOracle();
-
-  clearTimeout(oracleTimer);
-  oracleTimer = setTimeout(() => {
-    card.classList.remove('show');
-    setTimeout(() => {
-      oracleActive = false;
-      pumpOracle();
-    }, 600);
-  }, durMs);
+function showToast(text, sec){ noticeEnqueue({ type:'toast', prio:1, dur:sec*1000, maxWait:10000, ...simpleCard($el('toast'), text) }); }
+function showCeremonyInvite(text, sec=3){ noticeEnqueue({ type:'invite', prio:3, dur:sec*1000, maxWait:6000, ...simpleCard($el('ceremonyInvite'), text) }); }
+// Quà nhỏ (< 99 xu): 1 dòng "<Tên> · <quà> ×<n>", hiện 4s; cùng người + cùng quà thì gộp combo (cộng dồn số lượng, kéo dài thêm)
+function showGift(m){
+  const el = $el('gift'), key = m.name + '|' + m.giftName, n = Math.max(1, +m.count || 1);
+  const cut = s => String(s).length > 16 ? String(s).slice(0, 15).trimEnd() + '…' : String(s);
+  const target = (noticeCur && noticeCur.key === key) ? noticeCur : noticeQ.find(q => q.key === key);
+  if (target){
+    target.count += n; target.render();
+    if (target === noticeCur) target.endAt = Math.min(target.startAt + 12000, performance.now() + 4000);
+    return;
+  }
+  noticeEnqueue({ type:'gift', key, count:n, prio:2, dur:4000, maxWait:20000,
+    render(){ el.textContent = `${cut(m.name)} · ${m.giftName} ×${this.count}`; },
+    show(){ this.render(); el.classList.add('show'); }, hide(){ el.classList.remove('show'); } });
+}
+// Quà ≥ 99 xu: Sổ Vàng vẽ trên canvas; thẻ này giữ chỗ trong hàng đợi tới khi cuộn khép lại
+function showMeritScroll(m){
+  noticeEnqueue({ type:'scroll', prio:3, dur:30000, maxWait:1e12,
+    show(){ this.t0 = performance.now(); meritScroll.enqueue(m); }, hide(){},
+    isDone(now){ return now - this.t0 > 700 && !meritScroll.current && !meritScroll.queue.length; } });
+}
+function showChant(text){
+  if (noticeCur || noticeQ.length) return;               // đang bận thì bỏ lượt chữ (giọng đọc vẫn đọc bình thường)
+  const el = $el('chant');
+  noticeEnqueue({ type:'chant', prio:0, dur:10000, maxWait:1500,
+    show(){ $el('chantText').textContent = text; el.classList.add('show'); }, hide(){ el.classList.remove('show'); } });
+}
+function enqueueOracle(m){
+  const el = $el('oracleCard');
+  noticeEnqueue({ type:'oracle', prio:2, dur:Math.max(4, +(m.showSec || 8)) * 1000, maxWait:30000,
+    show(){ $el('oracleTitle').textContent = m.title || 'Quẻ Đại An · Tâm Tịnh'; $el('oracleVerse').textContent = '“' + (m.verse || '') + '”'; el.classList.add('show'); chimeOracle(); },
+    hide(){ el.classList.remove('show'); } });
 }
 
 /* ======================= audio ======================= */
@@ -508,12 +467,8 @@ function giftFx(v, m){
   if (m.incenseBoost || tier >= 2) {
     incenseFX.triggerSacredOffering(tier);
   }
-  // Quà ≥ 99 xu: chỉ hiện Sổ Vàng Công Đức (không hiện khung #gift); quà nhỏ: chỉ khung #gift
-  if (tier >= 3) {
-    document.getElementById('chant').classList.remove('show');
-    document.getElementById('oracleCard').classList.remove('show');
-    meritScroll.enqueue(m);
-  }
+  // Quà ≥ 99 xu: chỉ hiện Sổ Vàng Công Đức (qua hàng đợi thông báo); quà nhỏ: chỉ thẻ 1 dòng
+  if (tier >= 3) showMeritScroll(m);
 
   const kind = tier>=3?'bell':tier>=2?'lotus':'incense', s=v.scale||.4;
   addFx(kind, v.x, v.y-220*s, tier>=3?3.4:2.4, s*(tier>=3?1.5:1.1));
@@ -604,14 +559,14 @@ function bubble(text,x,y,s){
    Chỉ vẽ lại khi bố cục, chế độ ngày/đêm, ảnh hoặc phông chữ thay đổi. */
 const mkLayer=()=>{ const c=document.createElement('canvas'); c.width=1080; c.height=1920; return c; };
 const staticBg=mkLayer(), staticT1=mkLayer(), staticT2=mkLayer();
-let layoutVer=0, staticKey='', fontsOk=false;
+let layoutVer=0, staticKey='', fontsOk=false, TAG_GAP=22;   // TAG_GAP: khoảng cách thẻ tên thầy tới đỉnh đầu (content.json → layout.teacherTagGap)
 const tagFont = tc => { const fs = Math.max(15, Math.round(30 * tc.s / .4)); return [fs, `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`]; };
 function drawTeachers(from, to, crowded){
   for (let i=from;i<to;i++){
     const tc=TEACHERS[i];
     if (tc.flip){ ctx.save(); ctx.translate(tc.x,0); ctx.scale(-1,1); sprite(A[tc.skin],0,tc.y,tc.s); ctx.restore(); }
     else sprite(A[tc.skin],tc.x,tc.y,tc.s);
-    if (!crowded || tc.master) tag(tc.name, tc.x, tc.y - tc.s*260 - 22, tc.s, 'gold');
+    if (!crowded || tc.master) tag(tc.name, tc.x, tc.y - tc.s*260 - TAG_GAP, tc.s, 'gold');
   }
 }
 function renderStatic(){

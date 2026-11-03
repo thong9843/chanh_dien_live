@@ -153,7 +153,6 @@ export default {
     "tailSec": 0.35,
     "maxQueue": 5,
     "cooldownSec": 300,
-    "bannerTop": 1172,
     "bow": {
       "dropPct": 0.11,
       "squashPct": 0.10,
@@ -273,25 +272,15 @@ export default {
       "y": 1350,
       "scale": 0.4
     },
-    "gift": {
-      "top": 940
-    },
-    "chant": {
-      "top": 980
-    },
-    "toast": {
-      "top": 870
-    },
+    "teacherTagGap": 6,
     "meritScroll": {
-      "top": 1000
+      "top": 1040
     },
     "ui": {
       "chips": { "top": 240, "left": 24, "right": 1056 },
       "tips": { "x": 16, "y": 320, "w": 264, "h": 670, "sec": 8, "perPage": 3 },
       "merit": { "x": 800, "y": 320, "w": 256, "h": 670, "max": 5, "nameMax": 10 },
-      "bannerLeft": 162,
-      "bannerRight": 918,
-      "giftMaxW": 640
+      "notice": { "top": 1000, "h": 214, "w": 600 }
     },
     "safeZones": [
       { "label": "Thanh trên TikTok", "x": 0, "y": 0, "w": 1080, "h": 230 },
@@ -303,13 +292,13 @@ export default {
   "meritScroll": {
     "title": "✦  SỔ VÀNG CÔNG ĐỨC  ✦",
     "namePrefix": "Phật tử",
-    "offering": "Cúng dường {gift}{times}  ·  Công đức {total} ✧",
+    "offering": "dâng {gift}{times} · công đức {total}",
     "blessing": "Nguyện cầu bình an · Phước báu vô lượng",
     "sealTop": "PHƯỚC",
     "sealBottom": "BÁU",
     "x": 540,
-    "halfW": 360,
-    "height": 206
+    "halfW": 280,
+    "height": 150
   },
   "credit": {
     "enabled": true,
