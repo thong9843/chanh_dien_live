@@ -151,6 +151,12 @@ function loadContent(){
           return { name: cStr(tt.name, dt.name, 30), skin: ['monk','nun','granny','man','woman','child'].includes(tt.skin) ? tt.skin : dt.skin,
                    x: cNum(tt.x, 0, 1080, dt.x), y: cNum(tt.y, 0, 1920, dt.y), s: cNum(tt.s, .05, 5, dt.s), master: !!tt.master, flip: !!tt.flip }; }),
         teacherTagGap: cNum(L.teacherTagGap, 0, 60, D.teacherTagGap),   // khoảng cách thẻ tên thầy tới đỉnh đầu
+        buddhaGlow: (() => { const b = sub('buddhaGlow'), db = D.buddhaGlow, bs = k => (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k])) ? b[k] : {};
+          const h = bs('head'), dh = db.head, bd = bs('body'), dbd = db.body, vg = bs('vignette'), dvg = db.vignette;
+          return { head: { x: cNum(h.x, 0, 1080, dh.x), y: cNum(h.y, 0, 1920, dh.y), r: cNum(h.r, 50, 700, dh.r), alpha: cNum(h.alpha, 0, 0.8, dh.alpha) },
+                   body: { x: cNum(bd.x, 0, 1080, dbd.x), y: cNum(bd.y, 0, 1920, dbd.y), rx: cNum(bd.rx, 50, 700, dbd.rx), ry: cNum(bd.ry, 50, 700, dbd.ry), alpha: cNum(bd.alpha, 0, 0.8, dbd.alpha) },
+                   breathSec: cNum(b.breathSec, 6, 8, db.breathSec), breathAmp: cNum(b.breathAmp, 0, 0.6, db.breathAmp), nightBoost: cNum(b.nightBoost, 1, 2.5, db.nightBoost),
+                   vignette: { alpha: cNum(vg.alpha, 0, 0.3, dvg.alpha), size: cNum(vg.size, 40, 600, dvg.size) } }; })(),
         // Đỉnh Sổ Vàng: không bao giờ cao hơn y 640 (vùng mặt tượng y 250–600 luôn được chừa trống)
         meritScroll: { top: cNum(sub('meritScroll').top, 640, 1700, D.meritScroll.top) },
         ui: (() => { const u = sub('ui'), du = D.ui, sb = k => (u[k] && typeof u[k] === 'object' && !Array.isArray(u[k])) ? u[k] : {};

@@ -272,6 +272,14 @@
       "scale": 0.4
     },
     "teacherTagGap": 6,
+    "buddhaGlow": {
+      "head": { "x": 540, "y": 350, "r": 330, "alpha": 0.34 },
+      "body": { "x": 540, "y": 640, "rx": 330, "ry": 330, "alpha": 0.2 },
+      "breathSec": 7,
+      "breathAmp": 0.25,
+      "nightBoost": 1.4,
+      "vignette": { "alpha": 0.18, "size": 260 }
+    },
     "meritScroll": {
       "top": 1040
     },
