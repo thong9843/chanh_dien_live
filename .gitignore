@@ -7,3 +7,9 @@ live/tts/
 Thumbs.db
 .venv/
 tts_sidecar/.venv/
+*.onnx
+*.wav
+*.bin
+*.pt
+*.pth
+*.safetensors
