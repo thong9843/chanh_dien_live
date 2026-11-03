@@ -43,6 +43,29 @@
     return -(Math.cos(Math.PI * t) - 1) / 2;
   }
 
+  /* -------------------------------------------------------------------------
+   * Sprite vẽ sẵn: thay gradient mỗi hạt / shadowBlur mỗi khung bằng ảnh dựng một lần rồi drawImage.
+   * ------------------------------------------------------------------------- */
+  function makeCanvas(w, h) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.ceil(w));
+    c.height = Math.max(1, Math.ceil(h));
+    return c;
+  }
+
+  // Bộ nhớ đệm LRU nhỏ cho sprite phụ thuộc kích thước (đã làm tròn)
+  class SpriteCache {
+    constructor(max) { this.max = max; this.map = new Map(); }
+    get(key, build) {
+      let v = this.map.get(key);
+      if (v) { this.map.delete(key); this.map.set(key, v); return v; }
+      v = build();
+      this.map.set(key, v);
+      if (this.map.size > this.max) this.map.delete(this.map.keys().next().value);
+      return v;
+    }
+  }
+
   // Perlin-style smooth 2D Value Noise cho khói trầm uốn lượn tự nhiên
   const PERM = new Uint8Array(512);
   (function initNoise() {
@@ -678,11 +701,33 @@
    * ========================================================================= */
 
   const SMOKE_TOP_Y = 880; // khói nhang tan hết trước toạ độ y này
+  const SMOKE_MAX = 90;    // trần số hạt khói
+  const EMBER_MAX = 160;   // trần số tàn lửa
+
+  // Sprite glow khói (thường + vàng): tâm đục 1, mờ dần ra rìa; độ đục từng hạt đặt bằng globalAlpha
+  let smokeSprites = null;
+  function getSmokeSprites() {
+    if (smokeSprites) return smokeSprites;
+    const build = (c0, c1) => {
+      const S = 128, c = makeCanvas(S, S), x = c.getContext('2d');
+      const g = x.createRadialGradient(S / 2, S / 2, S / 2 * 0.08, S / 2, S / 2, S / 2);
+      g.addColorStop(0, c0); g.addColorStop(0.55, c1); g.addColorStop(1, 'rgba(220, 212, 200, 0)');
+      x.fillStyle = g; x.fillRect(0, 0, S, S);
+      return c;
+    };
+    smokeSprites = {
+      normal: build('rgba(244, 235, 218, 1)', 'rgba(225, 216, 204, 0.48)'),
+      golden: build('rgba(255, 232, 188, 1)', 'rgba(238, 224, 200, 0.52)'),
+    };
+    return smokeSprites;
+  }
 
   class IncenseSmokeSystem {
     constructor() {
       this.particles = [];
       this.embers = [];
+      this.freeParticles = []; // object pool: hạt hết hạn được tái sử dụng, không tạo object mới mỗi lần
+      this.freeEmbers = [];
       this.boostUntil = 0;
       this.boostPeak = 0.85;
       this.boostIntensity = 0;
@@ -697,16 +742,17 @@
       this.boostPeak = Math.max(this.boostPeak, intensity);
       this.boostIntensity = Math.max(this.boostIntensity, intensity * 0.65);
 
-      for (let i = 0; i < 7 && this.embers.length < 160; i++) {
-        this.embers.push({
-          ox: (Math.random() - 0.5) * 44,
-          oy: (Math.random() - 0.5) * 10,
-          vx: (Math.random() - 0.5) * 26,
-          vy: -(38 + Math.random() * 68),
-          age: 0,
-          life: 1.1 + Math.random() * 1.4,
-          r: 1.8 + Math.random() * 2.5,
-        });
+      for (let i = 0; i < 7 && this.embers.length < EMBER_MAX; i++) {
+        const e = this.freeEmbers.pop() || {};
+        e.ox = (Math.random() - 0.5) * 44;
+        e.oy = (Math.random() - 0.5) * 10;
+        e.vx = (Math.random() - 0.5) * 26;
+        e.vy = -(38 + Math.random() * 68);
+        e.age = 0;
+        e.life = 1.1 + Math.random() * 1.4;
+        e.r = 1.8 + Math.random() * 2.5;
+        e.ph = Math.random() * 6.283;
+        this.embers.push(e);
       }
     }
 
@@ -727,19 +773,19 @@
       this.spawnAcc += dt * rate;
       while (this.spawnAcc >= 1) {
         this.spawnAcc -= 1;
-        if (this.particles.length < 90) {
+        if (this.particles.length < SMOKE_MAX) {
           const stickIdx = (Math.floor(Math.random() * 3) - 1); // 3 nén hương tại lư hương
-          this.particles.push({
-            x: burnerX + stickIdx * (8 + boost * 4) + (Math.random() - 0.5) * 8,
-            y: burnerY - 6,
-            vy: -(36 + Math.random() * 26 + boost * 24),
-            age: 0,
-            life: 4.6 + Math.random() * 2.8 + boost * 1.6,
-            r0: 3 + Math.random() * 3,
-            r1: 14 + Math.random() * 12 + boost * 4, // khói mảnh
-            seed: Math.random() * 100,
-            golden: boost > 0.25 && Math.random() < 0.45,
-          });
+          const p = this.freeParticles.pop() || {};
+          p.x = burnerX + stickIdx * (8 + boost * 4) + (Math.random() - 0.5) * 8;
+          p.y = burnerY - 6;
+          p.vy = -(36 + Math.random() * 26 + boost * 24);
+          p.age = 0;
+          p.life = 4.6 + Math.random() * 2.8 + boost * 1.6;
+          p.r0 = 3 + Math.random() * 3;
+          p.r1 = 14 + Math.random() * 12 + boost * 4; // khói mảnh
+          p.seed = Math.random() * 100;
+          p.golden = boost > 0.25 && Math.random() < 0.45;
+          this.particles.push(p);
         }
       }
 
@@ -748,16 +794,17 @@
         this.emberAcc += dt * (8 * boost);
         while (this.emberAcc >= 1) {
           this.emberAcc -= 1;
-          if (this.embers.length >= 160) continue;
-          this.embers.push({
-            ox: (Math.random() - 0.5) * 30,
-            oy: -4,
-            vx: (Math.random() - 0.5) * 20,
-            vy: -(28 + Math.random() * 48),
-            age: 0,
-            life: 0.9 + Math.random() * 1.1,
-            r: 1.5 + Math.random() * 2.0,
-          });
+          if (this.embers.length >= EMBER_MAX) continue;
+          const e = this.freeEmbers.pop() || {};
+          e.ox = (Math.random() - 0.5) * 30;
+          e.oy = -4;
+          e.vx = (Math.random() - 0.5) * 20;
+          e.vy = -(28 + Math.random() * 48);
+          e.age = 0;
+          e.life = 0.9 + Math.random() * 1.1;
+          e.r = 1.5 + Math.random() * 2.0;
+          e.ph = Math.random() * 6.283;
+          this.embers.push(e);
         }
       }
 
@@ -786,15 +833,14 @@
       }
       ctx.restore();
 
-      // 2. Vẽ các dải hạt khói trầm bay lên theo Perlin Noise + Sine Wave drift
-      for (let i = this.particles.length - 1; i >= 0; i--) {
+      // 2. Vẽ các dải hạt khói trầm bay lên theo Perlin Noise + Sine Wave drift (1 sprite glow dựng sẵn, không tạo gradient mỗi hạt)
+      const sprites = getSmokeSprites();
+      let w = 0;
+      for (let i = 0; i < this.particles.length; i++) {
         const p = this.particles[i];
         p.age += dt;
         const u = p.age / p.life;
-        if (u >= 1) {
-          this.particles.splice(i, 1);
-          continue;
-        }
+        if (u >= 1) { this.freeParticles.push(p); continue; }
 
         // Kết hợp Perlin Noise 2D và Sine Wave tạo đường cong khói trầm mềm mại tự nhiên
         const nVal = perlin2D(p.seed + p.y * 0.0085, t * 0.42 + p.seed * 0.3);
@@ -808,36 +854,25 @@
         const env = u < 0.16 ? (u / 0.16) : Math.pow(1 - (u - 0.16) / 0.84, 1.45);
         // Khói tan hết trước SMOKE_TOP_Y: mờ dần trong 70px cuối rồi xoá hạt
         const heightFade = clamp((p.y - SMOKE_TOP_Y) / 70, 0, 1);
-        if (heightFade <= 0) { this.particles.splice(i, 1); continue; }
+        if (heightFade <= 0) { this.freeParticles.push(p); continue; }
         const alpha = Math.min(0.35, env * (0.17 + boost * 0.16)) * heightFade; // độ đục tối đa 0.35
 
-        const grad = ctx.createRadialGradient(p.x, p.y, radius * 0.08, p.x, p.y, radius);
-        if (p.golden && u < 0.45) {
-          grad.addColorStop(0, `rgba(255, 232, 188, ${alpha.toFixed(3)})`);
-          grad.addColorStop(0.55, `rgba(238, 224, 200, ${(alpha * 0.52).toFixed(3)})`);
-        } else {
-          grad.addColorStop(0, `rgba(244, 235, 218, ${alpha.toFixed(3)})`);
-          grad.addColorStop(0.55, `rgba(225, 216, 204, ${(alpha * 0.48).toFixed(3)})`);
-        }
-        grad.addColorStop(1, 'rgba(220, 212, 200, 0)');
-
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.globalAlpha = alpha;
+        ctx.drawImage((p.golden && u < 0.45) ? sprites.golden : sprites.normal, p.x - radius, p.y - radius, radius * 2, radius * 2);
+        this.particles[w++] = p;
       }
+      this.particles.length = w;
+      ctx.globalAlpha = 1;
 
       // 3. Vẽ các hạt tàn lửa hương vàng cam bay lên
       ctx.globalCompositeOperation = 'lighter';
-      for (let i = this.embers.length - 1; i >= 0; i--) {
+      let we = 0;
+      for (let i = 0; i < this.embers.length; i++) {
         const e = this.embers[i];
         e.age += dt;
         const u = e.age / e.life;
-        if (u >= 1) {
-          this.embers.splice(i, 1);
-          continue;
-        }
-        e.ox += (e.vx + Math.sin(t * 9 + i) * 14) * dt;
+        if (u >= 1) { this.freeEmbers.push(e); continue; }
+        e.ox += (e.vx + Math.sin(t * 9 + e.ph) * 14) * dt;
         e.oy += e.vy * dt;
         const ex = burnerX + e.ox;
         const ey = burnerY + e.oy;
@@ -845,7 +880,9 @@
         ctx.beginPath();
         ctx.arc(ex, ey, e.r * (1 - u * 0.5), 0, Math.PI * 2);
         ctx.fill();
+        this.embers[we++] = e;
       }
+      this.embers.length = we;
 
       ctx.restore();
     }
@@ -874,6 +911,33 @@
         coins: donation.coins || 1,
         total: donation.total || donation.coins || 1,
       });
+    }
+
+    _shadowSprite(maxHalfW, scrollH) {
+      const key = maxHalfW + '|' + scrollH;
+      if (this._shadowKey !== key) {
+        const PAD = 64, w = maxHalfW * 2 + PAD * 2, h = scrollH - 12 + PAD * 2 + 14;
+        const c = makeCanvas(w, h), x = c.getContext('2d');
+        x.shadowColor = 'rgba(0, 0, 0, 0.68)';
+        x.shadowBlur = 32;
+        x.shadowOffsetY = 14;
+        x.fillStyle = 'rgba(30, 12, 4, 0.35)';
+        x.fillRect(PAD, PAD, maxHalfW * 2, scrollH - 12);
+        this._shadowKey = key; this._shadowImg = c; this._shadowPad = PAD;
+      }
+      return this._shadowImg;
+    }
+
+    _drawShadow(ctx, cx, topY, halfW, maxHalfW, scrollH) {
+      const img = this._shadowSprite(maxHalfW, scrollH), PAD = this._shadowPad, W = img.width, H = img.height;
+      const x0 = cx - halfW - PAD, y0 = topY + 6 - PAD, dstW = halfW * 2 + PAD * 2, cap = PAD + 48;
+      if (dstW >= cap * 2 && W > cap * 2) {
+        ctx.drawImage(img, 0, 0, cap, H, x0, y0, cap, H);
+        ctx.drawImage(img, cap, 0, W - cap * 2, H, x0 + cap, y0, dstW - cap * 2, H);
+        ctx.drawImage(img, W - cap, 0, cap, H, x0 + dstW - cap, y0, cap, H);
+      } else {
+        ctx.drawImage(img, 0, 0, W, H, x0, y0, dstW, H);
+      }
     }
 
     updateAndDraw(ctx, dt, t, lotusImg) {
@@ -922,14 +986,8 @@
       ctx.save();
       ctx.globalAlpha = alpha;
 
-      // 1. Bóng đổ 2.5D & Hào quang vàng sau bức trướng lụa
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.68)';
-      ctx.shadowBlur = 32;
-      ctx.shadowOffsetY = 14;
-      ctx.fillStyle = 'rgba(30, 12, 4, 0.35)';
-      ctx.fillRect(cx - halfW, topY + 6, halfW * 2, scrollH - 12);
-      ctx.restore();
+      // 1. Bóng đổ 2.5D sau bức trướng lụa: sprite vẽ sẵn (shadowBlur chỉ chạy một lần lúc dựng), cắt 3 phần theo chiều ngang khi cuộn đang mở
+      this._drawShadow(ctx, cx, topY, halfW, maxHalfW, scrollH);
 
       // 2. Thân lụa gấm vàng (chỉ vẽ khi đã hé mở)
       if (halfW > 20) {
@@ -1145,7 +1203,19 @@
       return hour >= 6 && hour <= 17;
     }
 
-    drawBackgroundLighting(ctx, dt, t, mode = 'auto') {
+    // Lớp phủ đêm thâm nghiêm viền ngoài (giữ sáng ấm vùng bàn thờ trung tâm). Tĩnh: overlay vẽ sẵn vào lớp nền (opts.shadeBaked).
+    drawNightShade(ctx) {
+      ctx.save();
+      const nightShade = ctx.createRadialGradient(540, 960, 260, 540, 960, 1120);
+      nightShade.addColorStop(0.0, 'rgba(10, 8, 20, 0.06)');
+      nightShade.addColorStop(0.65, 'rgba(8, 6, 18, 0.28)');
+      nightShade.addColorStop(1.0, 'rgba(5, 4, 14, 0.48)');
+      ctx.fillStyle = nightShade;
+      ctx.fillRect(0, 0, 1080, 1920);
+      ctx.restore();
+    }
+
+    drawBackgroundLighting(ctx, dt, t, mode = 'auto', opts = {}) {
       const isDay = this.isDaytime(mode);
 
       if (isDay) {
@@ -1195,15 +1265,7 @@
         ctx.restore();
       } else {
         // --- BAN ĐÊM (18:00 - 05:59): Hạ tông tĩnh mịch + Nến lung linh & Đèn dầu ấm áp ---
-        ctx.save();
-        // Lớp phủ đêm thâm nghiêm viền ngoài (giữ sáng ấm vùng bàn thờ trung tâm)
-        const nightShade = ctx.createRadialGradient(540, 960, 260, 540, 960, 1120);
-        nightShade.addColorStop(0.0, 'rgba(10, 8, 20, 0.06)');
-        nightShade.addColorStop(0.65, 'rgba(8, 6, 18, 0.28)');
-        nightShade.addColorStop(1.0, 'rgba(5, 4, 14, 0.48)');
-        ctx.fillStyle = nightShade;
-        ctx.fillRect(0, 0, 1080, 1920);
-        ctx.restore();
+        if (!opts.shadeBaked) this.drawNightShade(ctx);
 
         // Hiệu ứng ánh đèn dầu ấm áp & nến lung linh trên bàn thờ
         ctx.save();
@@ -1365,6 +1427,50 @@
       return this.active && this.highlightAlpha > 0.02 && v && v.id === this.targetId && !v.inCeremony;
     }
 
+    _ringSprite(rOuter) {
+      this._ringCache ||= new SpriteCache(24);
+      return this._ringCache.get(rOuter, () => {
+        const PADR = 40, W = (rOuter + PADR) * 2, H = (rOuter * 0.42 + PADR) * 2;
+        const c = makeCanvas(W, H), x = c.getContext('2d');
+        x.globalCompositeOperation = 'lighter';           // giống cách vẽ gốc: cộng sáng
+        x.translate(c.width / 2, c.height / 2);
+        x.scale(1, 0.42);
+        x.shadowColor = '#ffd875';
+        x.shadowBlur = 18;
+        x.strokeStyle = '#fff2be';
+        x.lineWidth = 3.2;
+        x.beginPath();
+        x.arc(0, 0, rOuter * 132 / 152, 0, Math.PI * 2);
+        x.stroke();
+        x.strokeStyle = 'rgba(226, 176, 79, 0.85)';
+        x.lineWidth = 1.8;
+        x.beginPath();
+        x.arc(0, 0, rOuter, 0, Math.PI * 2);
+        x.stroke();
+        return c;
+      });
+    }
+
+    // Quầng sáng quanh thẻ tên zoom: chỉ phần bóng (dựng bằng shadowBlur một lần, cache theo kích thước làm tròn + các mức nhấp nháy)
+    _plateGlow(w, h, blur) {
+      this._glowCache ||= new SpriteCache(40);
+      const wq = Math.max(8, Math.round(w / 6) * 6), bq = Math.max(6, Math.round(blur / 2) * 2), hq = Math.round(h);
+      const PAD = 56;
+      const img = this._glowCache.get(wq + '|' + hq + '|' + bq, () => {
+        const OFF = wq + PAD * 2 + 80;
+        const c = makeCanvas(wq + PAD * 2, hq + PAD * 2), x = c.getContext('2d');
+        x.shadowColor = 'rgba(255, 218, 120, 0.95)';
+        x.shadowBlur = bq;
+        x.shadowOffsetX = OFF;                              // vẽ hình ngoài khung, chỉ giữ lại bóng
+        x.fillStyle = 'rgba(0, 0, 0, 0.96)';
+        x.beginPath();
+        if (x.roundRect) x.roundRect(PAD - OFF, PAD, wq, hq, hq / 2); else x.rect(PAD - OFF, PAD, wq, hq);
+        x.fill();
+        return c;
+      });
+      return { img, pad: PAD, wq, hq };
+    }
+
     drawCharacterAuraRing(ctx, v, t) {
       if (!this.isHighlighting(v)) return;
       const a = this.highlightAlpha;
@@ -1384,23 +1490,10 @@
       ctx.arc(v.x, v.y - 115 * ws, 235 * ws * pulse, 0, Math.PI * 2);
       ctx.fill();
 
-      // Vòng viền sáng hoàng kim dưới chân bồ đoàn
+      // Vòng viền sáng hoàng kim dưới chân bồ đoàn: sprite vẽ sẵn theo bán kính (làm tròn 3px), không shadowBlur mỗi khung
       ctx.globalAlpha = 0.92 * a;
-      ctx.translate(v.x, v.y - 10 * ws);
-      ctx.scale(1, 0.42);
-      ctx.shadowColor = '#ffd875';
-      ctx.shadowBlur = 18;
-      ctx.strokeStyle = '#fff2be';
-      ctx.lineWidth = 3.2;
-      ctx.beginPath();
-      ctx.arc(0, 0, 132 * ws * pulse, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.strokeStyle = 'rgba(226, 176, 79, 0.85)';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.arc(0, 0, 152 * ws * pulse, 0, Math.PI * 2);
-      ctx.stroke();
+      const ring = this._ringSprite(Math.max(6, Math.round(152 * ws * pulse / 3) * 3));
+      ctx.drawImage(ring, v.x - ring.width / 2, v.y - 10 * ws - ring.height / 2);
       ctx.restore();
     }
 
@@ -1423,9 +1516,9 @@
       const y = v.y - topY - 24 * ws / 0.4 - h * 0.25;
       const pulseGlow = 16 + 6 * Math.sin(t * 4.5);
 
-      // Nền sơn mài trầm ấm + viền sáng kép rực rỡ
-      ctx.shadowColor = 'rgba(255, 218, 120, 0.95)';
-      ctx.shadowBlur = pulseGlow;
+      // Nền sơn mài trầm ấm + viền sáng kép rực rỡ (quầng sáng là sprite vẽ sẵn)
+      const glow = this._plateGlow(w, h, pulseGlow);
+      ctx.drawImage(glow.img, x - glow.wq / 2 - glow.pad, y - glow.hq / 2 - glow.pad);
       const bg = ctx.createLinearGradient(x, y - h / 2, x, y + h / 2);
       bg.addColorStop(0, 'rgba(92, 32, 12, 0.96)');
       bg.addColorStop(1, 'rgba(38, 14, 6, 0.96)');
@@ -1439,7 +1532,6 @@
       ctx.strokeStyle = '#fff0b5';
       ctx.stroke();
 
-      ctx.shadowBlur = 0;
       ctx.lineWidth = 1.4;
       ctx.strokeStyle = 'rgba(226, 176, 79, 0.9)';
       ctx.beginPath();
