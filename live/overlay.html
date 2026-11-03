@@ -39,12 +39,12 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 /* side cards */
 .card{background:var(--panel);border:2px solid var(--line);border-radius:22px;padding:18px 22px;font-size:24px;line-height:1.4;backdrop-filter:blur(4px)}
 /* cột trái: gợi ý bình luận (xoay vòng); cột phải: Công Đức. Dài và hẹp, nằm ngoài vùng tượng (x 308–788) */
-#tips{left:16px;top:320px;width:264px;height:670px;box-sizing:border-box;padding:16px 18px;display:flex;flex-direction:column;text-align:left}
-#tips h3{margin:0 0 10px;font-family:var(--display);font-size:25px;line-height:1.25;color:var(--gold2);text-align:center}
-#tipsBody{position:relative;flex:1}
-#tipsBody .pg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-evenly;opacity:0;transition:opacity .5s}
-#tipsBody .pg.show{opacity:1}
-#tipsBody .pg div{font-size:25px;line-height:1.35}
+#tips{left:16px;top:320px;width:264px;height:auto;box-sizing:border-box;padding:16px 18px;display:flex;flex-direction:column;text-align:left}
+#tips h3{margin:0 0 14px;font-family:var(--display);font-size:25px;line-height:1.25;color:var(--gold2);text-align:center}
+#tipsBody{display:grid}
+#tipsBody .pg{grid-area:1/1;display:flex;flex-direction:column;gap:12px;opacity:0;transition:opacity .5s;pointer-events:none}
+#tipsBody .pg.show{opacity:1;pointer-events:auto}
+#tipsBody .pg div{font-size:24px;line-height:1.35}
 #tipsBody b{color:var(--gold2)}
 #merit{left:800px;top:320px;width:256px;height:auto;box-sizing:border-box;padding:16px 20px;text-align:center}
 #merit h3{margin:0 0 10px;font-family:var(--display);font-size:25px;color:var(--gold2);letter-spacing:.02em;white-space:nowrap}
@@ -254,7 +254,7 @@ function applyUiLayout(Lo){
   $('chipCount').style.left = px(ch.left); $('chipCount').style.top = px(ch.top);
   $('chipsRight').style.right = px(1080 - ch.right); $('chipsRight').style.top = px(ch.top);
   const t = $('tips'), tp = u.tips, m = $('merit'), mr = u.merit;
-  if (tp){ t.style.left = px(tp.x); t.style.top = px(tp.y); t.style.width = px(tp.w); t.style.height = px(tp.h); }
+  if (tp){ t.style.left = px(tp.x); t.style.top = px(tp.y); t.style.width = px(tp.w); t.style.height = 'auto'; if (tp.h) t.style.maxHeight = px(tp.h); }
   if (mr){ m.style.left = px(mr.x); m.style.top = px(mr.y); m.style.width = px(mr.w); m.style.height = 'auto'; if (mr.h) m.style.maxHeight = px(mr.h); MERIT_MAX = mr.max; MERIT_NAME_MAX = mr.nameMax; }
   const nt = u.notice;   // vùng thông báo chung: căn giữa x 540
   if (nt){ const nb = $('noticeBox'); nb.style.width = px(nt.w); nb.style.left = px(540 - nt.w / 2); nb.style.top = px(nt.top); nb.style.height = px(nt.h); }
