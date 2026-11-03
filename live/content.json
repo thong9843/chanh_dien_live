@@ -14,7 +14,12 @@
     "anonymous": "ẩn danh",
     "defaultGift": "Hoa Sen",
     "ambientDay": "☀️ Nắng Chánh Điện",
-    "ambientNight": "🕯️ Đêm Tĩnh Tâm"
+    "ambientNight": "🕯️ Đêm Tĩnh Tâm",
+    "ambientDawn": "🌅 Bình Minh",
+    "more": "+{n} người đang thiền",
+    "ambientRam": "🌕 Đêm Rằm",
+    "ambientPhatdan": "🪷 Phật Đản",
+    "ambientVulan": "🏮 Vu Lan"
   },
   "plaque": {
     "enabled": true,
@@ -204,7 +209,7 @@
     "gapSec": 0.8,
     "incenseHoldSec": 2.2,
     "tailSec": 0.35,
-    "maxQueue": 5,
+    "maxQueue": 20,
     "cooldownSec": 300,
     "bow": {
       "dropPct": 0.11,
@@ -217,9 +222,9 @@
       "pauseSec": 0.3
     },
     "walk": {
-      "speedPxPerSec": 140,
+      "speedPxPerSec": 170,
       "minSec": 1.2,
-      "maxSec": 3.5,
+      "maxSec": 8,
       "stepSec": 0.35,
       "riseSec": 0.4,
       "bobPx": 2,
@@ -410,23 +415,23 @@
       },
       "tips": {
         "x": 16,
-        "y": 320,
-        "w": 264,
-        "h": 670,
+        "y": 1520,
+        "w": 314,
+        "h": 180,
         "sec": 8,
         "perPage": 3
       },
       "merit": {
-        "x": 800,
-        "y": 320,
-        "w": 256,
-        "h": 670,
-        "max": 5,
-        "nameMax": 10
+        "x": 750,
+        "y": 1520,
+        "w": 314,
+        "h": 180,
+        "max": 3,
+        "nameMax": 14
       },
       "notice": {
-        "top": 1000,
-        "h": 214,
+        "top": 1080,
+        "h": 220,
         "w": 600
       }
     },
@@ -459,7 +464,110 @@
         "w": 1080,
         "h": 190
       }
-    ]
+    ],
+    "v3": {
+      "baseW": 227,
+      "spriteK": 0.9,
+      "monkWidthK": 1.1,
+      "monks": [
+        {
+          "name": "Thầy Minh Đạo",
+          "skin": "monk",
+          "x": 95,
+          "y": 1350,
+          "flip": false
+        },
+        {
+          "name": "Thầy Thiện Hạnh",
+          "skin": "monk",
+          "x": 70,
+          "y": 1445,
+          "flip": false
+        },
+        {
+          "name": "Sư Trụ Trì",
+          "skin": "monk",
+          "x": 45,
+          "y": 1540,
+          "flip": false,
+          "master": true
+        },
+        {
+          "name": "Thầy Tâm Từ",
+          "skin": "monk",
+          "x": 985,
+          "y": 1350,
+          "flip": true
+        },
+        {
+          "name": "Thầy Giác Tâm",
+          "skin": "monk",
+          "x": 1010,
+          "y": 1445,
+          "flip": true
+        },
+        {
+          "name": "Thầy Pháp Duyên",
+          "skin": "monk",
+          "x": 1035,
+          "y": 1540,
+          "flip": true
+        }
+      ],
+      "cushions": {
+        "back": {
+          "y": 1343,
+          "w": 118,
+          "x": [
+            335,
+            471,
+            609,
+            747
+          ]
+        },
+        "front": {
+          "y": 1408,
+          "w": 135,
+          "x": [
+            306,
+            463,
+            620,
+            779
+          ]
+        },
+        "footDy": 14
+      },
+      "aisle": {
+        "yTop": 1482,
+        "topL": 360,
+        "topR": 720,
+        "yBot": 1920,
+        "botL": 225,
+        "botR": 855
+      },
+      "seats": {
+        "perSide": 50,
+        "yMin": 1570,
+        "yMax": 1900,
+        "scaleTop": 0.26,
+        "scaleBottom": 0.36,
+        "gapK": 0.8,
+        "margin": 12,
+        "edgeGap": 14
+      },
+      "route": {
+        "laneK": 0.4,
+        "entryY": 1500,
+        "gateY": 1470,
+        "backGapDy": 32
+      },
+      "labels": {
+        "recentMax": 30,
+        "avatarPx": 36,
+        "nameMax": 10,
+        "nameFontPx": 15
+      }
+    }
   },
   "meritScroll": {
     "title": "✦  SỔ VÀNG TRI ÂN  ✦",
@@ -492,12 +600,63 @@
       "cached"
     ],
     "vieneuVoice": "Thiền Tâm Đức",
-    "vieneuSpeed": 0.9
+    "vieneuSpeed": 0.9,
+    "minGiftWhenBusy": 10,
+    "busyQueueLen": 5
   },
   "oracle": {
     "title": "Pháp ngữ hôm nay",
     "userCooldownSec": 600,
     "globalCooldownSec": 20,
     "tts": "Pháp ngữ gửi Phật tử {name}."
+  },
+  "scene": {
+    "fadeSec": 2,
+    "dayFromHour": 6,
+    "nightFromHour": 18,
+    "halo": {
+      "x": 540,
+      "y": 320,
+      "r": 145,
+      "alpha": 0.16,
+      "breathSec": 7,
+      "breathAmp": 0.3
+    },
+    "lunar": {
+      "recheckMin": 10,
+      "ram": {
+        "from": 14,
+        "to": 16
+      },
+      "phatdan": {
+        "month": 4,
+        "from": 8,
+        "to": 15
+      },
+      "vulan": {
+        "month": 7,
+        "from": 1,
+        "to": 15
+      }
+    }
+  },
+  "avatar": {
+    "hosts": [
+      "tiktokcdn.com",
+      "tiktokcdn-us.com",
+      "tiktokcdn-eu.com",
+      "tiktokv.com",
+      "tiktokv.us",
+      "ibyteimg.com",
+      "ibytedtos.com",
+      "muscdn.com"
+    ]
+  },
+  "limits": {
+    "chatGapSec": 3,
+    "rotateAfterMin": 10,
+    "batchMs": 100,
+    "giftComboMs": 2500,
+    "giftComboMaxMs": 8000
   }
 }

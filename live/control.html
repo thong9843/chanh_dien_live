@@ -193,13 +193,19 @@ button.red{background:var(--red);border-color:#b84a33}
       <button id="btnMusicNext" style="flex:0 0 auto">⏭ Bài tiếp</button>
     </div>
     <div class="row"><button id="btnBell">🔔 Thỉnh chuông</button><button id="btnMo">Gõ mõ</button></div>
-    <h2>Cảnh &amp; Ánh sáng Chánh Điện</h2>
+    <h2>Cảnh Chánh Điện</h2>
     <div class="row">
-      <label>Ánh sáng &amp; Thời tiết
-        <select id="lightingMode">
-          <option value="auto">Tự động theo giờ thực (06h–18h Ngày / Đêm)</option>
-          <option value="day">☀️ Ban ngày (Nắng chiếu cửa sổ)</option>
-          <option value="night">🕯️ Ban đêm (Nến lung linh &amp; Đèn dầu)</option>
+      <label>Cảnh
+        <select id="scene">
+          <option value="auto">Tự động (Ngày / Đêm theo giờ thực)</option>
+          <option value="lunar">📅 Tự động theo lịch âm (Rằm / Phật Đản / Vu Lan)</option>
+          <option value="day">☀️ Ngày</option>
+          <option value="dawn">🌅 Bình minh</option>
+          <option value="night">🌙 Đêm</option>
+          <option value="ram">🌕 Rằm</option>
+          <option value="phatdan">🪷 Phật Đản</option>
+          <option value="vulan">🏮 Vu Lan</option>
+          <option value="old">🏛️ Chánh điện cũ</option>
         </select>
       </label>
       <label>Số chỗ ngồi
@@ -238,7 +244,7 @@ function logLine(s){ const el=$('log'); el.textContent += s + '\n'; el.scrollTop
 const SETTING_IDS = [
   'voice','pitch','rate',
   'music','mo','autoChant','moBpm','chantEveryMin',
-  'lightingMode','zoomEnabled','safeZone','musicTrack','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
+  'scene','zoomEnabled','safeZone','musicTrack','title','subtitle','seatMode','joinOnEnter','readMemberJoin'
 ];
 function syncGiftUI(){ $('giftMin').disabled = $('giftReadAll').checked; }
 function fillSettings(s){

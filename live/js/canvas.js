@@ -402,6 +402,11 @@
       return clamp(this.fade * this.ceremonyAlpha, 0, 1);
     }
 
+    // Tỉ lệ ngồi: bố cục v3 gán sẵn seat.scale (phối cảnh theo y); bố cục cũ tính theo lưới
+    seatScale(floor, gridCols) {
+      return (this.seat && Number.isFinite(this.seat.scale)) ? this.seat.scale : this.computePerspectiveScale(floor, gridCols);
+    }
+
     assignSeat(seat, instant = false, floor = { yTop: 1430, yBot: 1870 }, gridCols = 6) {
       this.seat = seat;
       if (!seat) return;
@@ -414,7 +419,7 @@
         this.y = seat.y;
         this.state = 'sit';
         this.fade = 1;
-        this.scale = this.computePerspectiveScale(floor, gridCols);
+        this.scale = this.seatScale(floor, gridCols);
         this.targetScale = this.scale;
       }
     }
@@ -515,7 +520,7 @@
           this.y = lerpDt(this.y, this.targetY, 0.08, dt);
         }
 
-        this.targetScale = this.computePerspectiveScale(floor, gridCols);
+        this.targetScale = this.seatScale(floor, gridCols);
         this.scale = lerpDt(this.scale, this.targetScale, 0.08, dt);
       }
 
@@ -656,6 +661,7 @@
       ctx.save();
       ctx.globalAlpha = effAlpha;
       ctx.translate(this.x, this.y + walkStepY);
+      if (this.seat && this.seat.flip && !this.walkControlled && !this.atAltarSpot) ctx.scale(-1, 1);   // ngồi bên phải thì quay mặt vào giữa (hướng về tượng Phật)
       if (this.state === 'walk') {
         ctx.rotate(Math.sin(this.walkBob) * 0.025);
       }
@@ -1616,6 +1622,9 @@
    * ========================================================================= */
 
   const KNEEL_PHASES = new Set(['kneel_down', 'kneel_bow', 'kneel_up', 'kneel_tail']);
+  const root = global;
+  let V3_CFG = null;   // content.json → layout.v3 (overlay gán khi nhận snapshot); null = bố cục cũ
+  function setV3Config(c) { V3_CFG = c && typeof c === 'object' ? c : null; }
 
   class CeremonyDirector {
     constructor() {
@@ -1710,7 +1719,7 @@
       v.bowPauseRemain = 0;
       v.onFinalDeepBow = null;
       v.ceremonyHoldPose = null;
-      if (this.phase === 'fade_in_altar' || this.phase === 'perform' || this.phase === 'rise' || this.phase === 'walk' || KNEEL_PHASES.has(this.phase)) {
+      if (this.phase === 'fade_in_altar' || this.phase === 'perform' || this.phase === 'rise' || this.phase === 'walk' || this.phase === 'walk_back' || this.phase === 'sit_down' || KNEEL_PHASES.has(this.phase)) {
         this.phase = 'fade_out_altar';
         this.timer = 0;
         this.outFrom = v.ceremonyAlpha;
@@ -1724,6 +1733,7 @@
     _begin(msg, visitorsMap, altarSpotCfg, floor, gridCols) {
       const v = visitorsMap.get(msg.id);
       if (!v) return false;
+      this.legacyPath = !msg.spot || !!msg.spot.legacy || !V3_CFG;   // true: đường đi kiểu cũ (một điểm lễ ở bàn thờ); false: đi lối giữa tới bồ đoàn riêng
 
       // Người chưa kịp đi tới bồ đoàn thì đặt vào chỗ ngồi trước rồi mới mờ dần lên bàn thờ
       if (v.seat && v.state === 'walk') {
@@ -1735,7 +1745,8 @@
         v.targetScale = v.scale;
       }
 
-      const spot = altarSpotCfg || {};
+      const spot = msg.spot || altarSpotCfg || {};
+      this.spot = msg.spot || null;
       this.altarX = Number.isFinite(spot.x) ? spot.x : ALTAR_DEFAULT.x;
       this.altarY = Number.isFinite(spot.y) ? spot.y : ALTAR_DEFAULT.y;
       this.altarScale = Number.isFinite(spot.scale) ? spot.scale : ALTAR_DEFAULT.scale;
@@ -1745,8 +1756,8 @@
       this.incenseHoldSec = clamp(Number.isFinite(+msg.incenseHoldSec) ? +msg.incenseHoldSec : 2.2, 0.5, 10);
       this.tailSec = clamp(Number.isFinite(+msg.tailSec) ? +msg.tailSec : 0.35, 0, 3);
       this.sinceStart = 0;
-      // Hạn chót tự kết thúc lễ nếu lệch giờ với server (server là nguồn thời gian duy nhất)
-      this.performDeadline = (+msg.totalSec > 0) ? (+msg.totalSec - 2 * this.fadeSec + 0.3) : Infinity;
+      // Hạn chót tự kết thúc lễ nếu lệch giờ với server (server là nguồn thời gian duy nhất): phần còn phải dành cho đi về + ngồi xuống (hoặc 2 lần mờ)
+      this._totalSec = +msg.totalSec > 0 ? +msg.totalSec : 0;
 
       this.active = true;
       this.viewerId = v.id;
@@ -1781,6 +1792,7 @@
       } else {
         this.phase = 'fade_out_seat';
       }
+      this.performDeadline = this._totalSec > 0 ? this._totalSec - (this.walk ? this.walk.sec + this.walk.riseSec : 2 * this.fadeSec) + 0.3 : Infinity;
 
       v.inCeremony = true;
       v.atAltarSpot = false;
@@ -1880,6 +1892,44 @@
         return;
       }
 
+      if (this.phase === 'walk_back') {
+        // Hành lễ xong: đi đúng đường cũ về chỗ ngồi (đảo ngược), luân phiên walkL/walkR, scale theo phối cảnh
+        const w = this.walk, s = clamp(this.timer / w.sec, 0, 1);
+        const pt = this._pointAt(1 - s);
+        v.x = v.targetX = pt.x;
+        v.y = v.targetY = pt.y;
+        v.scale = v.targetScale = this._scaleAtY(pt.y) / 1.05;
+        v.walkImgKey = (Math.floor(this.timer / w.stepSec) % 2 === 0) ? 'walkL' : 'walkR';
+        v.walkBobPx = Math.abs(Math.sin(Math.PI * this.timer / w.stepSec)) * w.bobPx;
+        v.ceremonyAlpha = 1;
+        if (s >= 1) {
+          v.walkControlled = false;
+          v.walkImgKey = 'stand';
+          v.walkBobPx = 0;
+          if (v.seat) { v.x = v.targetX = v.seat.x; v.y = v.targetY = v.seat.y; }
+          v.scale = v.targetScale = v.seatScale(floor, gridCols);
+          this.phase = 'sit_down';
+          this.timer = 0;
+        }
+        return;
+      }
+
+      if (this.phase === 'sit_down') {
+        // Ngồi xuống: mờ chéo ảnh đứng → ảnh ngồi tại chỗ cũ
+        v.ceremonyAlpha = 1;
+        v.poseMix = 1 - easeInOutSine(clamp(this.timer / this.walk.riseSec, 0, 1));
+        if (this.timer >= this.walk.riseSec) {
+          this._restore(v);
+          v.inCeremony = false;
+          this.active = false;
+          this.viewerId = null;
+          this.phase = 'idle';
+          this.timer = 0;
+          this.subStep = 0;
+        }
+        return;
+      }
+
       if (KNEEL_PHASES.has(this.phase)) {
         if (this.sinceStart >= this.performDeadline) { this._abort(visitorsMap); return; }
         this._updateKneel(v, dt, hooks);
@@ -1912,7 +1962,7 @@
             this.subStep = 2;
             this.timer = 0;
           } else if (this.subStep === 2 && this.timer >= this.tailSec) {
-            this._toFadeOutAltar();
+            this._afterPerform(v);
           }
         } else {
           // worship (3 lạy) hoặc prostrate (1 lạy giữ lâu)
@@ -1920,7 +1970,7 @@
             this.subStep = 1;
             this.timer = 0;
           } else if (this.subStep === 1 && this.timer >= this.tailSec) {
-            this._toFadeOutAltar();
+            this._afterPerform(v);
           }
         }
         if (this.phase === 'perform' && this.sinceStart >= this.performDeadline) {
@@ -1945,7 +1995,7 @@
             v.targetX = v.seat.x;
             v.targetY = v.seat.y;
           }
-          v.scale = v.computePerspectiveScale(floor, gridCols);
+          v.scale = v.seatScale(floor, gridCols);
           v.targetScale = v.scale;
           v.ceremonyAlpha = 0;
         }
@@ -2004,7 +2054,7 @@
     // Chuỗi quỳ lạy. Trả về true nếu đã xử lý khung này. Mọi thời gian lấy từ kneel (server) + BOW_CFG, đã kẹp.
     _updateKneel(v, dt, hooks) {
       const K = this.kneel, kb = this.kb;
-      if (!K || !kb) { this._toFadeOutAltar(); return true; }
+      if (!K || !kb) { this._afterPerform(v); return true; }
       v.ceremonyAlpha = 1;
       if (this.phase === 'kneel_down') {
         v.kneelMix = easeInOutSine(clamp(this.timer / K.downSec, 0, 1));
@@ -2041,7 +2091,7 @@
         return true;
       }
       // kneel_tail: đứng yên một nhịp rồi mờ dần về chỗ
-      if (this.timer >= this.tailSec) this._toFadeOutAltar();
+      if (this.timer >= this.tailSec) this._afterPerform(v);
       return true;
     }
 
@@ -2049,14 +2099,20 @@
     // Người đi có y lớn hơn hàng ngồi nên được vẽ phía trước (sắp theo y như bình thường).
     _buildPath(v, floor) {
       const seat = v.seat;
-      const rowGap = this.gridRows > 1 ? (floor.yBot - floor.yTop) / (this.gridRows - 1) : 0;
-      const dy = rowGap * this.walk.laneFrac;
-      const pts = [
-        { x: v.x, y: v.y },
-        { x: v.x, y: seat.y + dy },
-        { x: this.altarX, y: seat.y + dy },
-        { x: this.altarX, y: this.altarY },
-      ];
+      let pts;
+      if (!this.legacyPath && root.LayoutV3) {
+        // v3: ngang ra làn lối giữa → lên cổng thảm → (lách khe hàng trước nếu bồ đoàn hàng sau) → bồ đoàn riêng của mình
+        pts = root.LayoutV3.route(V3_CFG, { x: v.x, y: v.y }, this.spot);
+      } else {
+        const rowGap = this.gridRows > 1 ? (floor.yBot - floor.yTop) / (this.gridRows - 1) : 0;
+        const dy = rowGap * this.walk.laneFrac;
+        pts = [
+          { x: v.x, y: v.y },
+          { x: v.x, y: seat.y + dy },
+          { x: this.altarX, y: seat.y + dy },
+          { x: this.altarX, y: this.altarY },
+        ];
+      }
       let len = 0;
       for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
       // scale theo y cho cả đoạn đường: càng đi lên (y nhỏ) càng nhỏ, tới altarSpot đúng bằng altarScale
@@ -2090,6 +2146,41 @@
       this.timer = 0;
       this.outFrom = 1;
     }
+
+    // Hành lễ xong: có ảnh pose thì rời bồ đoàn đi bộ về chỗ cũ; không thì mờ dần như trước
+    _afterPerform(v) {
+      if (!this.poseMode || !this.path || !this.walk) { this._toFadeOutAltar(); return; }
+      v.atAltarSpot = false;
+      v.ceremonyHoldPose = null;
+      v.isBowing = false; v.bowQueue = 0; v.bowPauseRemain = 0; v.onFinalDeepBow = null;
+      v.kneelMix = 0; v.prostrateMix = 0;
+      v.poseMix = 1;
+      v.walkControlled = true;
+      v.walkImgKey = 'walkL';
+      this.phase = 'walk_back';
+      this.timer = 0;
+    }
+  }
+
+  /* Nhiều lượt lễ chạy song song (tối đa 8 bồ đoàn): mỗi người một CeremonyDirector riêng, bỏ khi xong. */
+  class CeremonyManager {
+    constructor() { this.runs = new Map(); this.assets = null; this.gridRows = 4; }
+    start(msg, visitorsMap, altarSpotCfg, floor, gridCols) {
+      let d = this.runs.get(msg.id);
+      if (!d) { d = new CeremonyDirector(); this.runs.set(msg.id, d); }
+      d.assets = this.assets; d.gridRows = this.gridRows;
+      const ok = d.start(msg, visitorsMap, altarSpotCfg, floor, gridCols);
+      if (!ok && !d.active && !d.pending) this.runs.delete(msg.id);
+      return ok;
+    }
+    update(dt, nowMs, visitorsMap, floor, gridCols, hooks) {
+      for (const [id, d] of this.runs) {
+        d.update(dt, nowMs, visitorsMap, floor, gridCols, hooks);
+        if (!d.active && !d.pending) this.runs.delete(id);
+      }
+    }
+    reset(visitorsMap) { for (const d of this.runs.values()) d.reset(visitorsMap); this.runs.clear(); }
+    get size() { return this.runs.size; }
   }
 
   /* =========================================================================
@@ -2121,6 +2212,21 @@
       x.fillStyle = g;
       x.fillRect(0, 0, 512, 512);
       this._sprite = c;
+    }
+
+    // Hào quang nhẹ "thở" sau đầu Phật cho các cảnh ảnh mới (ngày / bình minh / đêm): chỉ một sprite cộng sáng, alpha theo chu kỳ thở.
+    // cfg = content.json → scene.halo { x, y, r, alpha, breathSec, breathAmp }
+    drawHalo(ctx, t, cfg) {
+      if (!this._sprite || !cfg) return;
+      const breath = 1 + cfg.breathAmp * Math.sin((2 * Math.PI * t) / Math.max(1, cfg.breathSec));
+      const a = Math.min(1, cfg.alpha * breath);
+      if (a < 0.005) return;
+      const R = cfg.r * 1.3;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = a;
+      ctx.drawImage(this._sprite, cfg.x - R, cfg.y - R, R * 2, R * 2);
+      ctx.restore();
     }
 
     draw(ctx, t, isDay, opts = {}) {
@@ -2179,6 +2285,8 @@
     BuddhaGlowSystem,
     CameraZoomController,
     CeremonyDirector,
+    CeremonyManager,
+    setV3Config,
     ALTAR_DEFAULT,
     setBowConfig,
     setStandConfig,

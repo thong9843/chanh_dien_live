@@ -10,6 +10,7 @@ const CHARS = { c_man: 260, c_woman: 260, c_granny: 260, c_monk: 260, c_nun: 260
 const POSE_SKINS = ['man', 'woman', 'granny', 'monk', 'nun', 'child'];
 const POSES = ['stand', 'walkL', 'walkR'], POSES_OPT = ['kneel', 'prostrate'];   // pose_<skin>_<pose>.png: đủ stand/walkL/walkR mới có đi bộ; kneel+prostrate tuỳ chọn
 const isPoseFile = n => new RegExp(`^pose_(${POSE_SKINS.join('|')})_(${[...POSES, ...POSES_OPT].join('|')})\.png$`).test(n);
+const SCENES = ['hall.jpg', 'hall_mountain_day.jpg', 'hall_mountain_dawn.jpg', 'hall_mountain_night.jpg', 'hall_ram.jpg', 'hall_phatdan.jpg', 'hall_vulan.jpg'];   // ảnh nền các cảnh (hall.jpg = Chánh điện cũ), đều 1080x1920
 const FX = ['fx_banner', 'fx_bell', 'fx_halo', 'fx_incense', 'fx_lotus', 'fx_mo', 'fx_petal', 'fx_scroll'];
 const WIDTH_OK = [100, 400];                                                                            // rộng linh hoạt, chỉ cảnh báo ngoài khoảng
 let errors = 0, warns = 0;
@@ -87,9 +88,10 @@ if (!fs.existsSync(DIR)){ bad('không có thư mục assets'); process.exit(1); 
 const files = new Set(fs.readdirSync(DIR));
 
 console.log('Tên file');
-const need = ['hall.jpg', ...Object.keys(CHARS).map(n => n + '.png'), ...FX.map(n => n + '.png')];
+const need = [...SCENES, ...Object.keys(CHARS).map(n => n + '.png'), ...FX.map(n => n + '.png')];
 for (const n of need) files.has(n) ? ok(n) : bad('thiếu ' + n);
-const known = new Set([...need, 'music', 'fonts', 'README.md']);
+const EXTRAS = ['candle_body', 'candle_flame', 'wish_card'];   // dành cho Đợt 3 (nến + thẻ nguyện ước): chỉ cho phép có mặt và kiểm tra alpha, chưa dùng trong code
+const known = new Set([...need, ...EXTRAS.map(n => n + '.png'), 'music', 'fonts', 'README.md']);
 for (const n of files) if (!known.has(n) && !isPoseFile(n)) warn(n.startsWith('anim_') ? `${n}: sprite cũ, nên xoá (code tự hiện tư thế ngồi)` : `file lạ: ${n}`);
 
 console.log('Phông chữ tự lưu (assets/fonts)');
@@ -157,10 +159,18 @@ for (const n of FX){
   catch (e) { bad(`${f}: ${e.message}`); }
 }
 
-console.log('Nền');
-if (files.has('hall.jpg')){
-  try { const j = jpegSize(fs.readFileSync(path.join(DIR, 'hall.jpg'))); j.w === 1080 && j.h === 1920 ? ok('hall.jpg 1080x1920') : bad(`hall.jpg ${j.w}x${j.h}, cần 1080x1920`); }
-  catch (e) { bad('hall.jpg: ' + e.message); }
+console.log('PNG dành cho Đợt 3 (nến, thẻ nguyện ước; có alpha)');
+for (const n of EXTRAS){
+  const f = n + '.png'; if (!files.has(f)) continue;
+  try { const p = parsePng(fs.readFileSync(path.join(DIR, f))); hasAlpha(p) ? ok(`${f}: ${p.w}x${p.h}`) : bad(`${f}: không có kênh alpha`); }
+  catch (e) { bad(`${f}: ${e.message}`); }
+}
+
+console.log('Nền các cảnh (1080x1920)');
+for (const n of SCENES){
+  if (!files.has(n)) continue;
+  try { const j = jpegSize(fs.readFileSync(path.join(DIR, n))); j.w === 1080 && j.h === 1920 ? ok(`${n} 1080x1920`) : bad(`${n} ${j.w}x${j.h}, cần 1080x1920`); }
+  catch (e) { bad(`${n}: ${e.message}`); }
 }
 
 console.log('Nhạc');

@@ -69,6 +69,7 @@ function loadContent(){
   return {
     channel: { title: cStr(o('channel').title, D.channel.title, 40), subtitle: cStr(o('channel').subtitle, D.channel.subtitle, 60) },
     labels, gift, oracles,
+    avatar: { hosts: cArr(o('avatar').hosts, D.avatar.hosts, 60, 20).map(h => h.toLowerCase().replace(/^\.+/, '')).filter(h => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(h)) },
     guide: { title: cStr(o('guide').title, D.guide.title, 60), lines: cArr(o('guide').lines, D.guide.lines, 160, 12) },
     prayers: cArr(r.prayers, D.prayers, 300, 100), chants: cArr(r.chants, D.chants, 400, 100),
     demo: { names: cArr(o('demo').names, D.demo.names, 18, 200), botLines: cArr(o('demo').botLines, D.demo.botLines, 120, 100) },
@@ -146,12 +147,30 @@ function loadContent(){
       })(),
       vieneuVoice: cStr(o('tts')?.vieneuVoice, D.tts?.vieneuVoice || 'Thiền Tâm Đức', 80),
       vieneuSpeed: cNum(o('tts')?.vieneuSpeed, 0.7, 1.2, D.tts?.vieneuSpeed || 0.9),
+      minGiftWhenBusy: Math.round(cNum(o('tts')?.minGiftWhenBusy, 1, 50000, D.tts.minGiftWhenBusy)),   // hàng đợi giọng bận: quà dưới ngưỡng này chỉ phát câu chung đã lưu
+      busyQueueLen: Math.round(cNum(o('tts')?.busyQueueLen, 1, 8, D.tts.busyQueueLen)),
     },
+    limits: (() => { const l = o('limits'), dl = D.limits; return {
+      chatGapSec: cNum(l.chatGapSec, 0, 60, dl.chatGapSec), rotateAfterMin: cNum(l.rotateAfterMin, 0.1, 600, dl.rotateAfterMin),
+      batchMs: Math.round(cNum(l.batchMs, 20, 1000, dl.batchMs)), giftComboMs: Math.round(cNum(l.giftComboMs, 200, 10000, dl.giftComboMs)),
+      giftComboMaxMs: Math.round(cNum(l.giftComboMaxMs, 500, 30000, dl.giftComboMaxMs)) }; })(),
     oracle: {
       userCooldownSec: cNum(o('oracle')?.userCooldownSec, 10, 3600, D.oracle?.userCooldownSec || 600),
       globalCooldownSec: cNum(o('oracle')?.globalCooldownSec, 1, 300, D.oracle?.globalCooldownSec || 20),
       tts: cStr(o('oracle')?.tts, D.oracle?.tts || 'Pháp ngữ gửi Phật tử {name}.', 200),
     },
+    scene: (() => {
+      const sc = o('scene'), ds = D.scene, h = (sc.halo && typeof sc.halo === 'object' && !Array.isArray(sc.halo)) ? sc.halo : {}, dh = ds.halo;
+      let dayFrom = Math.round(cNum(sc.dayFromHour, 0, 23, ds.dayFromHour)), nightFrom = Math.round(cNum(sc.nightFromHour, 1, 24, ds.nightFromHour));
+      if (dayFrom >= nightFrom) { dayFrom = ds.dayFromHour; nightFrom = ds.nightFromHour; }
+      return { fadeSec: cNum(sc.fadeSec, 0, 10, ds.fadeSec), dayFromHour: dayFrom, nightFromHour: nightFrom,
+               lunar: (() => { const lu = (sc.lunar && typeof sc.lunar === 'object' && !Array.isArray(sc.lunar)) ? sc.lunar : {}, dl = ds.lunar;
+                 const rg = (k, withMonth) => { const r = (lu[k] && typeof lu[k] === 'object') ? lu[k] : {}, dr = dl[k]; let from = Math.round(cNum(r.from, 1, 30, dr.from)), to = Math.round(cNum(r.to, 1, 30, dr.to)); if (from > to) { from = dr.from; to = dr.to; }
+                   return withMonth ? { month: Math.round(cNum(r.month, 1, 12, dr.month)), from, to } : { from, to }; };
+                 return { recheckMin: cNum(lu.recheckMin, 1, 1440, dl.recheckMin), ram: rg('ram', false), phatdan: rg('phatdan', true), vulan: rg('vulan', true) }; })(),
+               halo: { x: cNum(h.x, 0, 1080, dh.x), y: cNum(h.y, 0, 1920, dh.y), r: cNum(h.r, 30, 400, dh.r), alpha: cNum(h.alpha, 0, 0.6, dh.alpha),
+                       breathSec: cNum(h.breathSec, 3, 20, dh.breathSec), breathAmp: cNum(h.breathAmp, 0, 0.8, dh.breathAmp) } };
+    })(),
     plaque: {
       enabled: typeof o('plaque').enabled === 'boolean' ? o('plaque').enabled : D.plaque.enabled,
       text: cStr(o('plaque').text, D.plaque.text, 60),
@@ -184,13 +203,33 @@ function loadContent(){
         ui: (() => { const u = sub('ui'), du = D.ui, sb = k => (u[k] && typeof u[k] === 'object' && !Array.isArray(u[k])) ? u[k] : {};
           const ch = sb('chips'), dch = du.chips, tp = sb('tips'), dtp = du.tips, mr = sb('merit'), dmr = du.merit;
           return { chips: { top: cNum(ch.top, 0, 1800, dch.top), left: cNum(ch.left, 0, 540, dch.left), right: cNum(ch.right, 540, 1080, dch.right) },
-                   // cột trái: gợi ý bình luận (x 16–290); cột phải: Công Đức (x ≥ 800, không bao giờ lấn x < 790)
-                   tips: { x: cNum(tp.x, 0, 400, dtp.x), y: cNum(tp.y, 0, 1800, dtp.y), w: cNum(tp.w, 120, 300, dtp.w), h: cNum(tp.h, 100, 1200, dtp.h),
+                   // hai thẻ chân màn hình: gợi ý bình luận (trái), Tri Ân (phải)
+                   tips: { x: cNum(tp.x, 0, 700, dtp.x), y: cNum(tp.y, 0, 1850, dtp.y), w: cNum(tp.w, 120, 400, dtp.w), h: cNum(tp.h, 60, 1200, dtp.h),
                            sec: cNum(tp.sec, 2, 60, dtp.sec), perPage: Math.round(cNum(tp.perPage, 1, 6, dtp.perPage)) },
-                   merit: { x: cNum(mr.x, 790, 1000, dmr.x), y: cNum(mr.y, 0, 1800, dmr.y), w: cNum(mr.w, 120, 290, dmr.w), h: cNum(mr.h, 100, 1200, dmr.h),
+                   merit: { x: cNum(mr.x, 540, 1000, dmr.x), y: cNum(mr.y, 0, 1850, dmr.y), w: cNum(mr.w, 120, 400, dmr.w), h: cNum(mr.h, 60, 1200, dmr.h),
                             max: Math.round(cNum(mr.max, 1, 8, dmr.max)), nameMax: Math.round(cNum(mr.nameMax, 4, 20, dmr.nameMax)) },
                    // vùng thông báo chung (hàng đợi duy nhất): rộng ≤ 600, căn giữa x 540, nằm dưới vùng tượng
                    notice: (() => { const nt = sb('notice'), dnt = du.notice; return { top: cNum(nt.top, 900, 1500, dnt.top), h: cNum(nt.h, 100, 400, dnt.h), w: cNum(nt.w, 300, 600, dnt.w) }; })() }; })(),
+        v3: (() => {
+          const v = sub('v3'), dv = D.v3, so = (src, k) => (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k])) ? src[k] : {};
+          const xs = (arr, d) => { const a = Array.isArray(arr) && arr.length === d.length ? arr.map((x, i) => cNum(x, 0, 1080, d[i])) : d.slice(); return a; };
+          const cu = so(v, 'cushions'), dcu = dv.cushions, row = (name) => { const r = so(cu, name), dr = dcu[name]; return { y: cNum(r.y, 900, 1700, dr.y), w: cNum(r.w, 40, 300, dr.w), x: xs(r.x, dr.x) }; };
+          const ai = so(v, 'aisle'), dai = dv.aisle, se = so(v, 'seats'), dse = dv.seats, ro = so(v, 'route'), dro = dv.route, lb = so(v, 'labels'), dlb = dv.labels;
+          let yMin = cNum(se.yMin, 1000, 1900, dse.yMin), yMax = cNum(se.yMax, 1000, 1920, dse.yMax); if (yMin >= yMax - 100) { yMin = dse.yMin; yMax = dse.yMax; }
+          let yTop = cNum(ai.yTop, 1000, 1800, dai.yTop), yBot = cNum(ai.yBot, 1100, 2000, dai.yBot); if (yTop >= yBot - 100) { yTop = dai.yTop; yBot = dai.yBot; }
+          const monks = (Array.isArray(v.monks) && v.monks.length ? v.monks : dv.monks).slice(0, 8).map((m, i) => { const dm = dv.monks[i] || dv.monks[0], mm = (m && typeof m === 'object') ? m : {};
+            return { name: cStr(mm.name, dm.name, 30), skin: ['monk', 'nun', 'granny', 'man', 'woman', 'child'].includes(mm.skin) ? mm.skin : dm.skin,
+                     x: cNum(mm.x, -100, 1180, dm.x), y: cNum(mm.y, 900, 1800, dm.y), flip: typeof mm.flip === 'boolean' ? mm.flip : dm.flip, master: !!mm.master }; });
+          return {
+            baseW: cNum(v.baseW, 100, 400, dv.baseW), spriteK: cNum(v.spriteK, 0.5, 2, dv.spriteK), monkWidthK: cNum(v.monkWidthK, 0.5, 2, dv.monkWidthK), monks,
+            cushions: { back: row('back'), front: row('front'), footDy: cNum(cu.footDy, -40, 80, dcu.footDy) },
+            aisle: { yTop, topL: cNum(ai.topL, 0, 540, dai.topL), topR: cNum(ai.topR, 540, 1080, dai.topR), yBot, botL: cNum(ai.botL, 0, 540, dai.botL), botR: cNum(ai.botR, 540, 1080, dai.botR) },
+            seats: { perSide: Math.round(cNum(se.perSide, 4, 80, dse.perSide)), yMin, yMax, scaleTop: cNum(se.scaleTop, 0.05, 1, dse.scaleTop), scaleBottom: cNum(se.scaleBottom, 0.05, 1, dse.scaleBottom),
+                     gapK: cNum(se.gapK, 0.3, 2, dse.gapK), margin: cNum(se.margin, 0, 200, dse.margin), edgeGap: cNum(se.edgeGap, 0, 200, dse.edgeGap) },
+            route: { laneK: cNum(ro.laneK, 0, 1, dro.laneK), entryY: cNum(ro.entryY, 1000, 1900, dro.entryY), gateY: cNum(ro.gateY, 1000, 1900, dro.gateY), backGapDy: cNum(ro.backGapDy, 0, 200, dro.backGapDy) },
+            labels: { recentMax: Math.round(cNum(lb.recentMax, 1, 100, dlb.recentMax)), avatarPx: Math.round(cNum(lb.avatarPx, 16, 80, dlb.avatarPx)), nameMax: Math.round(cNum(lb.nameMax, 4, 20, dlb.nameMax)), nameFontPx: Math.round(cNum(lb.nameFontPx, 10, 30, dlb.nameFontPx)) },
+          };
+        })(),
         safeZones: (Array.isArray(L.safeZones) && L.safeZones.length ? L.safeZones.slice(0, 8) : D.safeZones).map((z, i) => {
           const dz = D.safeZones[i] || D.safeZones[0], zz = (z && typeof z === 'object') ? z : {};
           return { label: cStr(zz.label, dz.label, 40), x: cNum(zz.x, 0, 1080, dz.x), y: cNum(zz.y, 0, 1920, dz.y), w: cNum(zz.w, 0, 1080, dz.w), h: cNum(zz.h, 0, 1920, dz.h) }; }),
@@ -211,8 +250,16 @@ function loadContent(){
   };
 }
 const CONTENT = loadContent();
+// Bố cục v3 dùng chung với overlay (js/layout.js): 100 chỗ ngồi hai bên lối giữa, 8 bồ đoàn lễ, đường đi
+await import('./js/layout.js');
+const LV3 = globalThis.LayoutV3;
+const V3 = CONTENT.layout.v3, UI = CONTENT.layout.ui;
+const V3_SPOTS = LV3.buildSpots(V3);
+const V3_SEATS = LV3.buildSeats(V3, [UI.tips, UI.merit]);
+const MAX_SEATS = V3_SEATS.length;
+if (MAX_SEATS < 2 * V3.seats.perSide) console.warn(`Bố cục chỉ xếp được ${MAX_SEATS}/${2 * V3.seats.perSide} chỗ ngồi, kiểm tra layout.v3.seats`);
 const CLIENT_CONTENT = {
-  labels: CONTENT.labels, guide: CONTENT.guide, plaque: CONTENT.plaque, layout: CONTENT.layout, share: CONTENT.share,
+  labels: CONTENT.labels, scene: CONTENT.scene, avatar: CONTENT.avatar, guide: CONTENT.guide, plaque: CONTENT.plaque, layout: CONTENT.layout, share: CONTENT.share,
   milestone: { text: CONTENT.milestone.text, showSec: CONTENT.milestone.showSec },
   gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown },
   zoom: CONTENT.zoom,
@@ -232,7 +279,7 @@ const settings = {
   music: true, mo: true, moBpm: 52,
   autoChant: true, chantEveryMin: 3,
   seatMode: 'auto',                  // auto | 24 | 36 | 64 | 100
-  lightingMode: 'auto',              // auto (theo giờ thực) | day | night
+  scene: 'auto',                     // auto (ngày/đêm theo giờ thực) | lunar (theo lịch âm: Rằm / Phật Đản / Vu Lan, còn lại ngày/đêm) | day | dawn | night | ram | phatdan | vulan | old (Chánh điện cũ)
   musicTrack: 'shuffle',             // 'shuffle' (ngẫu nhiên, không lặp tới khi hết 5 bài) | '1'…'5' (lặp một bài)
   safeZone: false,                   // phủ đỏ các vùng TikTok che (chỉ để canh bố cục, không dùng khi phát)
   zoomEnabled: CONTENT.zoom.enabled, // bật/tắt zoom vào Phật tử khi quà ≥99 xu hoặc follow
@@ -249,7 +296,7 @@ const log = []; const LOG_MAX = 500;   // nhật ký vòng: giữ tối đa 500 
 function addLog(s){ const line = `[${new Date().toLocaleTimeString('vi-VN')}] ${s}`; log.push(line); if (log.length > LOG_MAX) log.splice(0, log.length - LOG_MAX); broadcast({ t:'log', line }, 'control'); console.log(line); }
 
 const CAPS = [24, 36, 64, 100];
-function capacity(){ if (settings.seatMode !== 'auto') return +settings.seatMode; const n = viewers.size; return CAPS.find(c => n <= c) || 100; }
+function capacity(){ if (settings.scene !== 'old') return MAX_SEATS; if (settings.seatMode !== 'auto') return +settings.seatMode; const n = viewers.size; return CAPS.find(c => n <= c) || 100; }
 
 /* ----------------------------------------------------- text sanitization */
 // Lọc bớt tên dài, emoji, ký tự đặc biệt để đọc TTS mượt mà & hiển thị đẹp
@@ -361,23 +408,38 @@ function isHighTierGift(giftName, coins, tier){
   return tier >= 2 || coins >= 20 || HIGH_GIFT_RE.test(giftName);
 }
 
-function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo }; }
-function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, vieneu: vieneuState, content: CLIENT_CONTENT }; }
+// Ảnh đại diện chỉ nhận https + máy chủ CDN của TikTok (danh sách trong content.json → avatar.hosts); còn lại bỏ, overlay vẽ chữ cái đầu thay thế.
+function safeAvatar(u){
+  try {
+    const url = new URL(String(u || '').slice(0, 400));
+    if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) return '';
+    const h = url.hostname.toLowerCase();
+    return CONTENT.avatar.hosts.some(x => h === x || h.endsWith('.' + x)) ? url.href : '';
+  } catch { return ''; }
+}
+function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo, seat:v.seat }; }
+function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), more: overflow.size, cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, vieneu: vieneuState, content: CLIENT_CONTENT }; }
 
 /* ------------------------------------------- Silent mode, Altar Ceremony & Camera Zoom */
 const zoomQueue = [];
 let zoomNextAt = 0, zoomTimer = null;
 
-// Trạng thái Lên lễ Phật (!thắp nhang, !cúng bái, !quỳ lạy): mỗi lúc 1 người, hàng chờ tối đa 5,
-// cooldown 5 phút/người (chỉ tính từ lúc người đó BẮT ĐẦU hành lễ), nghỉ gapSec giữa 2 người.
+// Lên lễ Phật (!thắp nhang, !cúng bái, !quỳ lạy): tối đa 8 người cùng lúc, mỗi người một bồ đoàn (hàng trước trước),
+// hàng chờ tối đa ceremony.maxQueue, cooldown 5 phút/người (chỉ tính từ lúc người đó BẮT ĐẦU hành lễ),
+// các lượt bắt đầu cách nhau tối thiểu gapSec. Chánh điện cũ (scene "old") chỉ có 1 điểm lễ (altarSpot).
 // Server là nguồn thời gian duy nhất: overlay chỉ chạy theo bản tin 'ceremony', không gửi lệnh ngược.
-let ceremonyActive = null; // { id, name, kind, endsAt }
-const ceremonyQueue = [];  // [{ id, kind }]
+const ceremonies = new Map();      // id -> { id, name, kind, spot, endsAt, timer }
+const ceremonyQueue = [];          // [{ id, kind }]
+const spotsBusy = new Set();       // chỉ số bồ đoàn đang có người
 const ceremonyCooldowns = new Map();
-let ceremonyTimer = null, ceremonyGapTimer = null, ceremonyNextAt = 0;
+let ceremonyGapTimer = null, ceremonyNextAt = 0;
+
+const OLD_SPOT = () => { const a = CONTENT.layout.altarSpot; return { i: 0, row: 'front', x: a.x, y: a.y, cy: a.y, w: 0, scale: a.scale, gapX: a.x, legacy: true }; };
+const spotList = () => settings.scene === 'old' ? [OLD_SPOT()] : V3_SPOTS;
+function takeSpot(){ for (const s of spotList()) if (!spotsBusy.has(s.i)) return s; return null; }
 
 function isAtAltarSpot(id){
-  return !!(ceremonyActive && ceremonyActive.id === id);
+  return ceremonies.has(id);
 }
 
 // Giữ chỗ ngồi của người đang lên lễ (và trong hàng chờ lễ), không nhường cho người mới
@@ -397,7 +459,7 @@ function parseCeremonyCommand(text){
   return null;
 }
 
-// Skin có đủ bộ ảnh tư thế assets/pose_<skin>_{stand,walkL,walkR}.png thì được đứng dậy đi bộ lên bàn thờ
+// Skin có đủ bộ ảnh tư thế assets/pose_<skin>_{stand,walkL,walkR}.png thì được đứng dậy đi bộ lên bồ đoàn
 const POSE_SKINS = new Set();
 let POSE_FILES = [];   // các file pose_<skin>_<pose>.png có thật trong assets/ (overlay chỉ nạp đúng những file này)
 function scanPoseSkins(){
@@ -411,36 +473,17 @@ function scanPoseSkins(){
 }
 scanPoseSkins();
 
-// Toạ độ chỗ ngồi theo đúng cách overlay xếp (cùng công thức layout() ở overlay.html) để ước lượng quãng đường đi bộ
-const SEAT_GRID = { 24: [6, 4], 36: [6, 6], 64: [8, 8], 100: [10, 10] };
-function seatLayout(cap){
-  const fl = CONTENT.layout.floor, [cols, rows] = SEAT_GRID[cap] || SEAT_GRID[24], seats = [];
-  for (let r = 0; r < rows; r++){
-    const t = rows === 1 ? .5 : r / (rows - 1);
-    const y = fl.yTop + (fl.yBot - fl.yTop) * t, half = fl.halfTop + (fl.halfBot - fl.halfTop) * t;
-    for (let k = 0; k < cols; k++){
-      let u = (k - (cols - 1) / 2) / ((cols - 1) / 2); u = Math.sign(u) * (.14 + .86 * Math.abs(u));
-      seats.push({ x: 540 + u * half, y, r });
-    }
-  }
-  seats.sort((a, b) => (b.r - a.r) || (Math.abs(a.x - 540) - Math.abs(b.x - 540)));
-  return { seats, rowGap: rows > 1 ? (fl.yBot - fl.yTop) / (rows - 1) : 0 };
-}
-
-// Thời gian đi bộ của 1 người: tốc độ cố định, kẹp trong [minSec, maxSec].
-// Đường đi: ghế → bước ra phía trước hàng (laneFrac × khoảng cách hàng) → ngang tới lối giữa x=540 → thẳng lên altarSpot.
-function ceremonyWalkInfo(v){
+// Thời gian đi bộ MỘT chiều: độ dài đường đi (cùng hàm route với overlay) / tốc độ, kẹp trong [minSec, maxSec].
+function ceremonyWalkInfo(v, spot){
   const w = CONTENT.ceremony.walk;
   if (!POSE_SKINS.has(v.skin)) return null;
-  const { seats, rowGap } = seatLayout(capacity());
-  const seat = seats[[...viewers.keys()].indexOf(v.id)];
+  const seat = V3_SEATS[v.seat];
   if (!seat) return null;
-  const dy = rowGap * w.laneFrac, altar = CONTENT.layout.altarSpot;
-  const len = dy + Math.abs(altar.x - seat.x) + Math.abs(seat.y + dy - altar.y);
+  const len = spot.legacy ? Math.abs(seat.x - 540) + Math.abs(seat.y - spot.y) + 80 : LV3.pathLen(LV3.route(V3, seat, spot));
   return { sec: Math.min(w.maxSec, Math.max(w.minSec, len / w.speedPxPerSec)), laneFrac: w.laneFrac, stepSec: w.stepSec, riseSec: w.riseSec, bobPx: w.bobPx };
 }
 
-// Tổng thời gian 1 lượt lễ (giây): ngồi tại chỗ = 4 lần mờ + hành lễ; có ảnh pose = đứng dậy + đi bộ + hành lễ + 2 lần mờ
+// Tổng thời gian 1 lượt lễ (giây): không có ảnh pose = 4 lần mờ + hành lễ; có ảnh pose = đứng dậy + đi lên + hành lễ + đi về + ngồi xuống
 // Quỳ + lạy bằng ảnh kneel/prostrate (chỉ !cúng bái, !quỳ lạy, skin có đi bộ và đủ 2 ảnh): các đoạn mờ chéo cũng được cộng vào tổng thời gian.
 function kneelCapable(v, kind){
   return kind !== 'incense' && POSE_SKINS.has(v.skin) && POSE_FILES.includes(`pose_${v.skin}_kneel.png`) && POSE_FILES.includes(`pose_${v.skin}_prostrate.png`);
@@ -456,40 +499,45 @@ function computeCeremonyDurationSec(kind, walk, kneel){
   else if (kind === 'incense') perform = c.incenseHoldSec + bowSec(b.holdSec);
   else if (kind === 'worship') perform = bowSec(b.holdSec) * 3 + b.pauseSec * 2;
   else perform = bowSec(b.prostrateHoldSec);
-  if (walk) return walk.riseSec + walk.sec + perform + c.tailSec + c.fadeSec * 2;
+  if (walk) return 2 * walk.riseSec + 2 * walk.sec + perform + c.tailSec;
   return c.fadeSec * 4 + perform + c.tailSec;
 }
 
 function resetCeremony(){
-  ceremonyActive = null;
+  for (const c of ceremonies.values()) clearTimeout(c.timer);
+  ceremonies.clear();
+  spotsBusy.clear();
   ceremonyQueue.length = 0;
   ceremonyCooldowns.clear();
   ceremonyNextAt = 0;
-  clearTimeout(ceremonyTimer); ceremonyTimer = null;
   clearTimeout(ceremonyGapTimer); ceremonyGapTimer = null;
 }
 
-function startCeremony(v, kind){
+function startCeremony(v, kind, spot){
   // Xoá mọi mục zoom đang chờ của người này (không zoom vào người đang ở điểm lễ)
   for (let i = zoomQueue.length - 1; i >= 0; i--){
     if (zoomQueue[i].id === v.id) zoomQueue.splice(i, 1);
   }
   const c = CONTENT.ceremony;
-  const walk = ceremonyWalkInfo(v);
+  const walk = ceremonyWalkInfo(v, spot);
   const kneel = walk && kneelCapable(v, kind) ? c.kneel : null;
   const totalSec = computeCeremonyDurationSec(kind, walk, kneel);
   const now = Date.now();
-  ceremonyActive = { id: v.id, name: v.name, kind, endsAt: now + totalSec * 1000 };
+  spotsBusy.add(spot.i);
+  const run = { id: v.id, name: v.name, kind, spot: spot.i, endsAt: now + totalSec * 1000, timer: null };
+  ceremonies.set(v.id, run);
   ceremonyCooldowns.set(v.id, now); // cooldown chỉ tính khi bắt đầu hành lễ
+  ceremonyNextAt = now + c.gapSec * 1000;
 
   const labelMap = { incense: '!thắp nhang', worship: '!cúng bái', prostrate: '!quỳ lạy' };
-  addLog(`🙏 Mời Phật tử ${v.name} lên lễ Phật (${labelMap[kind] || kind})`);
+  addLog(`🙏 Mời Phật tử ${v.name} lên lễ Phật (${labelMap[kind] || kind}) · bồ đoàn ${spot.i + 1}/${spotList().length}`);
 
   broadcast({
     t: 'ceremony',
     id: v.id,
     name: v.name,
     kind,
+    spot: { i: spot.i, x: spot.x, y: spot.y, scale: spot.scale, row: spot.row, gapX: spot.gapX, legacy: !!spot.legacy },
     inviteText: fill(c.inviteText, { name: v.name }),
     inviteSec: c.inviteSec,
     fadeSec: c.fadeSec,
@@ -504,29 +552,34 @@ function startCeremony(v, kind){
     totalSec,
   });
 
-  clearTimeout(ceremonyTimer);
-  ceremonyTimer = setTimeout(finishCeremony, Math.round(totalSec * 1000));
-  ceremonyTimer.unref?.();
+  run.timer = setTimeout(() => finishCeremony(v.id), Math.round(totalSec * 1000));
+  run.timer.unref?.();
 }
 
-function finishCeremony(){
-  ceremonyTimer = null;
-  ceremonyActive = null;
-  ceremonyNextAt = Date.now() + CONTENT.ceremony.gapSec * 1000; // nghỉ giữa 2 người lên lễ
+function finishCeremony(id){
+  const run = ceremonies.get(id);
+  if (!run) return;
+  clearTimeout(run.timer);
+  ceremonies.delete(id);
+  spotsBusy.delete(run.spot);
   scheduleNextCeremony();
 }
 
+// Lấy người kế tiếp trong hàng chờ khi còn bồ đoàn trống; các lượt bắt đầu cách nhau tối thiểu gapSec
 function scheduleNextCeremony(){
   clearTimeout(ceremonyGapTimer); ceremonyGapTimer = null;
-  if (ceremonyActive || !ceremonyQueue.length) return;
+  if (!ceremonyQueue.length || !spotList().some(s => !spotsBusy.has(s.i))) return;
   const wait = Math.max(0, ceremonyNextAt - Date.now());
   ceremonyGapTimer = setTimeout(() => {
     ceremonyGapTimer = null;
     while (ceremonyQueue.length){
+      const spot = takeSpot();
+      if (!spot) return;
       const next = ceremonyQueue.shift();
       const v = viewers.get(next.id);
-      if (v){ startCeremony(v, next.kind); return; } // người đã rời phòng thì bỏ qua, không tính cooldown
+      if (v){ startCeremony(v, next.kind, spot); break; } // người đã rời phòng thì bỏ qua, không tính cooldown
     }
+    scheduleNextCeremony();
   }, wait);
   ceremonyGapTimer.unref?.();
 }
@@ -542,8 +595,9 @@ function requestCeremony(id, kind, bypassUserCooldown = false){
     if (now - last < CONTENT.ceremony.cooldownSec * 1000) return false;
   }
 
-  if (!ceremonyActive && !ceremonyQueue.length && now >= ceremonyNextAt){
-    startCeremony(v, kind);
+  const spot = !ceremonyQueue.length && now >= ceremonyNextAt ? takeSpot() : null;
+  if (spot){
+    startCeremony(v, kind, spot);
     return true;
   }
 
@@ -639,26 +693,72 @@ function enqueueZoom(id, reason){
   scheduleNextZoom();
 }
 
+// Chỗ ngồi do server cấp (chỉ số 0…MAX_SEATS-1 theo thứ tự ưu tiên của LayoutV3.buildSeats), overlay chỉ vẽ theo chỉ số này.
+// Hết chỗ: người bình luận mới thay người im lặng lâu nhất (quá limits.rotateAfterMin phút, không đang lên lễ, ưu tiên người chưa dâng quà);
+// quà/follow (opts.force) thì thay người im lặng lâu nhất bất kể bao lâu. Không thay được → vào danh sách "đang thiền" (chip +N).
+const seatOwner = new Array(MAX_SEATS).fill(null);
+const overflow = new Map();          // id -> lastAt: người đã tương tác nhưng không có chỗ ngồi
+let moreSent = 0;
+function syncMore(){ if (overflow.size !== moreSent){ moreSent = overflow.size; broadcast({ t:'more', n: moreSent }); } }
+function removeViewer(id){
+  const v = viewers.get(id); if (!v) return;
+  viewers.delete(id);
+  if (v.seat != null && seatOwner[v.seat] === id) seatOwner[v.seat] = null;
+  broadcast({ t:'leave', id });
+}
+function clearAllViewers(){ viewers.clear(); seatOwner.fill(null); overflow.clear(); moreSent = 0; }
+function evictCandidate(force){
+  const pool = [...viewers.values()].filter(x => !isProtectedCeremonyViewer(x.id)), oldest = l => l.reduce((b, x) => (!b || x.lastAt < b.lastAt) ? x : b, null);
+  const c = oldest(pool.filter(x => x.coins === 0)) || (force ? oldest(pool) : null);
+  if (!c) return null;
+  if (!force && Date.now() - c.lastAt < CONTENT.limits.rotateAfterMin * 60_000) return null;
+  return c;
+}
 function seat(id, name, opts = {}){
   let v = viewers.get(id);
-  if (v){ v.lastAt = Date.now(); if (name) v.rawName = String(name).slice(0, 80); if (opts.avatar) v.avatar = opts.avatar; return { v, isNew:false }; }
-  if (viewers.size >= 100){                     // full: the longest-quiet non-donor (not in ceremony) stands up
-    const quiet = [...viewers.values()].filter(x => x.coins === 0 && !isProtectedCeremonyViewer(x.id)).sort((a,b) => a.lastAt - b.lastAt)[0];
-    if (!quiet) return { v:null, isNew:false };
-    viewers.delete(quiet.id); broadcast({ t:'leave', id: quiet.id });
+  if (v){ v.lastAt = Date.now(); if (name) v.rawName = String(name).slice(0, 80); if (opts.avatar) v.avatar = safeAvatar(opts.avatar); return { v, isNew:false }; }
+  let idx = seatOwner.indexOf(null);
+  if (idx < 0){
+    const c = evictCandidate(!!opts.force);
+    if (!c){ overflow.set(id, Date.now()); syncMore(); return { v:null, isNew:false }; }
+    overflow.set(c.id, c.lastAt);               // người bị thay vẫn đang xem: tính vào "đang thiền"
+    removeViewer(c.id); idx = seatOwner.indexOf(null);
   }
+  overflow.delete(id);
   const rawName = String(name || id).slice(0, 80);
   v = { id, rawName, name: sanitizeDisplayName(rawName), skin: opts.skin || DEFAULT_SKINS[viewers.size % DEFAULT_SKINS.length],
-        avatar: opts.avatar || '', coins: 0, joinedAt: Date.now(), lastAt: Date.now(), demo: !!opts.demo };
-  viewers.set(id, v);
+        avatar: safeAvatar(opts.avatar), coins: 0, joinedAt: Date.now(), lastAt: Date.now(), demo: !!opts.demo, seat: idx };
+  viewers.set(id, v); seatOwner[idx] = id;
   broadcast({ t:'join', v: pub(v), cap: capacity() });
+  syncMore();
   return { v, isNew:true };
 }
+// Dọn danh sách "đang thiền" (không chỗ ngồi): bỏ người im quá 30 phút, giữ tối đa 20000 người
+setInterval(() => {
+  const cut = Date.now() - 30 * 60_000;
+  for (const [id, at] of overflow) if (at < cut || overflow.size > 20000) overflow.delete(id);
+  syncMore();
+}, 60_000).unref?.();
 
 /* ------------------------------------------------------------- events in */
+// Giới hạn bình luận: mỗi người tối đa 1 bình luận mỗi limits.chatGapSec giây (bình luận dồn dập bị bỏ); lệnh thử từ bảng điều khiển (sim_) không bị giới hạn
+const chatLast = new Map();
+function chatAllowed(id){
+  if (String(id).startsWith('sim_')) return true;
+  const now = Date.now();
+  if (now - (chatLast.get(id) || 0) < CONTENT.limits.chatGapSec * 1000) return false;
+  chatLast.set(id, now);
+  return true;
+}
+setInterval(() => {
+  const cut = Date.now() - Math.max(10_000, CONTENT.limits.chatGapSec * 2000);
+  for (const [id, at] of chatLast) if (at < cut) chatLast.delete(id);
+}, 30_000).unref?.();
+
 function onChat(id, name, text, avatar){
   text = String(text || '').replace(/[\u0000-\u001F]/g, '').trim().slice(0, 120);
   if (!text) return;
+  if (!chatAllowed(id)) return;
   const want = skinFromText(text);
   const { v, isNew } = seat(id, name, { avatar, skin: want || undefined });
   if (!v) return;
@@ -678,10 +778,37 @@ function onChat(id, name, text, avatar){
   }
 }
 
+// Gom combo quà trước khi đọc: cùng người + cùng quà liên tiếp trong limits.giftComboMs thì đọc MỘT câu với tổng số lượng (tối đa giftComboMaxMs).
+// Hàng đợi giọng đọc đang bận (≥ tts.busyQueueLen câu): quà dưới tts.minGiftWhenBusy xu không đọc tên, chỉ phát câu chung đã lưu sẵn (tối đa 1 câu chờ).
+const giftCombos = new Map();
+function queueGiftTts(v, gift, count, coins, prayer){
+  const L = CONTENT.limits, key = v.id + '|' + gift, now = Date.now();
+  let c = giftCombos.get(key);
+  if (!c){ c = { id: v.id, gift, count: 0, coins: 0, first: now, timer: null }; giftCombos.set(key, c); }
+  c.count += count; c.coins += coins; c.prayer = prayer; c.name = v.rawName || v.name;
+  clearTimeout(c.timer);
+  c.timer = setTimeout(() => { giftCombos.delete(key); try { sayGiftCombo(c); } catch (e) { addLog('Đọc quà lỗi: ' + String(e?.message || e).slice(0, 160)); } },
+    Math.max(50, Math.min(L.giftComboMs, c.first + L.giftComboMaxMs - now)));
+  c.timer.unref?.();
+}
+function sayGiftCombo(c){
+  const v = viewers.get(c.id), big = c.coins >= 99;
+  if (ttsQueue.length >= CONTENT.tts.busyQueueLen && c.coins < CONTENT.tts.minGiftWhenBusy){
+    if (ttsQueue.some(q => q.meta?.generic)) return;                // đã có một câu chung đang chờ, không chất thêm
+    say(getFallbackTextWithoutName({ tag: 'gift' }), { tag: 'gift', fixed: true, generic: true, small: true, names: [] }, 2);
+    return;
+  }
+  const spokenName = spoken(c.name || v?.name);
+  const giftTpl = big ? (CONTENT.gift.bigLine || CONTENT.gift.line) : (CONTENT.gift.smallLine || CONTENT.gift.line);
+  const line = fill(giftTpl, { name: spokenName, gift: c.gift, count: c.count, total: v ? v.coins : c.coins, prayer: c.prayer,
+    times: c.count > 1 ? fill(CONTENT.gift.timesSpoken, { count: c.count }) : '' });
+  say(line, { tag: 'gift', small: !big, names: [spokenName] }, big ? 4 : 2);
+}
+
 function onGift(id, name, giftName, count, diamonds, avatar){
   const cleanGift = sanitizeGiftName(giftName);
   count = Math.max(1, Math.min(9999, +count || 1));
-  const { v } = seat(id, name, { avatar });
+  const { v } = seat(id, name, { avatar, force: true });
   if (!v) return;
   const coins = Math.max(1, (diamonds || 1) * (count || 1));
   v.coins += coins;
@@ -691,17 +818,6 @@ function onGift(id, name, giftName, count, diamonds, avatar){
   const tier = coins >= 99 ? 3 : coins >= 20 ? 2 : 1;
   const highGift = isHighTierGift(cleanGift, coins, tier);
   const scrollMerit = tier >= 3;               // quà ≥ 99 xu: chỉ hiện Sổ Vàng; quà nhỏ: chỉ khung #gift
-
-  const spokenName = spoken(v.rawName || name || v.name);
-  const giftTpl = scrollMerit ? (CONTENT.gift.bigLine || CONTENT.gift.line) : (CONTENT.gift.smallLine || CONTENT.gift.line);
-  const line = fill(giftTpl, {
-    name: spokenName,
-    gift: cleanGift,
-    count,
-    total: v.coins,
-    prayer,
-    times: count > 1 ? fill(CONTENT.gift.timesSpoken, { count }) : '',
-  });
 
   broadcast({
     t: 'gift',
@@ -722,7 +838,7 @@ function onGift(id, name, giftName, count, diamonds, avatar){
   }
 
   if (settings.gifts.readAll || coins >= settings.gifts.minDiamonds){
-    say(line, { tag: 'gift', small: tier < 3, names: [spokenName] }, tier >= 3 ? 4 : 2);
+    queueGiftTts(v, cleanGift, count, coins, prayer);
   }
 }
 
@@ -747,7 +863,7 @@ function onFollow(id, name, avatar){
   if (followed.has(id)) return;
   if (followed.size >= FOLLOWED_MAX) followed.delete(followed.values().next().value);
   followed.add(id);
-  const { v } = seat(id, name, { avatar });
+  const { v } = seat(id, name, { avatar, force: true });
   const who = v ? v.name : sanitizeDisplayName(name);
   broadcast({ t:'follow', id, name: who });
   if (v && CONTENT.zoom.onFollow) enqueueZoom(v.id, 'follow');
@@ -909,7 +1025,7 @@ function say(text, meta = {}, prio = 1){
 }
 
 function mergeSmallGifts(){
-  const idx = ttsQueue.map((q, i) => q.meta.small ? i : -1).filter(i => i >= 0);
+  const idx = ttsQueue.map((q, i) => q.meta.small && !q.meta.generic ? i : -1).filter(i => i >= 0);
   if (idx.length < 2) return;
   const names = [...new Set(idx.flatMap(i => ttsQueue[i].meta.names || []))];
   const shown = names.slice(0, 3).join(', '), more = names.length - 3;
@@ -1041,6 +1157,10 @@ function pruneTtsFiles(){
 async function synthesizeForQueue(text, meta){
   const order = CONTENT.tts?.order || ['vieneu', 'edge', 'cached'];
   let lastError = null;
+  if (meta?.fixed){                                  // câu cố định (kinh, câu chung): đã có trên đĩa thì phát luôn, không tạo lại
+    const hit = getCachedTtsFile(text);
+    if (hit) return { file: hit.fileName, backend: 'cached' };
+  }
 
   for (const backend of order){
     if (backend === 'vieneu'){
@@ -1174,8 +1294,9 @@ async function previewNameTTS(rawName, ws){
   }
 }
 
-async function pregenerateFixedTts(){
-  const fixed = [
+// Các câu cố định được lưu đĩa (kinh, lời nguyện, pháp ngữ, câu chung không tên). Chỉ những file cache_* ứng với các câu này (theo giọng hiện hành) được giữ.
+function fixedTtsTexts(){
+  return [
     ...(CONTENT.chants || []),
     ...(CONTENT.prayers || []),
     ...((CONTENT.oracles || []).map(o => o.teaching || o.verse).filter(Boolean)),
@@ -1185,6 +1306,23 @@ async function pregenerateFixedTts(){
     'Chào mừng Phật tử đã đến chánh điện.',
     'Nam Mô A Di Đà Phật.',
   ].filter(Boolean);
+}
+// Xoá file cache_* cũ không còn khớp câu cố định nào (đổi nội dung kinh/lời nguyện hoặc đổi giọng). Chạy lúc khởi động; trả về số file đã xoá.
+function pruneStaleTtsCache(){
+  const keep = new Set(fixedTtsTexts().map(t => getTtsCacheKey(t)));
+  let removed = 0;
+  try {
+    for (const f of fs.readdirSync(TTS_DIR)){
+      const m = /^cache_([0-9a-f]{16})\.(mp3|wav)$/.exec(f);
+      if (m && !keep.has(m[1])){ try { fs.unlinkSync(path.join(TTS_DIR, f)); removed++; } catch {} }
+    }
+  } catch {}
+  return removed;
+}
+{ const n = pruneStaleTtsCache(); if (n) console.log(`Đã xoá ${n} file cache giọng đọc cũ không còn khớp câu cố định nào`); }
+
+async function pregenerateFixedTts(){
+  const fixed = fixedTtsTexts();
 
   for (const text of fixed){
     const cached = getCachedTtsFile(text);
@@ -1388,12 +1526,12 @@ async function disconnectTikTok(){
 const DEMO_NAMES = CONTENT.demo.names;
 function fillDemo(n){
   const have = [...viewers.values()].filter(v => v.demo).length;
-  for (let i = have; i < n && viewers.size < 100; i++){
+  for (let i = have; i < n && viewers.size < MAX_SEATS; i++){
     const name = DEMO_NAMES[i % DEMO_NAMES.length] + (i >= DEMO_NAMES.length ? ' ' + (Math.floor(i / DEMO_NAMES.length) + 1) : '');
     seat('demo_' + i, name, { demo: true, skin: ['man','woman','woman','man','granny','monk','nun','child'][i % 8] });
   }
 }
-function clearSeats(){ viewers.clear(); resetZoom(); resetCeremony(); broadcast(snapshot()); addLog('Đã làm trống bồ đoàn'); }
+function clearSeats(){ clearAllViewers(); resetZoom(); resetCeremony(); broadcast(snapshot()); addLog('Đã làm trống bồ đoàn'); }
 
 /* ------------------------------------------------------------- control */
 function onControl(m, ws){
@@ -1428,10 +1566,14 @@ function onControl(m, ws){
     case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }, 5); break;
     case 'test_name': bg('Nghe thử lỗi', previewNameTTS(m.name, ws)); break;
     case 'test_vieneu': bg('Nghe thử VieNeu lỗi', previewVieNeuTTS(ws)); break;
-    case 'settings':
+    case 'settings': {
+      const wasOld = settings.scene === 'old';
       applySettings(m.settings || {});
+      if ((settings.scene === 'old') !== wasOld) resetCeremony();       // hai bố cục khác số bồ đoàn: đặt lại các lượt lễ đang chạy
+
       if (!settings.zoomEnabled) resetZoom();
       scheduleChant(); broadcast({ t:'settings', settings, cap: capacity() }); break;
+    }
     case 'bots': setBots(!!m.on, +m.n || 12, typeof m.pace === 'string' ? m.pace : 'mid'); break;
   }
 }
@@ -1443,7 +1585,7 @@ const SETTING_RULES = {
   pitch: v => clamp(v, -50, 50), rate: v => clamp(v, -50, 50), moBpm: v => clamp(v, 20, 120), chantEveryMin: v => clamp(v, 1, 60),
   music: Boolean, mo: Boolean, autoChant: Boolean, zoomEnabled: Boolean, joinOnEnter: Boolean, readMemberJoin: Boolean, safeZone: Boolean,
   musicTrack: v => ['shuffle', '1', '2', '3', '4', '5'].includes(String(v)) ? String(v) : 'shuffle',
-  lightingMode: v => ['auto', 'day', 'night'].includes(v) ? v : 'auto',
+  scene: v => ['auto', 'lunar', 'day', 'dawn', 'night', 'ram', 'phatdan', 'vulan', 'old'].includes(v) ? v : 'auto',
   gifts: v => ({ readAll: !!(v && v.readAll), minDiamonds: clamp(v && v.minDiamonds, 1, 50000) }),
   seatMode: v => ['auto', '24', '36', '64', '100'].includes(String(v)) ? String(v) : 'auto',
 };
@@ -1451,25 +1593,27 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, Math.round(+v || 0)));
 function applySettings(o){ for (const [k, fn] of Object.entries(SETTING_RULES)) if (k in o) settings[k] = fn(o[k]); }
 
 /* ----------------------------------------------------------------- bots */
-let botTimer = null;
+let botTimer = null, botCount = 0;
 const BOT_LINES = CONTENT.demo.botLines;
+// n bot (tối đa 300): 100 người đầu có chỗ ngồi, phần còn lại vào "đang thiền" và thay chỗ theo luật xoay vòng khi bình luận
 function setBots(on, n, pace){
   clearInterval(botTimer); botTimer = null;
   if (on){
-    n = clamp(n, 1, 100);
+    n = clamp(n, 1, 300); botCount = n;
     for (let i = 0; i < n; i++) seat('bot_' + i, DEMO_NAMES[(i + 7) % DEMO_NAMES.length] + ' ·bot', { demo: true });
     const every = { slow: 4000, mid: 1800, fast: 700 }[pace] || 1800;
     botTimer = setInterval(() => {
-      const ids = [...viewers.keys()].filter(id => id.startsWith('bot_')); if (!ids.length) return;
-      const id = ids[Math.floor(Math.random() * ids.length)], v = viewers.get(id), r = Math.random();
-      if (r < .62) onChat(id, v.name, BOT_LINES[Math.floor(Math.random() * BOT_LINES.length)]);
+      const i = Math.floor(Math.random() * botCount), id = 'bot_' + i, name = DEMO_NAMES[(i + 7) % DEMO_NAMES.length] + ' ·bot', r = Math.random();
+      if (r < .62) onChat(id, name, BOT_LINES[Math.floor(Math.random() * BOT_LINES.length)]);
       else if (r < .88) onLikes(id, 1 + Math.floor(Math.random() * 4));
-      else if (r < .96) onGift(id, v.name, 'Hoa hồng', 1 + Math.floor(Math.random() * 3), 1);
-      else onGift(id, v.name, 'Đèn hoa sen', 1, 99);
+      else if (r < .96) onGift(id, name, 'Hoa hồng', 1 + Math.floor(Math.random() * 3), 1);
+      else onGift(id, name, 'Đèn hoa sen', 1, 99);
     }, every);
     addLog(`🤖 Bật ${n} bot, nhịp ${pace}`);
   } else {
-    for (const id of [...viewers.keys()]) if (id.startsWith('bot_') && !isProtectedCeremonyViewer(id)) { viewers.delete(id); broadcast({ t:'leave', id }); }
+    for (const id of [...viewers.keys()]) if (id.startsWith('bot_') && !isProtectedCeremonyViewer(id)) removeViewer(id);
+    for (const id of [...overflow.keys()]) if (id.startsWith('bot_')) overflow.delete(id);
+    syncMore();
     addLog('🤖 Tắt bot');
   }
   broadcast({ t:'bots', on }, 'control');
@@ -1530,18 +1674,37 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024,
     }
     req.kind = kind; cb(true);
   } });
+// Bảng điều khiển nhận ngay từng bản tin; overlay nhận gói gom mỗi limits.batchMs (100 ms): một lần gửi / client / nhịp thay vì từng sự kiện,
+// các bản tin 'like' cùng một người trong nhịp được cộng dồn thành một.
+let batch = [];
+function flushBatch(){
+  if (!batch.length) return;
+  const likes = new Map(), out = [];
+  for (const m of batch){
+    if (m.t === 'like'){ const k = likes.get(m.id); if (k){ k.n = Math.min(100000, k.n + m.n); continue; } const c = { ...m }; likes.set(m.id, c); out.push(c); }
+    else out.push(m);
+  }
+  batch = [];
+  const s = JSON.stringify(out.length === 1 ? out[0] : { t: 'batch', msgs: out });
+  for (const c of wss.clients) if (c.readyState === 1 && c.role !== 'control' && c.live !== false) { try { c.send(s); } catch (e) { console.error('[broadcast] gửi lỗi:', e?.message); } }
+}
 function broadcast(msg, only){
   const s = JSON.stringify(msg);
-  for (const c of wss.clients) if (c.readyState === 1 && (!only || c.role === only)) { try { c.send(s); } catch (e) { console.error('[broadcast] gửi lỗi:', e?.message); } }
+  for (const c of wss.clients) if (c.readyState === 1 && c.role === 'control' && (!only || only === 'control')) { try { c.send(s); } catch (e) { console.error('[broadcast] gửi lỗi:', e?.message); } }
+  if (only !== 'control') { batch.push(msg); if (batch.length > 5000) batch.splice(0, batch.length - 5000); }
 }
+setInterval(flushBatch, CONTENT.limits.batchMs).unref?.();
 wss.on('error', e => survive('wss error', e));
 server.on('error', e => survive('server error', e));
 server.on('clientError', (e, socket) => { try { socket.destroy(); } catch {} });
 wss.on('connection', (ws, req) => {
   ws.on('error', e => console.error('[ws client] lỗi:', e?.message));            // không có listener thì lỗi socket làm sập tiến trình
   ws.role = req.kind === 'local' && new URL(req.url, 'http://x').searchParams.get('role') === 'control' ? 'control' : 'overlay';
+  ws.live = false;                                             // chưa nhận gói gom cho tới khi đã nhận snapshot
   try {
+    flushBatch();                                              // gói cũ gửi cho các client khác trước, để snapshot không bị sự kiện cũ chồng lên
     ws.send(JSON.stringify(snapshot()));
+    ws.live = true;
     if (ws.role === 'control') ws.send(JSON.stringify({ t:'logs', lines: log }));
   } catch (e) { console.error('[ws] gửi snapshot lỗi:', e?.message); }
   ws.on('message', buf => {
