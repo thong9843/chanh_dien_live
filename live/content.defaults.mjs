@@ -20,7 +20,9 @@ export default {
     "ambientNight": "🕯️ Đêm Tĩnh Tâm"
   },
   "plaque": {
-    "enabled": false
+    "enabled": true,
+    "text": "Nam Mô A Di Đà Phật",
+    "top": 185
   },
   "guide": {
     "title": "💬 Bình luận để tương tác",

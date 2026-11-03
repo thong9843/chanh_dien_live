@@ -143,7 +143,11 @@ function loadContent(){
       globalCooldownSec: cNum(o('oracle')?.globalCooldownSec, 1, 300, D.oracle?.globalCooldownSec || 20),
       tts: cStr(o('oracle')?.tts, D.oracle?.tts || 'Pháp ngữ gửi Phật tử {name}.', 200),
     },
-    plaque: { enabled: typeof o('plaque').enabled === 'boolean' ? o('plaque').enabled : D.plaque.enabled },   // tiêu đề thiền đường trên overlay: mặc định tắt
+    plaque: {
+      enabled: typeof o('plaque').enabled === 'boolean' ? o('plaque').enabled : D.plaque.enabled,
+      text: cStr(o('plaque').text, D.plaque.text, 60),
+      top: cNum(o('plaque').top, 120, 270, D.plaque.top)
+    },
     layout: (() => {
       const L = o('layout'), D = DEFAULT_CONTENT.layout, sub = k => (L[k] && typeof L[k] === 'object' && !Array.isArray(L[k])) ? L[k] : {};
       const n = (src, def, k, lo, hi) => cNum(src[k], lo, hi, def[k]);

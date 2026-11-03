@@ -19,15 +19,12 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #stage{position:absolute;left:50%;top:50%;width:1080px;height:1920px;transform-origin:center center;overflow:hidden;background:var(--bg)}
 #c{position:absolute;inset:0;width:1080px;height:1920px}
 .ui{position:absolute;z-index:3}
-/* title plaque */
-#plaque{display:none;left:90px;right:90px;top:70px;height:150px;border:3px solid var(--gold);border-radius:28px;
-  background:linear-gradient(180deg,rgba(70,26,10,.92),rgba(30,12,6,.92));box-shadow:0 0 0 6px rgba(0,0,0,.35),0 0 50px rgba(226,176,79,.25) inset;
-  flex-direction:column;align-items:center;justify-content:center;gap:6px}
-#plaque.on{display:flex}
-#plaque::before,#plaque::after{content:"❁";position:absolute;top:50%;transform:translateY(-50%);font-size:44px;color:var(--gold)}
-#plaque::before{left:34px}#plaque::after{right:34px}
-#title{font-family:var(--display);font-weight:700;font-size:58px;letter-spacing:.06em;color:var(--gold2);text-transform:uppercase;text-shadow:0 2px 0 #3a1406,0 0 20px rgba(255,200,100,.35)}
-#subtitle{font-family:var(--display);font-size:30px;letter-spacing:.12em;color:var(--fg)}
+/* title plaque: dòng chữ Nam Mô A Di Đà Phật mạ vàng chạm khắc thanh tịnh trên cùng */
+#plaque{display:none;position:absolute;left:50%;transform:translateX(-50%);top:185px;width:100%;max-width:440px;text-align:center;pointer-events:none;z-index:2}
+#plaque.on{display:block}
+#plaqueText{font-family:var(--display), "Noto Serif", Georgia, serif;font-weight:700;font-size:30px;color:#F3D58A;
+  letter-spacing:2px;white-space:nowrap;display:inline-block;line-height:1.2;
+  text-shadow:0 0 10px rgba(243,213,138,0.65), 0 0 22px rgba(212,168,75,0.35), 0 2px 4px rgba(0,0,0,0.85)}
 /* pills */
 /* chip trạng thái: số người ở góc trên-trái, đồng hồ + ngày/đêm ở góc trên-phải (xếp dọc, không chip nào nằm trên đầu/hào quang tượng) */
 #chipCount{left:24px;top:240px}
@@ -82,7 +79,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 <body>
 <div id="fit"><div id="stage">
   <canvas id="c" width="1080" height="1920"></canvas>
-  <div id="plaque" class="ui"><div id="title">Chánh Điện Tịnh Tâm</div><div id="subtitle">Nam Mô A Di Đà Phật</div></div>
+  <div id="plaque" class="ui"><span id="plaqueText">Nam Mô A Di Đà Phật</span></div>
   <div id="chipCount" class="pill ui"><span class="dot"></span><span id="count">0/24</span><small id="watchLbl">đang<br>thiền</small></div>
   <div id="chipsRight" class="ui">
     <div class="pill">⏱ <span id="timer">00:00:00</span></div>
@@ -233,7 +230,13 @@ function applyContent(c){
   document.getElementById('unmute')?.replaceChildren(document.createTextNode(L('unmute')));
   const w = document.getElementById('watchLbl'); w.replaceChildren(); L('watching','').split('|').forEach((p,i)=>{ if(i) w.append(document.createElement('br')); w.append(p); });
   startTips(c.guide?.title, c.guide?.lines || [], c.layout?.ui?.tips?.perPage || 3, c.layout?.ui?.tips?.sec || 8);
-  document.getElementById('plaque').classList.toggle('on', !!c.plaque?.enabled);   // tiêu đề thiền đường: mặc định tắt (content.json → plaque.enabled)
+  const plq = document.getElementById('plaque');
+  if (plq) {
+    plq.classList.toggle('on', !!c.plaque?.enabled);
+    if (Number.isFinite(c.plaque?.top)) plq.style.top = c.plaque.top + 'px';
+  }
+  const plqText = document.getElementById('plaqueText');
+  if (plqText && c.plaque?.text) plqText.textContent = c.plaque.text;
   Object.assign(credit, c.credit || {});
   meritScroll.configure(c.meritScroll ? { ...c.meritScroll, top: c.layout?.meritScroll?.top } : null);
   if (c.ceremony?.bow) setBowConfig(c.ceremony.bow);
@@ -580,8 +583,8 @@ function connect(){
   };
 }
 function applySettings(){
-  document.getElementById('title').textContent=settings.title||'Chánh Điện Tịnh Tâm';       // plaque ẩn mặc định, vẫn cập nhật chữ để bật lại được
-  document.getElementById('subtitle').textContent=settings.subtitle||'Nam Mô A Di Đà Phật';
+  const plqText = document.getElementById('plaqueText');
+  if (plqText) plqText.textContent = settings.plaqueText || CONTENT?.plaque?.text || 'Nam Mô A Di Đà Phật';
   updateAmbientBadge();
   document.getElementById('safe').style.display = settings.safeZone ? 'block' : 'none';
   if (musicEl && (settings.musicTrack||'shuffle')!==trackMode){ bag=[]; nextTrack(); }   // đổi chế độ/bài từ bảng điều khiển: chuyển ngay
