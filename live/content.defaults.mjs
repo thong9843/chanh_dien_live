@@ -282,11 +282,11 @@ export default {
     },
     "teacherTagGap": 6,
     "buddhaGlow": {
-      "head": { "x": 540, "y": 350, "r": 330, "alpha": 0.34 },
-      "body": { "x": 540, "y": 640, "rx": 330, "ry": 330, "alpha": 0.2 },
+      "head": { "x": 540, "y": 355, "r": 175, "alpha": 0.38 },
+      "body": { "x": 540, "y": 625, "rx": 195, "ry": 285, "alpha": 0.26 },
       "breathSec": 7,
-      "breathAmp": 0.25,
-      "nightBoost": 1.4,
+      "breathAmp": 0.22,
+      "nightBoost": 1.35,
       "vignette": { "alpha": 0.18, "size": 260 }
     },
     "meritScroll": {

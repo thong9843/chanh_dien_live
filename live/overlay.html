@@ -610,23 +610,23 @@ function bubble(text,x,y,s){
 /* ---- Lớp tĩnh vẽ sẵn vào canvas ẩn: nền (hall) và 6 vị thầy + thẻ tên (tách đôi quanh thầy trụ trì để hào quang vẫn nằm đúng giữa).
    Chỉ vẽ lại khi bố cục, chế độ ngày/đêm, ảnh hoặc phông chữ thay đổi. */
 /* Hào quang + quầng sáng thân Phật: sprite vẽ sẵn (gradient tròn một lần), mỗi khung chỉ drawImage với alpha 'thở' chu kỳ 6–8s. Ban đêm sáng hơn (nightBoost) để Phật luôn nổi nhất cảnh. */
-let glowSprite=null;
-function getGlowSprite(){
-  if (glowSprite) return glowSprite;
-  const c=document.createElement('canvas'); c.width=c.height=256; const x=c.getContext('2d');
-  const g=x.createRadialGradient(128,128,0,128,128,128);
-  g.addColorStop(0,'rgba(255,226,160,1)'); g.addColorStop(.35,'rgba(255,208,120,.55)'); g.addColorStop(.7,'rgba(255,184,84,.16)'); g.addColorStop(1,'rgba(255,170,60,0)');
-  x.fillStyle=g; x.fillRect(0,0,256,256);
-  return (glowSprite=c);
+let buddhaGlowFX = null;
+function getBuddhaGlowFX(){
+  if (!buddhaGlowFX && window.ChanhDienCanvas?.BuddhaGlowSystem) {
+    buddhaGlowFX = new window.ChanhDienCanvas.BuddhaGlowSystem(LAYOUT.buddhaGlow);
+  }
+  return buddhaGlowFX;
 }
-const BUDDHA_GLOW_DEFAULT={ head:{x:540,y:350,r:330,alpha:.34}, body:{x:540,y:640,rx:330,ry:330,alpha:.2}, breathSec:7, breathAmp:.25, nightBoost:1.4, vignette:{alpha:.18,size:260} };
-function drawBuddhaGlow(t, isDay){
-  const G=LAYOUT.buddhaGlow||BUDDHA_GLOW_DEFAULT, sp=getGlowSprite();
-  const k=(1+G.breathAmp*Math.sin(2*Math.PI*t/G.breathSec))*(isDay?1:G.nightBoost);   // chỉ đổi alpha, không đổi kích thước
-  ctx.save(); ctx.globalCompositeOperation='lighter';
-  ctx.globalAlpha=Math.min(1,G.body.alpha*k); ctx.drawImage(sp,G.body.x-G.body.rx,G.body.y-G.body.ry,G.body.rx*2,G.body.ry*2);
-  ctx.globalAlpha=Math.min(1,G.head.alpha*k); ctx.drawImage(sp,G.head.x-G.head.r,G.head.y-G.head.r,G.head.r*2,G.head.r*2);
-  ctx.restore();
+const BUDDHA_GLOW_DEFAULT={ head:{x:540,y:355,r:175,alpha:.38}, body:{x:540,y:625,rx:195,ry:285,alpha:.26}, breathSec:7, breathAmp:.22, nightBoost:1.35, vignette:{alpha:.18,size:260} };
+function drawBuddhaGlow(t, isDay, extraAlpha = 0){
+  const fx = getBuddhaGlowFX();
+  const G = LAYOUT.buddhaGlow || BUDDHA_GLOW_DEFAULT;
+  if (fx) {
+    fx.draw(ctx, t, isDay, {
+      ...G,
+      headAlpha: (G.head?.alpha ?? 0.38) + extraAlpha,
+    });
+  }
 }
 function drawVignette(c){
   const V=(LAYOUT.buddhaGlow||BUDDHA_GLOW_DEFAULT).vignette, a=V.alpha, n=V.size; if (a<=0) return;
@@ -685,13 +685,9 @@ function frame(now){
   // 1. Ánh Sáng & Thời Tiết Chánh Điện Realtime (Ban ngày: Nắng cửa sổ / Ban đêm: Nến & Đèn dầu)
   ambientFX.drawBackgroundLighting(ctx, dt, t, settings.lightingMode || 'auto', { shadeBaked: true });
 
-  // 2. Hào quang tượng Phật & ánh nến bàn thờ
+  // 2. Hào quang tượng Phật rạng rỡ (halo tròn sau đầu + mandorla elip thân, không viền chữ nhật)
   haloPulse=Math.max(0,haloPulse-dt*.4);
-  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=LAYOUT.halo.alpha+.08*Math.sin(t*1.2)+haloPulse*.5; sprite(A.halo,540,LAYOUT.halo.y,LAYOUT.halo.scale+haloPulse*.35,.5); ctx.restore();
-  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.04+.03*Math.sin(t*9)*Math.sin(t*13.3); ctx.fillStyle='#ffb347'; ctx.fillRect(LAYOUT.candleGlow.x,LAYOUT.candleGlow.y,LAYOUT.candleGlow.w,LAYOUT.candleGlow.h); ctx.restore();
-
-  // 2b. Phật rạng rỡ: hào quang sau đầu + quầng sáng thân (sprite vẽ sẵn, thở nhẹ)
-  drawBuddhaGlow(t, ambientFX.isDaytime(settings.lightingMode || 'auto'));
+  drawBuddhaGlow(t, ambientFX.isDaytime(settings.lightingMode || 'auto'), haloPulse * 0.35);
 
   // 3. Lư Hương Lửa & Khói Trầm Tương Tác (Perlin Noise + Sine Wave drift)
   incenseFX.updateAndDraw(ctx, dt, t, 540, LAYOUT.incense.y);

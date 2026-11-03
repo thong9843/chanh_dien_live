@@ -2092,6 +2092,81 @@
     }
   }
 
+  /* =========================================================================
+   * 7. HÀO QUANG TƯỢNG PHẬT (ROUND HALO + MANDORLA VERTICAL ELLIPSE)
+   *    - Hào quang tròn sau đầu (round soft halo)
+   *    - Quầng sáng thân hình quả hạnh / elip dọc (mandorla vertical ellipse)
+   *    - Gradient tròn rơi về 0 hoàn toàn trong lòng vòm, không chạm mép cột
+   *    - Sprite dựng sẵn (pre-rendered), chỉ biến thiên alpha theo chu kỳ thở
+   * ========================================================================= */
+  class BuddhaGlowSystem {
+    constructor(cfg = {}) {
+      this.cfg = cfg;
+      this._sprite = null;
+      this._initSprite();
+    }
+
+    _initSprite() {
+      if (typeof document === 'undefined') return;
+      const c = document.createElement('canvas');
+      c.width = c.height = 512;
+      const x = c.getContext('2d');
+      const cx = 256, cy = 256, r = 240;
+      const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0.00, 'rgba(255, 238, 175, 1.0)');
+      g.addColorStop(0.28, 'rgba(255, 215, 130, 0.65)');
+      g.addColorStop(0.55, 'rgba(255, 185, 80, 0.28)');
+      g.addColorStop(0.80, 'rgba(255, 160, 45, 0.08)');
+      g.addColorStop(1.00, 'rgba(255, 140, 30, 0.0)');
+      x.fillStyle = g;
+      x.fillRect(0, 0, 512, 512);
+      this._sprite = c;
+    }
+
+    draw(ctx, t, isDay, opts = {}) {
+      if (!this._sprite) return;
+      const h = opts.head || {};
+      const b = opts.body || {};
+
+      const headX = opts.headX ?? h.x ?? 540;
+      const headY = opts.headY ?? h.y ?? 355;
+      const headR = opts.headR ?? h.r ?? 175;
+      const headAlpha = opts.headAlpha ?? h.alpha ?? 0.38;
+
+      const bodyX = opts.bodyX ?? b.x ?? 540;
+      const bodyY = opts.bodyY ?? b.y ?? 625;
+      const bodyRx = opts.bodyRx ?? b.rx ?? 195;
+      const bodyRy = opts.bodyRy ?? b.ry ?? 285;
+      const bodyAlpha = opts.bodyAlpha ?? b.alpha ?? 0.26;
+
+      const breathSec = opts.breathSec ?? 7.0;
+      const breathAmp = opts.breathAmp ?? 0.22;
+      const nightBoost = opts.nightBoost ?? 1.35;
+
+      const breath = 1.0 + breathAmp * Math.sin((2 * Math.PI * t) / breathSec);
+      const boost = isDay ? 1.0 : nightBoost;
+      const effK = breath * boost;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+
+      // 1. Mandorla elip dọc bao quanh thân Phật
+      const bA = Math.min(1.0, bodyAlpha * effK);
+      if (bA > 0.005) {
+        ctx.globalAlpha = bA;
+        ctx.drawImage(this._sprite, bodyX - bodyRx, bodyY - bodyRy, bodyRx * 2, bodyRy * 2);
+      }
+
+      // 2. Hào quang tròn sau đầu Phật
+      const hA = Math.min(1.0, headAlpha * effK);
+      if (hA > 0.005) {
+        ctx.globalAlpha = hA;
+        ctx.drawImage(this._sprite, headX - headR, headY - headR, headR * 2, headR * 2);
+      }
+
+      ctx.restore();
+    }
+  }
   // Xuất module toàn cục cho overlay.html sử dụng
   global.ChanhDienCanvas = {
     lerp,
@@ -2101,6 +2176,7 @@
     IncenseSmokeSystem,
     SilkMeritScroll,
     AmbientLightingSystem,
+    BuddhaGlowSystem,
     CameraZoomController,
     CeremonyDirector,
     ALTAR_DEFAULT,
