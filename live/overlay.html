@@ -929,6 +929,7 @@ let lastDraw=performance.now(), lastProfileV3=null;
 function frame(now){
   requestAnimationFrame(frame);
   if (now - lastDraw < MIN_FRAME_MS) return;      // giới hạn 30 fps; mọi chuyển động tính theo dt nên tốc độ không đổi
+  window.__drawnFrames = (window.__drawnFrames || 0) + 1; window.__f = window.__drawnFrames;
   const dt=Math.min((now-lastDraw)/1000,.1); lastDraw=now; const t=now/1000;
   const sk=staticKeyNow(); if (sk!==staticKey){ staticKey=sk; renderStatic(); }
   ctx.clearRect(0,0,1080,1920);

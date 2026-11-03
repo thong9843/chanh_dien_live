@@ -104,7 +104,7 @@ async function main() {
   if (!page) throw new Error('Edge không mở được CDP/tab overlay sau 30s');
   br = new Cdp(ver.webSocketDebuggerUrl); pg = new Cdp(page.webSocketDebuggerUrl);
   await pg.send('Page.bringToFront'); await pg.send('Performance.enable'); await pg.send('Runtime.enable');
-  await pg.send('Runtime.evaluate', { expression: `window.__f=0;(function l(){window.__f++;requestAnimationFrame(l)})();document.getElementById('unmute')?.click();0` });
+  await pg.send('Runtime.evaluate', { expression: `window.__drawnFrames=0;window.__f=0;document.getElementById('unmute')?.click();0` });
 
   // Trạng thái GPU của Edge (tương đương edge://gpu): canvas phần cứng hay phần mềm.
   try {
@@ -159,7 +159,7 @@ async function main() {
   const rows = []; const kinds = ['incense', 'worship', 'prostrate'];
   const N = Math.round(MIN * 60000 / INTERVAL);
   let c0 = null, f0 = null, t0 = Date.now();
-  try { c0 = await cpuNow(); f0 = await evalNum('window.__f'); t0 = Date.now(); } catch (e) { log('Mẫu gốc lỗi:', e.message); }
+  try { c0 = await cpuNow(); f0 = await evalNum('window.__drawnFrames ?? window.__f ?? 0'); t0 = Date.now(); } catch (e) { log('Mẫu gốc lỗi:', e.message); }
   let skipped = 0;
   for (let i = 1; i <= N; i++) {
     for (let k = 0; k < INTERVAL / 6000; k++) {          // tải thêm: lên lễ, follow, quà lớn xen kẽ
@@ -170,7 +170,7 @@ async function main() {
     }
     try {
       const vis = (await pg.send('Runtime.evaluate', { expression: 'document.visibilityState' })).result.result.value;
-      const c1 = await cpuNow(), f1 = await evalNum('window.__f'), t1 = Date.now();
+      const c1 = await cpuNow(), f1 = await evalNum('window.__drawnFrames ?? window.__f ?? 0'), t1 = Date.now();
       const dt = (t1 - t0) / 1000, m = await heap();
       if (!c0 || f0 == null) { c0 = c1; f0 = f1; t0 = t1; throw new Error('chưa có mẫu gốc, đặt lại mốc'); }
       const g = k => (c1.byType[k] || 0) - (c0.byType[k] || 0);
@@ -184,7 +184,7 @@ async function main() {
     } catch (e) {
       skipped++; log(`Bỏ mẫu ${i}/${N}: ${e.message}`);
       c0 = null; f0 = null;                                // sau lỗi, mẫu kế tiếp chỉ đặt lại mốc
-      try { c0 = await cpuNow(); f0 = await evalNum('window.__f'); t0 = Date.now(); } catch {}
+      try { c0 = await cpuNow(); f0 = await evalNum('window.__drawnFrames ?? window.__f ?? 0'); t0 = Date.now(); } catch {}
       if (skipped >= 3 && rows.length === 0) throw new Error('Quá nhiều mẫu lỗi liên tiếp, dừng đo');
     }
   }
