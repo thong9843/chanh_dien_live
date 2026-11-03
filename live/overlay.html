@@ -46,7 +46,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #tipsBody .pg.show{opacity:1}
 #tipsBody .pg div{font-size:25px;line-height:1.35}
 #tipsBody b{color:var(--gold2)}
-#merit{left:800px;top:320px;width:256px;height:670px;box-sizing:border-box;padding:16px 20px;text-align:center}
+#merit{left:800px;top:320px;width:256px;height:auto;box-sizing:border-box;padding:16px 20px;text-align:center}
 #merit h3{margin:0 0 10px;font-family:var(--display);font-size:25px;color:var(--gold2);letter-spacing:.02em;white-space:nowrap}
 #merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:12px}
 #merit li{display:block;border-bottom:1px solid rgba(226,176,79,.25);padding-bottom:8px}
@@ -255,7 +255,7 @@ function applyUiLayout(Lo){
   $('chipsRight').style.right = px(1080 - ch.right); $('chipsRight').style.top = px(ch.top);
   const t = $('tips'), tp = u.tips, m = $('merit'), mr = u.merit;
   if (tp){ t.style.left = px(tp.x); t.style.top = px(tp.y); t.style.width = px(tp.w); t.style.height = px(tp.h); }
-  if (mr){ m.style.left = px(mr.x); m.style.top = px(mr.y); m.style.width = px(mr.w); m.style.height = px(mr.h); MERIT_MAX = mr.max; MERIT_NAME_MAX = mr.nameMax; }
+  if (mr){ m.style.left = px(mr.x); m.style.top = px(mr.y); m.style.width = px(mr.w); m.style.height = 'auto'; if (mr.h) m.style.maxHeight = px(mr.h); MERIT_MAX = mr.max; MERIT_NAME_MAX = mr.nameMax; }
   const nt = u.notice;   // vùng thông báo chung: căn giữa x 540
   if (nt){ const nb = $('noticeBox'); nb.style.width = px(nt.w); nb.style.left = px(540 - nt.w / 2); nb.style.top = px(nt.top); nb.style.height = px(nt.h); }
   const safe = $('safe'); safe.replaceChildren();
