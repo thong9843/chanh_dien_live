@@ -164,6 +164,14 @@ Mọi số liệu ở `content.json → ceremony` (`inviteText`, `inviteSec 3`, 
 
 ## 8. Việc còn mở
 
+**Đợt nâng cấp v4 (đã hoàn thành)**
+- **Backgrounds v4 & layout.v3**: Thay nền 6 cảnh v4 với bố cục mới; cập nhật 8 bồ đoàn (hàng sau y1348 w118, hàng trước y1412 w136), thảm x148–932 y1330–1488, lối giữa không đổi x452–628 từ y1489–1920; seatArea trái x16–440, phải x640–1064 y1500–1900; 6 vị trí sư thầy 2 bên nghiêng hướng vào giữa.
+- **Tỉ lệ nhân vật & chỗ ngồi**: Chuẩn hóa tỉ lệ theo bồ đoàn (0.74 hàng sau, 0.85 hàng trước), lối đi giữa nội suy 0.95 -> 0.74; người xem ngồi xa/gần 0.72 -> 0.95; tối đa 30 chỗ ngồi nhìn thấy (chồng lấn ngang <= 35%), người thừa đưa vào chip `+N người đang thiền`; kẹp x giữ nhân vật trong 8–1072.
+- **Thẻ giao diện ngoài vùng bình luận TikTok**: Thẻ gợi ý (trái) x16–280 và Tri Ân (phải) x800–1064 đưa lên y560–800, bán trong suốt; không còn thẻ dưới y1240.
+- **Thẻ tên & hàng đợi thông báo**: Tối đa 12 thẻ tên người xem không chồng đè; người hành lễ chỉ hiện thẻ tên nhỏ trên đầu; hàng đợi thông báo tạm dừng khi có người trên bồ đoàn.
+- **Đo hiệu năng 10 phút 100 bot**: Đếm khung hình thực tế vẽ (window.__drawnFrames); fps duy trì ~29–30, DOM nodes và bộ nhớ JS heap ổn định.
+- **Dọn dẹp & Kiểm tra**: Dọn cache TTS, đưa tài nguyên Đợt 3 chưa dùng sang `assets/_unused/`, xóa log/bench cũ, sinh bộ ảnh `shots/v4/` (6 cảnh idle, 30+ người xem, 8 người trên bồ đoàn quỳ lạy, safe zone overlay); `check-assets` 0 lỗi, overlay và control 0 console error.
+
 **Cần kiểm tra trên máy thật**
 - Nghe giọng đọc Edge TTS, hai bài nhạc, mõ, chuông; cân âm lượng.
 - Xem `fx_halo` trên overlay thật: hào quang không được hiện thành ô vuông sáng.
