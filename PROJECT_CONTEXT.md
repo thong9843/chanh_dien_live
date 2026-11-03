@@ -89,14 +89,18 @@ Chạy: `cd live && npm install && npm start` → mở `http://localhost:3000/li
 | `teachers` | 6 vị: trái x 165/275/385 (y 1345/1335/1325, `flip:false`), phải x 695/805/915 (y 1325/1335/1345, `flip:true`), `s 0.40` | Hai dãy thầy, lối giữa để trống. `master` (hào quang) = x 385. Thẻ tên chen chúc thì chỉ hiện thầy trụ trì |
 | `altarSpot` | `x 540, y 1350, scale 0.40` | Chỗ người lên lễ (ngay trước bàn thờ, giữa 2 dãy thầy); scale bằng thầy, không nhân scaleBoost |
 | `floor` | `yTop 1430, yBot 1870, halfTop 330, halfBot 470` | Vùng xếp chỗ người xem (24/36/64/100 chỗ, lối giữa) |
-| `gift.top` | 940 | Khung xướng quà nhỏ (< 99 xu), rộng ≤ 640px, căn giữa |
-| `chant.top` | 980 | Khung tụng kinh |
-| `toast.top` | 870 | Thông báo share/mốc tim |
-| `meritScroll.top` | 1000 | Đỉnh Sổ Vàng (quà ≥ 99 xu); server kẹp ≥ 640 để không che mặt tượng. Rộng `meritScroll.halfW 360` |
-| `ui` | `pillsCenterX 459, hintTop 326, hintSec 8, meritLeft 656, meritTop 630, meritW 262, bannerLeft 162, bannerRight 918, giftMaxW 640` | Bố cục UI trong vùng TikTok nhìn thấy (x ≤ 918) |
-| `safeZones` | 4 hình chữ nhật | Vùng TikTok che: trên y<230, cột phải x>918, khối dưới-trái x0–810 y1248–1730, dải dưới y1730–1920. Bật lớp phủ đỏ bằng ô trên control (chỉ để canh bố cục) |
+| `ui.chips` | `top 240, left 24, right 1056` | Chip số người (trên-trái) và đồng hồ + ngày/đêm (trên-phải, xếp dọc, kết thúc trước y 320) |
+| `ui.tips` | `x 16, y 320, w 264, h 670, sec 8, perPage 3` | Cột trái: gợi ý bình luận xoay vòng (`guide.title`, `guide.lines`) |
+| `ui.merit` | `x 800, y 320, w 256, h 670, max 5, nameMax 10` | Cột phải: Công Đức (mỗi người 2 dòng); server kẹp x ≥ 790 |
+| `ui.notice` | `top 1000, h 214, w 600` | Vùng thông báo chung, căn giữa x 540 |
+| `meritScroll.top` | 1040 | Đỉnh Sổ Vàng (kẹp ≥ 640); rộng `meritScroll.halfW 280`, cao 150 |
+| `teacherTagGap` | 6 | Khoảng cách thẻ tên thầy tới đỉnh đầu |
+| `buddhaGlow` | head/body, `breathSec 7`, `nightBoost 1.4`, `vignette {alpha .18, size 260}` | Hào quang + quầng sáng thân (sprite vẽ sẵn), vignette ở lớp tĩnh |
+| `safeZones` | 4 hình chữ nhật | Vùng TikTok che; bật lớp phủ đỏ bằng ô trên control (chỉ để canh bố cục) |
 
-`ceremony.bannerTop` 1172 (banner mời lễ), `credit.y` 1222.
+**VÙNG CẤM che** (tượng Phật): x 290–790, y 240–990. Cột bên, chip, thông báo và mưa hoa đều nằm ngoài vùng này (mưa hoa cũng không qua x 400–680, y < 620).
+
+**Thông báo** (`overlay.html`, `noticeEnqueue`): MỘT hàng đợi duy nhất cho Sổ Vàng (≥ 99 xu), quà nhỏ (1 dòng, gộp combo), tụng kinh, thẻ quẻ, mời lễ, toast; không bao giờ 2 thẻ cùng lúc, tối đa 3 dòng/thẻ, thẻ chờ quá lâu bị bỏ. `plaque.enabled` (mặc định false) bật lại tiêu đề thiền đường. `credit.y` 1222.
 
 Vùng cần tránh che: mặt tượng (y 200–450), góc trên trái (bảng tên), cột phải x>860 (bảng UI).
 
@@ -128,7 +132,7 @@ Tất cả nhân vật cùng góc nhìn sau lưng 3/4, cùng bồ đoàn đỏ t
 | Bình luận | Vào ngồi, bong bóng chữ 6s, cúi đầu. Gõ `nam/nữ/bà/sư/ni/tiểu` để đổi nhân vật |
 | Quà < 10 xu | Nhang + cánh hoa, đọc tên; hiện khung `#gift` (không Sổ Vàng) |
 | Quà 10–98 xu | Sen + nhiều cánh hoa, đọc tên; hiện khung `#gift` (không Sổ Vàng) |
-| Quà ≥ 99 xu | Chuông lớn + đánh chuông + mưa hoa, đọc tên; **chỉ** Sổ Vàng (không khung `#gift`) |
+| Quà ≥ 99 xu | Chuông lớn + đánh chuông + mưa hoa, đọc tên; **chỉ** Sổ Vàng (không thẻ quà nhỏ) |
 | `!thắp nhang` / `!cúng bái` / `!quỳ lạy` | Lên lễ Phật (mục 8a) |
 | Quà (chung) | Người tặng phát sáng, cúi lạy; cộng điểm bảng "Công Đức". `gifts.readAll` / `gifts.minDiamonds` (1–50000) chỉnh trên control |
 | Thả tim | Tim bay từ chỗ ngồi; mỗi mốc 1000 tim (tổng của phòng) → chuông lớn + câu đọc |
@@ -152,7 +156,7 @@ Control có nút thử: chat, quà nhỏ/vừa/lớn, Follow, Share, +1000 tim, 
 - Server gửi `poseSkins`/`poseFiles` trong snapshot; overlay chỉ nạp file có thật.
 
 **Lạy ngồi** (`ceremony.bow`): một lần = cúi `downSec 0.9` → giữ `holdSec 0.6` (quỳ lạy: `prostrateHoldSec 1.5`) → ngẩng `upSec 0.9`; giữa các vái `pauseSec 0.3`. Hạ người `dropPct 0.11`, nén thân `squashPct 0.10`, ngả nhẹ `leanPx 2`; đầu **không** nén, chỉ dịch xuống theo vai (đỉnh đầu hạ ~23px ở kích thước ảnh gốc).
-**Quỳ + lạy sát đất** (chỉ `!cúng bái` 3 lạy và `!quỳ lạy` 1 lạy giữ `prostrateHoldSec`; skin đi bộ được và có đủ `pose_<skin>_kneel/prostrate`): tới altarSpot → đứng → mờ chéo sang quỳ (`ceremony.kneel.downSec 0.4`) → mỗi lạy quỳ→lạy `prostrateFadeSec 0.35`, giữ theo `ceremony.bow`, lạy→quỳ 0.35 (nghỉ `pauseSec` giữa các lạy) → quỳ→đứng `upSec 0.4` → mờ về chỗ. Chuông nhỏ khi chạm đỉnh lạy cuối của `!cúng bái`. `ceremony.prostrateExtraDrop` theo skin (mặc định 0, granny 0.06, server kẹp 0–0.12) hạ thêm nửa trên ở pha lạy. Server cộng mọi đoạn mờ chéo vào `totalSec` (`computeCeremonyDurationSec`) và gửi `kneel` trong bản tin `ceremony`. `!thắp nhang` và skin thiếu ảnh vẫn vái như cũ.
+**Quỳ + lạy sát đất** (chỉ `!cúng bái` 3 lạy và `!quỳ lạy` 1 lạy giữ `prostrateHoldSec`; skin đi bộ được và có đủ `pose_<skin>_kneel/prostrate`): tới altarSpot → đứng → mờ chéo sang quỳ (`ceremony.kneel.downSec 0.4`) → mỗi lạy quỳ→lạy `prostrateFadeSec 0.35`, giữ theo `ceremony.bow`, lạy→quỳ 0.35 (nghỉ `pauseSec` giữa các lạy) → quỳ→đứng `upSec 0.4` → mờ về chỗ. Chuông nhỏ khi chạm đỉnh lạy cuối của `!cúng bái`. `ceremony.prostrateExtraDrop` theo skin (man 0, woman 0.04, granny 0.08, server kẹp 0–0.12), `ceremony.kneel.scale` 0.9 (kẹp 0.5–1.2) thu nhỏ ảnh quỳ/lạy, bóng elip dưới chân hạ thêm nửa trên ở pha lạy. Server cộng mọi đoạn mờ chéo vào `totalSec` (`computeCeremonyDurationSec`) và gửi `kneel` trong bản tin `ceremony`. `!thắp nhang` và skin thiếu ảnh vẫn vái như cũ.
 
 **Vái đứng** (`ceremony.stand`): `dropPct 0.09`, `squashPct 0.10`, `waistRatio 0.46`, `headRatio` man/woman 0.17, granny 0.24. Đo trên ảnh thật: đỉnh đầu hạ **17px (man), 15px (woman), 16px (granny)** ở pha sâu nhất, scale 0.40.
 
@@ -173,11 +177,12 @@ Commit theo thứ tự: nhóm 5 dọn nợ cấu hình · pose quỳ/lạy · 1a
 
 Đo hiệu suất: `node scripts/bench.mjs <phút> <nhãn> [file]` (bot 100 người, cửa sổ Edge thật, giữ cửa sổ phía trước). So trước/sau chỉ lấy mẫu fps ≥ 20, tính ms CPU/khung.
 
+*Nhạc:* phát ngẫu nhiên không lặp (túi 5 bài), control chọn bài (`settings.musicTrack`) + nút Bài tiếp. *TikTok:* chỉ tự nối lại khi mất mạng / kênh chưa live; lỗi khoá, xác thực, quota, gói dịch vụ thì dừng và báo.
+
 *Còn lại:*
 - **6. Soak test** (`live/scripts/soak.mjs`, 2 giờ, bot 100 người, ghi heap server qua lệnh `stats` chỉ cho control, heap overlay, fps; tiêu chí bộ nhớ đi ngang, fps ≥ 28) — chưa viết/chạy.
 - Chưa thử với phòng TikTok thật; tự nối lại mới kiểm bằng tên kênh không tồn tại.
-- `#plaque` (tên thiền đường, y 70–220) nằm hoàn toàn trong vùng TikTok che phía trên; chưa dời vì mọi chỗ trống dưới y 230 đều đè mặt tượng. Cân nhắc bỏ hoặc thu gọn.
-- Thẻ quẻ 4 dòng lấn ~20px vào khối dưới-trái; banner mời lễ có thể đè đáy khung tụng kinh khi trùng thời điểm.
+- Hộp chip trên-phải (x 830–1056, y 240–316) và cột Công Đức (x 800–1056) nằm trong cột phải TikTok (x > 918): có thể bị che.
 
 **Nhỏ, cân nhắc**
 - Chế độ 64/100 người: tên bị cắt ("Thiện…") vì hàng dày.
