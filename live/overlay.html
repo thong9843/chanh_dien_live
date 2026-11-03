@@ -331,7 +331,7 @@ function addVisitor(p, instant, rank = 0){
   }
 }
 function removeVisitor(id){ visitors.delete(id); reseat(); }
-// 30 người hoạt động gần nhất (bình luận, quà, tim, vào lễ…) mới hiện ảnh đại diện + tên; làm tươi 2 lần/giây
+// 12 người hoạt động gần nhất (layout.v3.labels.recentMax) (bình luận, quà, tim, vào lễ…) mới hiện ảnh đại diện + tên; làm tươi 2 lần/giây
 let activeSet = new Set(), activeAt = 0;
 function refreshActive(n){
   const arr = [...visitors.values()]; arr.sort((a,b) => b.lastActive - a.lastActive);
@@ -745,7 +745,7 @@ function tag(text,x,y,s,style,av,maxW){
   if (av){ ctx.save(); ctx.beginPath(); ctx.arc(x-w/2+pad*.55+aw/2, y, fs*.5, 0, 6.29); ctx.clip(); ctx.drawImage(av, x-w/2+pad*.55+aw/2-fs*.5, y-fs*.5, fs, fs); ctx.restore(); }
   ctx.fillStyle = style==='gold'?'#ffd98a':'#f6e9cf'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(text, x+aw/2, y+1);
 }
-// Nhãn trên đầu (chỉ 30 người hoạt động gần nhất): vòng tròn đại diện avatarPx, tên ngay dưới vòng tròn, sát đỉnh đầu. Chữ rút gọn theo layout.v3.labels.nameMax.
+// Nhãn trên đầu (chỉ 12 người hoạt động gần nhất): vòng tròn đại diện avatarPx, tên ngay dưới vòng tròn, sát đỉnh đầu. Chữ rút gọn theo layout.v3.labels.nameMax.
 function drawLabel(v, headY, alpha){
   // Nhãn dựng sẵn thành MỘT ảnh nhỏ cho mỗi người (đổi tên / ảnh đại diện / mốc quà mới dựng lại), mỗi khung chỉ một drawImage
   const LB = V3.labels, px = LB.avatarPx, fs = LB.nameFontPx, nm = String(v.name || '');
@@ -925,7 +925,7 @@ function frame(now){
     lastProfileV3 = v3; ceremonyManager.reset(visitors); reseat();
     for (const v of visitors.values()) if (v.seat) v.assignSeat(v.seat, true, FLOOR, cols);
   }
-  if (now - activeAt > 500){ activeAt = now; refreshActive(V3 ? V3.labels.recentMax : 30); }
+  if (now - activeAt > 500){ activeAt = now; refreshActive(V3 ? V3.labels.recentMax : 12); }
   const list=[...visitors.values()].sort((a,b)=>a.y-b.y);
   for (const v of list){
     const effAlpha = v.getEffectiveAlpha();

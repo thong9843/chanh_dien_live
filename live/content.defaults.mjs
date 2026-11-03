@@ -623,7 +623,7 @@ export default {
         "backGapDy": 32
       },
       "labels": {
-        "recentMax": 30,
+        "recentMax": 12,
         "avatarPx": 36,
         "nameMax": 10,
         "nameFontPx": 15

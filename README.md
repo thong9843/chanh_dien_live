@@ -29,7 +29,7 @@ Chưa live vẫn thử được: dùng **Thử tương tác**, **Đổ người 
 
 ### Người xem làm được gì
 
-- **Bình luận bất kỳ**: được vào ngồi (100 chỗ cố định ở hai bên lối giữa; mỗi người tối đa 1 bình luận mỗi 3 giây). Chỉ 30 người hoạt động gần nhất hiện ảnh đại diện TikTok (chỉ nhận ảnh https từ máy chủ ảnh của TikTok, không có thì hiện chữ cái đầu) và tên. Đầy chỗ thì người im lặng lâu nhất (quá 10 phút, chưa tặng quà) nhường chỗ cho người bình luận mới; người chưa có chỗ được tính vào chip **+N người đang thiền**.
+- **Bình luận bất kỳ**: được vào ngồi (100 chỗ cố định ở hai bên lối giữa; mỗi người tối đa 1 bình luận mỗi 3 giây). Chỉ 12 người hoạt động gần nhất hiện ảnh đại diện TikTok (chỉ nhận ảnh https từ máy chủ ảnh của TikTok, không có thì hiện chữ cái đầu) và tên. Đầy chỗ thì người im lặng lâu nhất (quá 10 phút, chưa tặng quà) nhường chỗ cho người bình luận mới; người chưa có chỗ được tính vào chip **+N người đang thiền**.
 - **`!thắp nhang`, `!cúng bái`, `!quỳ lạy`**: đi lên lối giữa tới một trong 8 bồ đoàn (hàng trước trước), thắp nhang (đứng vái) / quỳ lạy 3 lần / quỳ lạy 1 lần dài, rồi đi về chỗ. Tối đa 8 người cùng lúc, người thêm xếp hàng chờ.
 - **Bình luận đúng một từ** `nam`, `nữ`, `sư`, `ni`, `tiểu`, `bà`, `cao tăng`: đổi hình nhân vật. Câu "Nam mô A Di Đà Phật" không bị hiểu nhầm thành "nam".
 - **Tặng quà**: banner xướng tên, giọng đọc hồi hướng (lấy lời nguyện từ bình luận gần nhất của người đó nếu có), hiệu ứng theo giá trị quà, cộng điểm vào bảng Công Đức.
