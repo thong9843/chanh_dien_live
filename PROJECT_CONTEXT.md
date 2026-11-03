@@ -30,6 +30,7 @@ assets/                 hình + nhạc (đã commit, không bị .gitignore)
   pose_<skin>_<stand|walkL|walkR>.png   ảnh đứng/đi bộ (man, woman, granny)
   fx_*.png              hiệu ứng quà
   music/music1.mp3 … music5.mp3
+  fonts/                Noto Serif + Be Vietnam Pro (woff2, OFL) + fonts.css + OFL-*.txt (không gọi Google Fonts)
 index.html              bản web tĩnh độc lập (không dùng server)
 live/
   server.mjs            Node server: TikTok → WebSocket → overlay; TTS
@@ -88,9 +89,14 @@ Chạy: `cd live && npm install && npm start` → mở `http://localhost:3000/li
 | `teachers` | 6 vị: trái x 165/275/385 (y 1345/1335/1325, `flip:false`), phải x 695/805/915 (y 1325/1335/1345, `flip:true`), `s 0.40` | Hai dãy thầy, lối giữa để trống. `master` (hào quang) = x 385. Thẻ tên chen chúc thì chỉ hiện thầy trụ trì |
 | `altarSpot` | `x 540, y 1350, scale 0.40` | Chỗ người lên lễ (ngay trước bàn thờ, giữa 2 dãy thầy); scale bằng thầy, không nhân scaleBoost |
 | `floor` | `yTop 1430, yBot 1870, halfTop 330, halfBot 470` | Vùng xếp chỗ người xem (24/36/64/100 chỗ, lối giữa) |
-| `gift.top` | 940 | Khung xướng quà |
-| `chant.top` | 1235 | Khung tụng kinh |
-| `toast.top` | 1400 | Thông báo share/mốc tim |
+| `gift.top` | 940 | Khung xướng quà nhỏ (< 99 xu), rộng ≤ 640px, căn giữa |
+| `chant.top` | 980 | Khung tụng kinh |
+| `toast.top` | 870 | Thông báo share/mốc tim |
+| `meritScroll.top` | 1000 | Đỉnh Sổ Vàng (quà ≥ 99 xu); server kẹp ≥ 640 để không che mặt tượng. Rộng `meritScroll.halfW 360` |
+| `ui` | `pillsCenterX 459, hintTop 326, hintSec 8, meritLeft 656, meritTop 630, meritW 262, bannerLeft 162, bannerRight 918, giftMaxW 640` | Bố cục UI trong vùng TikTok nhìn thấy (x ≤ 918) |
+| `safeZones` | 4 hình chữ nhật | Vùng TikTok che: trên y<230, cột phải x>918, khối dưới-trái x0–810 y1248–1730, dải dưới y1730–1920. Bật lớp phủ đỏ bằng ô trên control (chỉ để canh bố cục) |
+
+`ceremony.bannerTop` 1172 (banner mời lễ), `credit.y` 1222.
 
 Vùng cần tránh che: mặt tượng (y 200–450), góc trên trái (bảng tên), cột phải x>860 (bảng UI).
 
@@ -103,7 +109,7 @@ Vùng cần tránh che: mặt tượng (y 200–450), góc trên trái (bảng t
 | `c_child.png` | cao **229**, rộng 142 | |
 | `fx_petal` 204×209, `fx_incense` 189×220, `fx_lotus` 229×220, `fx_bell` 286×220, `fx_halo` 229×220 | | Dùng trong overlay |
 | `fx_mo` 236×220, `fx_scroll` 281×220, `fx_banner` 323×159 | | Nạp nhưng hiện chưa vẽ ở đâu |
-| `pose_man/woman/granny_{stand,walkL,walkR}.png` | cao 417–480, rộng 139–187 | Ảnh đứng sau lưng, đáy = chân, giữa = trục chân, cùng bề rộng đầu với `c_<skin>.png`. Đủ bộ 3 ảnh thì skin đó được đi bộ lên bàn thờ. Tuỳ chọn thêm `pose_<skin>_kneel` + `pose_<skin>_prostrate` (code tự nhận, **chưa thử vì chưa có ảnh**) |
+| `pose_man/woman/granny_{stand,walkL,walkR}.png` | cao 417–480, rộng 139–187 | Ảnh đứng sau lưng, đáy = chân, giữa = trục chân, cùng bề rộng đầu với `c_<skin>.png`. Đủ bộ 3 ảnh thì skin đó được đi bộ lên bàn thờ. Thêm `pose_<skin>_kneel` + `pose_<skin>_prostrate` (đã có đủ cho man/woman/granny; đáy ảnh = gối/bàn chân, cùng tỉ lệ pixel với ảnh đứng) |
 | `music1.mp3` … `music5.mp3` | | Nhạc nền, lặp liền mạch (1–2 tự tổng hợp 150s/165s) |
 
 Tất cả nhân vật cùng góc nhìn sau lưng 3/4, cùng bồ đoàn đỏ thẫm, cùng cỡ bồ đoàn khi thu nhỏ.
@@ -120,9 +126,9 @@ Tất cả nhân vật cùng góc nhìn sau lưng 3/4, cùng bồ đoàn đỏ t
 | Sự kiện | Hành vi |
 |---|---|
 | Bình luận | Vào ngồi, bong bóng chữ 6s, cúi đầu. Gõ `nam/nữ/bà/sư/ni/tiểu` để đổi nhân vật |
-| Quà < 10 xu | Nhang + cánh hoa, đọc tên |
-| Quà 10–98 xu | Sen + nhiều cánh hoa, đọc tên |
-| Quà ≥ 99 xu | Chuông lớn + đánh chuông + mưa hoa, đọc tên |
+| Quà < 10 xu | Nhang + cánh hoa, đọc tên; hiện khung `#gift` (không Sổ Vàng) |
+| Quà 10–98 xu | Sen + nhiều cánh hoa, đọc tên; hiện khung `#gift` (không Sổ Vàng) |
+| Quà ≥ 99 xu | Chuông lớn + đánh chuông + mưa hoa, đọc tên; **chỉ** Sổ Vàng (không khung `#gift`) |
 | `!thắp nhang` / `!cúng bái` / `!quỳ lạy` | Lên lễ Phật (mục 8a) |
 | Quà (chung) | Người tặng phát sáng, cúi lạy; cộng điểm bảng "Công Đức". `gifts.readAll` / `gifts.minDiamonds` (1–50000) chỉnh trên control |
 | Thả tim | Tim bay từ chỗ ngồi; mỗi mốc 1000 tim (tổng của phòng) → chuông lớn + câu đọc |
@@ -146,6 +152,8 @@ Control có nút thử: chat, quà nhỏ/vừa/lớn, Follow, Share, +1000 tim, 
 - Server gửi `poseSkins`/`poseFiles` trong snapshot; overlay chỉ nạp file có thật.
 
 **Lạy ngồi** (`ceremony.bow`): một lần = cúi `downSec 0.9` → giữ `holdSec 0.6` (quỳ lạy: `prostrateHoldSec 1.5`) → ngẩng `upSec 0.9`; giữa các vái `pauseSec 0.3`. Hạ người `dropPct 0.11`, nén thân `squashPct 0.10`, ngả nhẹ `leanPx 2`; đầu **không** nén, chỉ dịch xuống theo vai (đỉnh đầu hạ ~23px ở kích thước ảnh gốc).
+**Quỳ + lạy sát đất** (chỉ `!cúng bái` 3 lạy và `!quỳ lạy` 1 lạy giữ `prostrateHoldSec`; skin đi bộ được và có đủ `pose_<skin>_kneel/prostrate`): tới altarSpot → đứng → mờ chéo sang quỳ (`ceremony.kneel.downSec 0.4`) → mỗi lạy quỳ→lạy `prostrateFadeSec 0.35`, giữ theo `ceremony.bow`, lạy→quỳ 0.35 (nghỉ `pauseSec` giữa các lạy) → quỳ→đứng `upSec 0.4` → mờ về chỗ. Chuông nhỏ khi chạm đỉnh lạy cuối của `!cúng bái`. `ceremony.prostrateExtraDrop` theo skin (mặc định 0, granny 0.06, server kẹp 0–0.12) hạ thêm nửa trên ở pha lạy. Server cộng mọi đoạn mờ chéo vào `totalSec` (`computeCeremonyDurationSec`) và gửi `kneel` trong bản tin `ceremony`. `!thắp nhang` và skin thiếu ảnh vẫn vái như cũ.
+
 **Vái đứng** (`ceremony.stand`): `dropPct 0.09`, `squashPct 0.10`, `waistRatio 0.46`, `headRatio` man/woman 0.17, granny 0.24. Đo trên ảnh thật: đỉnh đầu hạ **17px (man), 15px (woman), 16px (granny)** ở pha sâu nhất, scale 0.40.
 
 Mọi số liệu ở `content.json → ceremony` (`inviteText`, `inviteSec 3`, `fadeSec 0.6`, `incenseBoostSec 6`, `incenseHoldSec 2.2`, `tailSec 0.35`, `bannerTop 1700`, `bow`, `walk`, `stand`).
@@ -157,31 +165,19 @@ Mọi số liệu ở `content.json → ceremony` (`inviteText`, `inviteSec 3`, 
 - Xem `fx_halo` trên overlay thật: hào quang không được hiện thành ô vuông sáng.
 - Thử với phòng TikTok thật khi tài khoản đủ điều kiện (FOLLOW/SHARE/LIKE mới kiểm bằng mô phỏng; mốc tim dùng `totalLikeCount`, nếu không có thì cộng dồn).
 - Kiểm tra đã có `<link rel="icon">` (hết lỗi favicon 404) chưa.
-- Nhánh quỳ + lạy bằng `pose_<skin>_kneel/prostrate`: có code nhưng chưa có ảnh để thử.
 - Ảnh pose cho monk/nun/child (hiện các skin này lên lễ bằng cách mờ tại chỗ).
 
-**Đợt tối ưu hiệu suất (kế hoạch đã duyệt, chưa làm)**
+**Đợt tối ưu hiệu suất (đã làm xong, chưa push)** — số đo trước/sau và nguồn rò rỉ nằm ở message commit và báo cáo cuối đợt
 
-Quy tắc đợt này: nêu kế hoạch từng nhóm, commit riêng từng nhóm, **không đổi hình ảnh nhìn thấy** (trừ nhóm 4 khi chủ dự án duyệt), chưa push khi chưa được bảo.
+Commit theo thứ tự: nhóm 5 dọn nợ cấu hình · pose quỳ/lạy · 1a (30 fps, lớp tĩnh, chờ phông) · 1b (sprite glow khói, pool có trần, bóng vẽ sẵn; **bỏ 1c** cache sprite) · 2 (hết rò listener do `new Audio` + `createMediaElementSource` mỗi câu TTS; log vòng 500; trần `followed`; TikTok tự nối lại 5→60s kể cả lần đầu thất bại, dừng khi Ngắt) · 4 (vùng an toàn TikTok, xem mục 5) · 7 (phông tự lưu) · sửa `scripts/bench.mjs` (CPU Edge qua Get-Process theo PID).
 
-*Kết quả khảo sát (trước khi làm):*
-- Canvas đã là 1080×1920 và `fit()` đã scale `min(rộng/1080, cao/1920)` (letterbox 9:16). Vòng `requestAnimationFrame` chưa giới hạn fps; mỗi khung vẽ lại nền, ánh sáng ngày/đêm, 6 thầy + thẻ tên, người ngồi, khói.
-- Khói tạo 1 `createRadialGradient` cho mỗi hạt mỗi khung (≤ 90 hạt); `shadowBlur` có 4 chỗ trong `canvas.js` (Sổ Vàng, vòng hào quang zoom, thẻ tên zoom).
-- Âm thanh: mỗi câu TTS tạo `Audio` + `createMediaElementSource` nối vào `master` mà không ngắt khi phát xong → nguồn rò rỉ chính khi treo 8–12 giờ. Không có `createObjectURL`.
-- Server: log giữ 300 dòng (cần vòng 500); TikTok mất kết nối chỉ báo `disconnected`, không tự nối lại; tập `followed`, mảng `fx`/`petals` ở overlay chưa có trần.
-- Phông chữ nạp từ Google Fonts qua thẻ `<link>` → máy phát mất mạng thì rơi về phông mặc định.
+Đo hiệu suất: `node scripts/bench.mjs <phút> <nhãn> [file]` (bot 100 người, cửa sổ Edge thật, giữ cửa sổ phía trước). So trước/sau chỉ lấy mẫu fps ≥ 20, tính ms CPU/khung.
 
-*Các nhóm, theo thứ tự làm:* **0 → 5 → 1a → 1b → 1c → 2 → 3 → 4 → 6 → 7**
-- **0. Đo mốc**: bot 100 người ~10 phút trên code hiện tại, ghi heap server, heap overlay, fps (không commit).
-- **5. Dọn nợ cấu hình**: chuỗi + toạ độ Sổ Vàng, nhãn "Nắng Chánh Điện / Đêm Tĩnh Tâm" vào `content.json` + `content.defaults.mjs`; gom giá trị `altarSpot` trùng lặp (`Character`, `CeremonyDirector`, `overlay.html`, server) về một chỗ (`layout.altarSpot`, chỉ còn một hằng dự phòng).
-- **1a. Khung hình**: giới hạn 30 fps, mọi chuyển động theo deltaTime; chờ `document.fonts.ready`; lớp tĩnh (nền + 6 thầy + thẻ tên) vẽ vào canvas ẩn, chỉ vẽ lại khi layout hoặc chế độ ngày/đêm đổi. Hào quang thầy trụ trì và ánh sáng nhấp nháy vẫn vẽ mỗi khung, giữ nguyên thứ tự vẽ.
-- **1b. Hạt và bóng**: khói dùng 1 sprite glow vẽ sẵn (thường + vàng) thay gradient mỗi hạt; hạt/cánh hoa dùng object pool có trần; `shadowBlur` thay bằng sprite bóng vẽ sẵn.
-- **1c. Cache sprite** đã scale (LRU ~200) cho người ngồi yên (bỏ qua khi đang đi vì scale đổi liên tục). Chưa chắc có lợi → đo trước/sau; không có lợi rõ thì bỏ và báo.
-- **2. Chống rò rỉ**: log vòng 500 dòng; ngắt + dọn node âm thanh TTS sau khi phát xong; trần cho `followed`, `fx`, `petals`; rà timer/listener; `viewers`/cooldown có dọn; **TikTok tự nối lại, cả lần kết nối đầu thất bại**, backoff 5s→60s, dừng khi bấm Ngắt; control hiện "đang nối lại (lần n, còn x giây)".
-- **3. `live/start-overlay.bat`** (ĐÃ LÀM ở Đợt 1): mở Edge cửa sổ riêng `--app=http://localhost:3000/live/overlay.html` với `--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`, thêm `--user-data-dir` riêng (nếu không, cửa sổ gộp vào tiến trình Edge cũ và cờ mất tác dụng) và `--autoplay-policy=no-user-gesture-required`; ghi vào README.
-- **4. Vùng an toàn TikTok**: nút trên control phủ tạm các vùng UI TikTok che: trên ~12% (y<230), phải ~15% (x>918), khối dưới-trái ~35% (x 0–810, y 1248–1920) **và thêm dải dưới y 1730–1920**. Chỉ phủ + báo cáo thành phần quan trọng bị che + đề xuất toạ độ mới; **chờ chủ dự án duyệt** rồi mới dời. Dự đoán bị che: điểm số bên phải bảng Công Đức, banner mời lên lễ (`bannerTop 1700`), thẻ tên hàng ngồi trước, dòng credit, nút bật âm thanh.
-- **6. Soak test**: `live/scripts/soak.mjs`; bot 100 người, quà/follow/lên lễ liên tục 2 giờ, mỗi 10 phút ghi heap server (lệnh `stats` chỉ cho vai trò control, không mở HTTP mới), heap overlay (CDP), fps trung bình. Tiêu chí: bộ nhớ đi ngang, fps ≥ 28. Chạy **nền, sau khi xong nhóm 1–5**. Đo bằng Edge headless trên máy này nên có thể không đại diện cho TikTok LIVE Studio.
-- **7. Phông chữ tự lưu**: tải Noto Serif và Be Vietnam Pro (giấy phép OFL) vào repo, nạp bằng `@font-face` cục bộ thay Google Fonts; kèm file giấy phép OFL.
+*Còn lại:*
+- **6. Soak test** (`live/scripts/soak.mjs`, 2 giờ, bot 100 người, ghi heap server qua lệnh `stats` chỉ cho control, heap overlay, fps; tiêu chí bộ nhớ đi ngang, fps ≥ 28) — chưa viết/chạy.
+- Chưa thử với phòng TikTok thật; tự nối lại mới kiểm bằng tên kênh không tồn tại.
+- `#plaque` (tên thiền đường, y 70–220) nằm hoàn toàn trong vùng TikTok che phía trên; chưa dời vì mọi chỗ trống dưới y 230 đều đè mặt tượng. Cân nhắc bỏ hoặc thu gọn.
+- Thẻ quẻ 4 dòng lấn ~20px vào khối dưới-trái; banner mời lễ có thể đè đáy khung tụng kinh khi trùng thời điểm.
 
 **Nhỏ, cân nhắc**
 - Chế độ 64/100 người: tên bị cắt ("Thiện…") vì hàng dày.
