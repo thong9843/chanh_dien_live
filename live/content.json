@@ -485,6 +485,7 @@
   },
   "tts": {
     "minGapMs": 2000,
+    "cacheMaxMB": 200,
     "order": [
       "vieneu",
       "edge",

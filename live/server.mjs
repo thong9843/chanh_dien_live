@@ -137,6 +137,7 @@ function loadContent(){
     },
     tts: {
       minGapMs: cNum(o('tts')?.minGapMs, 500, 10000, D.tts?.minGapMs || 2000),
+      cacheMaxMB: cNum(o('tts')?.cacheMaxMB, 50, 2000, D.tts?.cacheMaxMB || 200),
       order: (() => {
         const allowed = ['vieneu', 'edge', 'cached'];
         const raw = Array.isArray(o('tts')?.order) ? o('tts').order : D.tts?.order;
@@ -831,10 +832,14 @@ function getTtsCacheKey(text, voice) {
 
 function getCachedTtsFile(text, voice) {
   const key = getTtsCacheKey(text, voice);
-  for (const ext of ['wav', 'mp3']) {
+  for (const ext of ['mp3', 'wav']) {
     const fileName = `cache_${key}.${ext}`;
     const filePath = path.join(TTS_DIR, fileName);
     if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+      try {
+        const now = new Date();
+        fs.utimesSync(filePath, now, now);
+      } catch {}
       return { fileName, filePath, ext };
     }
   }
@@ -994,10 +999,41 @@ function reportTTSFail(e, what){
   return reason;
 }
 
+// Giới hạn dung lượng thư mục live/tts/ theo LRU (mặc định 200MB, cấu hình qua content.json tts.cacheMaxMB)
 function pruneTtsFiles(){
-  const old = fs.readdirSync(TTS_DIR).filter(f => !f.startsWith('cache_')).sort();
-  while (old.length > 40) {
-    try { fs.unlinkSync(path.join(TTS_DIR, old.shift())); } catch {}
+  const maxBytes = (CONTENT.tts?.cacheMaxMB || 200) * 1024 * 1024;
+  try {
+    const fileEntries = fs.readdirSync(TTS_DIR).map(name => {
+      const filePath = path.join(TTS_DIR, name);
+      try {
+        const st = fs.statSync(filePath);
+        return { name, filePath, size: st.size, atimeMs: st.atimeMs || st.mtimeMs };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    let totalBytes = fileEntries.reduce((s, f) => s + f.size, 0);
+    if (totalBytes <= maxBytes) return;
+
+    // Sắp xếp theo LRU: xóa file ít được dùng nhất trước (atimeMs nhỏ nhất).
+    // Ưu tiên xóa file tạm (không bắt đầu bằng cache_) trước, sau đó mới đến file cache_
+    fileEntries.sort((a, b) => {
+      const aTemp = !a.name.startsWith('cache_');
+      const bTemp = !b.name.startsWith('cache_');
+      if (aTemp !== bTemp) return aTemp ? -1 : 1;
+      return a.atimeMs - b.atimeMs;
+    });
+
+    for (const f of fileEntries) {
+      if (totalBytes <= maxBytes) break;
+      try {
+        fs.unlinkSync(f.filePath);
+        totalBytes -= f.size;
+      } catch {}
+    }
+  } catch (e) {
+    console.error('Lỗi dọn dẹp cache TTS LRU:', e?.message);
   }
 }
 

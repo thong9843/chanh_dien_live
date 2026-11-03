@@ -488,6 +488,7 @@ export default {
   },
   "tts": {
     "minGapMs": 2000,
+    "cacheMaxMB": 200,
     "order": ["vieneu", "edge", "cached"],
     "vieneuVoice": "Thiền Tâm Đức",
     "vieneuSpeed": 0.9
