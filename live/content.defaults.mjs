@@ -17,6 +17,9 @@ export default {
     "ambientDay": "☀️ Nắng Chánh Điện",
     "ambientNight": "🕯️ Đêm Tĩnh Tâm"
   },
+  "plaque": {
+    "enabled": false
+  },
   "guide": {
     "lines": [
       "💬 **Bình luận bất kỳ** để bước vào thiền",
@@ -280,10 +283,7 @@ export default {
       "top": 1000
     },
     "ui": {
-      "pillsCenterX": 459,
-      "hintTop": 326,
-      "hintMaxW": 740,
-      "hintSec": 8,
+      "chips": { "top": 240, "left": 24, "right": 1056 },
       "meritLeft": 656,
       "meritTop": 630,
       "meritW": 262,

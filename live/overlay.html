@@ -20,27 +20,24 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #c{position:absolute;inset:0;width:1080px;height:1920px}
 .ui{position:absolute;z-index:3}
 /* title plaque */
-#plaque{left:90px;right:90px;top:70px;height:150px;border:3px solid var(--gold);border-radius:28px;
+#plaque{display:none;left:90px;right:90px;top:70px;height:150px;border:3px solid var(--gold);border-radius:28px;
   background:linear-gradient(180deg,rgba(70,26,10,.92),rgba(30,12,6,.92));box-shadow:0 0 0 6px rgba(0,0,0,.35),0 0 50px rgba(226,176,79,.25) inset;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+  flex-direction:column;align-items:center;justify-content:center;gap:6px}
+#plaque.on{display:flex}
 #plaque::before,#plaque::after{content:"❁";position:absolute;top:50%;transform:translateY(-50%);font-size:44px;color:var(--gold)}
 #plaque::before{left:34px}#plaque::after{right:34px}
 #title{font-family:var(--display);font-weight:700;font-size:58px;letter-spacing:.06em;color:var(--gold2);text-transform:uppercase;text-shadow:0 2px 0 #3a1406,0 0 20px rgba(255,200,100,.35)}
 #subtitle{font-family:var(--display);font-size:30px;letter-spacing:.12em;color:var(--fg)}
 /* pills */
-#pills{top:244px;left:0;right:0;display:flex;justify-content:center;gap:22px;transform:translateX(var(--uiShift,0px))}
-.pill{background:var(--panel);border:2px solid var(--line);border-radius:999px;padding:12px 26px;font-size:32px;font-weight:600;display:flex;align-items:center;gap:12px;font-variant-numeric:tabular-nums}
-.pill small{font-size:19px;font-weight:500;color:var(--muted);line-height:1.05}
-.dot{width:18px;height:18px;border-radius:50%;background:#46d36b;box-shadow:0 0 12px #46d36b}
-#ambientPill{font-size:24px;padding:10px 22px;color:var(--gold2)}
+/* chip trạng thái: số người ở góc trên-trái, đồng hồ + ngày/đêm ở góc trên-phải (xếp dọc, không chip nào nằm trên đầu/hào quang tượng) */
+#chipCount{left:24px;top:240px}
+#chipsRight{right:24px;top:240px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.pill{background:var(--panel);border:2px solid var(--line);border-radius:999px;padding:8px 20px;font-size:27px;font-weight:600;display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill small{font-size:16px;font-weight:500;color:var(--muted);line-height:1.05}
+.dot{width:16px;height:16px;border-radius:50%;background:#46d36b;box-shadow:0 0 12px #46d36b}
+#ambientPill{font-size:21px;padding:7px 18px;color:var(--gold2)}
 /* side cards */
 .card{background:var(--panel);border:2px solid var(--line);border-radius:22px;padding:18px 22px;font-size:24px;line-height:1.4;backdrop-filter:blur(4px)}
-/* một dòng gợi ý lệnh xoay vòng (thay bảng hướng dẫn cũ), nằm dưới hàng chip; hai lớp .h chồng nhau để mờ chéo */
-#hint{top:326px;left:0;right:0;height:52px;pointer-events:none;transform:translateX(var(--uiShift,0px))}
-#hint .h{position:absolute;left:50%;top:0;transform:translateX(-50%);max-width:740px;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  font-size:26px;line-height:34px;padding:7px 26px;border-radius:999px;background:var(--panel);border:2px solid var(--line);opacity:0;transition:opacity .5s}
-#hint .h.show{opacity:1}
-#hint b{color:var(--gold2)}
 #merit{left:656px;top:630px;width:262px;text-align:center}
 #merit h3{margin:0 0 8px;font-family:var(--display);font-size:30px;color:var(--gold2);letter-spacing:.06em}
 #merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:6px}
@@ -110,12 +107,11 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 <div id="fit"><div id="stage">
   <canvas id="c" width="1080" height="1920"></canvas>
   <div id="plaque" class="ui"><div id="title">Chánh Điện Tịnh Tâm</div><div id="subtitle">Nam Mô A Di Đà Phật</div></div>
-  <div id="pills" class="ui">
-    <div class="pill"><span class="dot"></span><span id="count">0/24</span><small id="watchLbl">đang<br>thiền</small></div>
+  <div id="chipCount" class="pill ui"><span class="dot"></span><span id="count">0/24</span><small id="watchLbl">đang<br>thiền</small></div>
+  <div id="chipsRight" class="ui">
     <div class="pill">⏱ <span id="timer">00:00:00</span></div>
     <div class="pill" id="ambientPill">☀️ Ban ngày</div>
   </div>
-  <div id="hint" class="ui" aria-live="off"><div class="h"></div><div class="h"></div></div>
   <div id="merit" class="card ui"><h3 id="meritTitle">✦ Công Đức ✦</h3><ol id="meritList"><li class="empty">Chưa có</li></ol></div>
   <div id="chant" class="ui"><h4 id="chantTitle">✦ TỤNG KINH ĐỊNH KỲ ✦</h4><p id="chantText"></p></div>
   <div id="toast" class="ui"></div>
@@ -265,7 +261,7 @@ function applyContent(c){
   document.getElementById('chantTitle').textContent = L('chant');
   document.getElementById('unmute')?.replaceChildren(document.createTextNode(L('unmute')));
   const w = document.getElementById('watchLbl'); w.replaceChildren(); L('watching','').split('|').forEach((p,i)=>{ if(i) w.append(document.createElement('br')); w.append(p); });
-  startHints(c.guide?.lines || [], c.layout?.ui?.hintSec || 8);
+  document.getElementById('plaque').classList.toggle('on', !!c.plaque?.enabled);   // tiêu đề thiền đường: mặc định tắt (content.json → plaque.enabled)
   Object.assign(credit, c.credit || {});
   meritScroll.configure(c.meritScroll ? { ...c.meritScroll, top: c.layout?.meritScroll?.top } : null);
   if (c.ceremony?.bow) setBowConfig(c.ceremony.bow);
@@ -286,9 +282,9 @@ function applyContent(c){
 function applyUiLayout(Lo){
   const u = Lo?.ui; if (!u) return;
   const $ = id => document.getElementById(id), px = v => Math.round(v) + 'px';
-  stage.style.setProperty('--uiShift', px(u.pillsCenterX - 540));            // hàng chip + dòng gợi ý lệch về giữa vùng nhìn thấy
-  $('hint').style.top = px(u.hintTop);
-  for (const h of $('hint').children) h.style.maxWidth = px(u.hintMaxW);
+  const ch = u.chips || { top: 240, left: 24, right: 1056 };
+  $('chipCount').style.left = px(ch.left); $('chipCount').style.top = px(ch.top);
+  $('chipsRight').style.right = px(1080 - ch.right); $('chipsRight').style.top = px(ch.top);
   const m = $('merit'); m.style.left = px(u.meritLeft); m.style.top = px(u.meritTop); m.style.width = px(u.meritW);
   for (const id of ['chant','oracleCard']){ const e = $(id); e.style.left = px(u.bannerLeft); e.style.right = px(1080 - u.bannerRight); }
   const gw = Math.min(u.giftMaxW, u.bannerRight - u.bannerLeft), g = $('gift');   // khung quà nhỏ: hẹp, căn giữa vùng nhìn thấy
@@ -300,23 +296,6 @@ function applyUiLayout(Lo){
     d.style.left = px(z.x); d.style.top = px(z.y); d.style.width = px(z.w); d.style.height = px(z.h);
     safe.append(d);
   }
-}
-
-/* Một dòng gợi ý lệnh xoay vòng (guide.lines), đổi mỗi hintSec giây, mờ chéo 0,5s bằng hai lớp chồng nhau */
-let hintTimer = null;
-function startHints(lines, sec){
-  clearInterval(hintTimer);
-  const els = [...document.querySelectorAll('#hint .h')];
-  const paint = (el, line) => { el.replaceChildren(); line.split('**').forEach((p,i)=>{ if (!p) return; if (i%2){ const b=document.createElement('b'); b.textContent=p; el.append(b); } else el.append(p); }); };   // **đậm** → <b>, còn lại textContent
-  els.forEach(e => { e.classList.remove('show'); e.replaceChildren(); });
-  if (!lines.length) return;
-  let idx = 0, front = 0;
-  paint(els[0], lines[0]); els[0].classList.add('show');
-  if (lines.length < 2) return;
-  hintTimer = setInterval(() => {
-    const back = 1 - front; idx = (idx + 1) % lines.length;
-    paint(els[back], lines[idx]); els[front].classList.remove('show'); els[back].classList.add('show'); front = back;
-  }, Math.max(2, sec) * 1000);
 }
 
 /* ======================= HUD ======================= */
@@ -553,7 +532,7 @@ function connect(){
   };
 }
 function applySettings(){
-  document.getElementById('title').textContent=settings.title||'Chánh Điện Tịnh Tâm';
+  document.getElementById('title').textContent=settings.title||'Chánh Điện Tịnh Tâm';       // plaque ẩn mặc định, vẫn cập nhật chữ để bật lại được
   document.getElementById('subtitle').textContent=settings.subtitle||'Nam Mô A Di Đà Phật';
   updateAmbientBadge();
   document.getElementById('safe').style.display = settings.safeZone ? 'block' : 'none';

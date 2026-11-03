@@ -134,6 +134,7 @@ function loadContent(){
       cooldownSec: cNum(ce.cooldownSec, 0, 3600, dce.cooldownSec),
       bannerTop: cNum(ce.bannerTop, 0, 1850, dce.bannerTop),
     },
+    plaque: { enabled: typeof o('plaque').enabled === 'boolean' ? o('plaque').enabled : D.plaque.enabled },   // tiêu đề thiền đường trên overlay: mặc định tắt
     layout: (() => {
       const L = o('layout'), D = DEFAULT_CONTENT.layout, sub = k => (L[k] && typeof L[k] === 'object' && !Array.isArray(L[k])) ? L[k] : {};
       const n = (src, def, k, lo, hi) => cNum(src[k], lo, hi, def[k]);
@@ -154,8 +155,9 @@ function loadContent(){
         // Đỉnh Sổ Vàng: không bao giờ cao hơn y 640 (vùng mặt tượng y 250–600 luôn được chừa trống)
         meritScroll: { top: cNum(sub('meritScroll').top, 640, 1700, D.meritScroll.top) },
         ui: (() => { const u = sub('ui'), du = D.ui;
-          return { pillsCenterX: n(u, du, 'pillsCenterX', 300, 780), hintTop: n(u, du, 'hintTop', 200, 900), hintMaxW: n(u, du, 'hintMaxW', 300, 1000),
-                   hintSec: n(u, du, 'hintSec', 2, 60), meritLeft: n(u, du, 'meritLeft', 0, 900), meritTop: n(u, du, 'meritTop', 0, 1800), meritW: n(u, du, 'meritW', 150, 500),
+          const ch = (u.chips && typeof u.chips === 'object') ? u.chips : {}, dch = du.chips;
+          return { chips: { top: cNum(ch.top, 0, 1800, dch.top), left: cNum(ch.left, 0, 540, dch.left), right: cNum(ch.right, 540, 1080, dch.right) },
+                   meritLeft: n(u, du, 'meritLeft', 0, 900), meritTop: n(u, du, 'meritTop', 0, 1800), meritW: n(u, du, 'meritW', 150, 500),
                    bannerLeft: n(u, du, 'bannerLeft', 0, 400), bannerRight: n(u, du, 'bannerRight', 680, 1080), giftMaxW: n(u, du, 'giftMaxW', 300, 900) }; })(),
         safeZones: (Array.isArray(L.safeZones) && L.safeZones.length ? L.safeZones.slice(0, 8) : D.safeZones).map((z, i) => {
           const dz = D.safeZones[i] || D.safeZones[0], zz = (z && typeof z === 'object') ? z : {};
@@ -178,7 +180,7 @@ function loadContent(){
 }
 const CONTENT = loadContent();
 const CLIENT_CONTENT = {
-  labels: CONTENT.labels, guide: CONTENT.guide, layout: CONTENT.layout, share: CONTENT.share,
+  labels: CONTENT.labels, guide: CONTENT.guide, plaque: CONTENT.plaque, layout: CONTENT.layout, share: CONTENT.share,
   milestone: { text: CONTENT.milestone.text, showSec: CONTENT.milestone.showSec },
   gift: { what: CONTENT.gift.what, timesShown: CONTENT.gift.timesShown },
   zoom: CONTENT.zoom,
