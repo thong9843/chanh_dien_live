@@ -279,7 +279,7 @@ function applyContent(c){
     document.getElementById('toast').style.top = c.layout.toast.top + 'px';
     document.getElementById('chant').style.top = c.layout.chant.top + 'px';
     if (c.ceremony?.bannerTop != null) document.getElementById('ceremonyInvite').style.top = c.ceremony.bannerTop + 'px';
-    FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers;
+    FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers; layoutVer++;
     layout(cap);
   }
   renderMerit();
@@ -506,7 +506,9 @@ function applySettings(){
 connect();
 
 /* ======================= render ======================= */
-const ctx=document.getElementById('c').getContext('2d');
+const mainCtx=document.getElementById('c').getContext('2d');
+let ctx=mainCtx;   // đổi tạm sang canvas ẩn khi vẽ lớp tĩnh (renderStatic)
+const FPS_CAP=30, MIN_FRAME_MS=1000/FPS_CAP-3;   // rAF 60Hz → cứ 2 nhịp vẽ 1 khung; chừa 3ms cho nhịp rAF lệch
 function sprite(im,x,y,s,ay=1){ if(!im?.naturalWidth) return; const w=im.naturalWidth*s,h=im.naturalHeight*s; ctx.drawImage(im,x-w/2,y-h*ay,w,h); }
 function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 function tag(text,x,y,s,style,av,maxW){
@@ -528,10 +530,45 @@ function bubble(text,x,y,s){
   ctx.fillStyle='#3a1a08'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,x,y-h/2+1);
 }
 
-let last=performance.now();
+/* ---- Lớp tĩnh vẽ sẵn vào canvas ẩn: nền (hall) và 6 vị thầy + thẻ tên (tách đôi quanh thầy trụ trì để hào quang vẫn nằm đúng giữa).
+   Chỉ vẽ lại khi bố cục, chế độ ngày/đêm, ảnh hoặc phông chữ thay đổi. */
+const mkLayer=()=>{ const c=document.createElement('canvas'); c.width=1080; c.height=1920; return c; };
+const staticBg=mkLayer(), staticT1=mkLayer(), staticT2=mkLayer();
+let layoutVer=0, staticKey='', fontsOk=false;
+const tagFont = tc => { const fs = Math.max(15, Math.round(30 * tc.s / .4)); return [fs, `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`]; };
+function drawTeachers(from, to, crowded){
+  for (let i=from;i<to;i++){
+    const tc=TEACHERS[i];
+    if (tc.flip){ ctx.save(); ctx.translate(tc.x,0); ctx.scale(-1,1); sprite(A[tc.skin],0,tc.y,tc.s); ctx.restore(); }
+    else sprite(A[tc.skin],tc.x,tc.y,tc.s);
+    if (!crowded || tc.master) tag(tc.name, tc.x, tc.y - tc.s*260 - 22, tc.s, 'gold');
+  }
+}
+function renderStatic(){
+  const bg=staticBg.getContext('2d'); bg.clearRect(0,0,1080,1920);
+  if (A.hall.naturalWidth) bg.drawImage(A.hall,0,0,1080,1920);
+  const prev=ctx;
+  try {
+    ctx=staticT1.getContext('2d'); ctx.clearRect(0,0,1080,1920);
+    // thẻ tên chen chúc thì chỉ hiện tên thầy trụ trì
+    const tw = TEACHERS.map(tc => { const [fs, f] = tagFont(tc); ctx.font = f; return ctx.measureText(tc.name).width + fs; });
+    const crowded = TEACHERS.some((a, i) => TEACHERS.some((b, j) => j > i && Math.abs(a.x - b.x) < (tw[i] + tw[j]) / 2 + 8 && Math.abs(a.y - b.y) < 60));
+    const mi = TEACHERS.findIndex(tc => tc.master), split = mi < 0 ? TEACHERS.length : mi;
+    drawTeachers(0, split, crowded);
+    ctx=staticT2.getContext('2d'); ctx.clearRect(0,0,1080,1920);
+    drawTeachers(split, TEACHERS.length, crowded);
+  } finally { ctx=prev; }
+}
+function staticKeyNow(){
+  return [layoutVer, ambientFX.isDaytime(settings.lightingMode || 'auto') ? 'd' : 'n', A.hall.naturalWidth > 0, A.monk.naturalWidth > 0, fontsOk].join('|');
+}
+
+let lastDraw=performance.now();
 function frame(now){
   requestAnimationFrame(frame);
-  const dt=Math.min((now-last)/1000,.05); last=now; const t=now/1000;
+  if (now - lastDraw < MIN_FRAME_MS) return;      // giới hạn 30 fps; mọi chuyển động tính theo dt nên tốc độ không đổi
+  const dt=Math.min((now-lastDraw)/1000,.1); lastDraw=now; const t=now/1000;
+  const sk=staticKeyNow(); if (sk!==staticKey){ staticKey=sk; renderStatic(); }
   ctx.clearRect(0,0,1080,1920);
 
   const cols = currentCols();
@@ -540,7 +577,7 @@ function frame(now){
   cameraZoom.update(dt, visitors, settings.zoomEnabled !== false, Date.now() < silentUntil);
 
   cameraZoom.applyTransform(ctx);
-  if (A.hall.naturalWidth) ctx.drawImage(A.hall,0,0,1080,1920);
+  ctx.drawImage(staticBg,0,0);
 
   // 1. Ánh Sáng & Thời Tiết Chánh Điện Realtime (Ban ngày: Nắng cửa sổ / Ban đêm: Nến & Đèn dầu)
   ambientFX.drawBackgroundLighting(ctx, dt, t, settings.lightingMode || 'auto');
@@ -553,19 +590,11 @@ function frame(now){
   // 3. Lư Hương Lửa & Khói Trầm Tương Tác (Perlin Noise + Sine Wave drift)
   incenseFX.updateAndDraw(ctx, dt, t, 540, LAYOUT.incense.y);
 
-  // 4. Sáu vị thầy hai bên bàn thờ (lối giữa để trống). Thẻ tên chen chúc thì chỉ hiện tên thầy trụ trì.
-  ctx.save();
-  const tagFont = tc => { const fs = Math.max(15, Math.round(30 * tc.s / .4)); return [fs, `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`]; };
-  const tagW = tc => { const [fs, f] = tagFont(tc); ctx.font = f; return ctx.measureText(tc.name).width + fs; };
-  const tw = TEACHERS.map(tagW);
-  const crowded = TEACHERS.some((a, i) => TEACHERS.some((b, j) => j > i && Math.abs(a.x - b.x) < (tw[i] + tw[j]) / 2 + 8 && Math.abs(a.y - b.y) < 60));
-  ctx.restore();
-  for (const tc of TEACHERS){
-    if (tc.master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,tc.x,tc.y-120,.9,.5); ctx.restore(); }
-    if (tc.flip){ ctx.save(); ctx.translate(tc.x,0); ctx.scale(-1,1); sprite(A[tc.skin],0,tc.y,tc.s); ctx.restore(); }
-    else sprite(A[tc.skin],tc.x,tc.y,tc.s);
-    if (!crowded || tc.master) tag(tc.name, tc.x, tc.y - tc.s*260 - 22, tc.s, 'gold');
-  }
+  // 4. Sáu vị thầy hai bên bàn thờ (lối giữa để trống): vẽ từ lớp tĩnh; hào quang thầy trụ trì vẫn vẽ mỗi khung, nằm giữa hai nửa lớp.
+  ctx.drawImage(staticT1,0,0);
+  const master=TEACHERS.find(tc=>tc.master);
+  if (master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,master.x,master.y-120,.9,.5); ctx.restore(); }
+  ctx.drawImage(staticT2,0,0);
 
   // 5. Phật tử ngồi thiền & hành lễ (cập nhật Lerp + Perspective Scaling + 12-Frame Bowing + Lotus Aura 5 phút)
   const bubbles=[];
@@ -626,7 +655,12 @@ function drawCredit(now){
   ctx.fillStyle = '#ffd98a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(credit.text, 540, credit.y + 1);
   ctx.restore();
 }
-layout(24); updateAmbientBadge(); requestAnimationFrame(frame);
+layout(24); updateAmbientBadge();
+// Chờ phông chữ (Noto Serif, Be Vietnam Pro) nạp xong rồi mới vẽ khung đầu, để thẻ tên/Sổ Vàng không đo chữ bằng phông dự phòng. Quá 4s thì vẽ luôn.
+Promise.race([
+  Promise.all(['600 30px "Be Vietnam Pro"','500 26px "Be Vietnam Pro"','700 24px "Noto Serif"','italic 700 42px "Noto Serif"'].map(f=>document.fonts.load(f).catch(()=>[]))).then(()=>document.fonts.ready),
+  new Promise(r=>setTimeout(r,4000)),
+]).catch(()=>{}).then(()=>{ fontsOk=true; lastDraw=performance.now(); requestAnimationFrame(frame); });
 </script>
 </body>
 </html>
