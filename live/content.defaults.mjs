@@ -132,6 +132,14 @@ export default {
     "text": "♥ {n} trái tim tịnh tâm ♥",
     "showSec": 5
   },
+  "tts": {
+    "minGapMs": 2000
+  },
+  "oracle": {
+    "userCooldownSec": 600,
+    "globalCooldownSec": 20,
+    "tts": "Pháp ngữ gửi Phật tử {name}."
+  },
   "zoom": {
     "enabled": true,
     "minCoins": 99,

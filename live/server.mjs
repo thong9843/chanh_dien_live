@@ -6,6 +6,7 @@
 //   cd live && npm install && npm start        → http://localhost:3000/live/control.html
 //
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');            // repo root: serves /assets, /live
 const TTS_DIR = path.join(__dirname, 'tts');
 fs.mkdirSync(TTS_DIR, { recursive: true });
-for (const f of fs.readdirSync(TTS_DIR)) { try { fs.unlinkSync(path.join(TTS_DIR, f)); } catch {} }
+for (const f of fs.readdirSync(TTS_DIR)) { if (!f.startsWith('cache_')) try { fs.unlinkSync(path.join(TTS_DIR, f)); } catch {} }
 // live/.env (đã nằm trong .gitignore, không bao giờ commit): EULER_API_KEY=... — đọc bằng loadEnvFile có sẵn của Node 20.12+, không thêm dependency.
 try { process.loadEnvFile(path.join(__dirname, '.env')); } catch {}
 const PORT = +process.env.PORT || 3000;
@@ -133,6 +134,14 @@ function loadContent(){
       })(),
       maxQueue: Math.round(cNum(ce.maxQueue, 1, 20, dce.maxQueue)),
       cooldownSec: cNum(ce.cooldownSec, 0, 3600, dce.cooldownSec),
+    },
+    tts: {
+      minGapMs: cNum(o('tts')?.minGapMs, 500, 10000, D.tts?.minGapMs || 2000),
+    },
+    oracle: {
+      userCooldownSec: cNum(o('oracle')?.userCooldownSec, 10, 3600, D.oracle?.userCooldownSec || 600),
+      globalCooldownSec: cNum(o('oracle')?.globalCooldownSec, 1, 300, D.oracle?.globalCooldownSec || 20),
+      tts: cStr(o('oracle')?.tts, D.oracle?.tts || 'Pháp ngữ gửi Phật tử {name}.', 200),
     },
     plaque: { enabled: typeof o('plaque').enabled === 'boolean' ? o('plaque').enabled : D.plaque.enabled },   // tiêu đề thiền đường trên overlay: mặc định tắt
     layout: (() => {
@@ -297,12 +306,18 @@ function pickOracle(){
   lastOracleIdx = idx;
   return list[idx];
 }
+let lastGlobalOracleAt = 0;
 function triggerOracle(id, name, avatar, bypassCooldown = false){
   const now = Date.now();
+  const userCooldownMs = (CONTENT.oracle?.userCooldownSec || 600) * 1000;
+  const globalCooldownMs = (CONTENT.oracle?.globalCooldownSec || 20) * 1000;
+
   if (!bypassCooldown){
+    if (now - lastGlobalOracleAt < globalCooldownMs) return false;
     const prev = oracleCooldown.get(id) || 0;
-    if (now - prev < 15_000) return false;
+    if (now - prev < userCooldownMs) return false;
   }
+  lastGlobalOracleAt = now;
   oracleCooldown.set(id, now);
   const oracle = pickOracle();
   const safeName = sanitizeDisplayName(name);
@@ -311,12 +326,19 @@ function triggerOracle(id, name, avatar, bypassCooldown = false){
     id,
     name: safeName,
     avatar: avatar || '',
-    title: oracle.title,
-    verse: oracle.verse,
-    advice: oracle.advice,
+    title: oracle.title || `Pháp ngữ hôm nay · ${oracle.topic || ''}`,
+    verse: oracle.teaching || oracle.verse,
+    advice: oracle.advice || '',
     showSec: 8,
   });
-  addLog(`📜 Quẻ Cầu An cho ${safeName}: ${oracle.title}`);
+  addLog(`📜 Pháp ngữ hôm nay cho ${safeName}: ${oracle.topic || oracle.title}`);
+
+  // TTS reads ONLY "Pháp ngữ gửi Phật tử {name}", never the full text! Priority = 1 (oracle)
+  const spokenName = spoken(name);
+  const ttsTpl = CONTENT.oracle?.tts || 'Pháp ngữ gửi Phật tử {name}.';
+  const ttsText = fill(ttsTpl, { name: spokenName });
+  say(ttsText, { tag: 'oracle' }, 1);
+
   return true;
 }
 
@@ -523,7 +545,7 @@ function requestCeremony(id, kind, bypassUserCooldown = false){
 setInterval(() => {
   const now = Date.now(), cd = CONTENT.ceremony.cooldownSec * 1000;
   for (const [id, at] of ceremonyCooldowns) if (now - at >= cd) ceremonyCooldowns.delete(id);
-  for (const [id, at] of oracleCooldown) if (now - at >= 15_000) oracleCooldown.delete(id);
+  for (const [id, at] of oracleCooldown) if (now - at >= (CONTENT.oracle?.userCooldownSec || 600) * 1000) oracleCooldown.delete(id);
 }, 60_000).unref?.();
 
 function setSilentUntil(untilMs){
@@ -686,7 +708,7 @@ function onGift(id, name, giftName, count, diamonds, avatar){
   }
 
   if (settings.gifts.readAll || coins >= settings.gifts.minDiamonds){
-    say(line, { tag: 'gift', small: tier < 3, names: [spokenName] }, tier >= 3 ? 3 : 1);
+    say(line, { tag: 'gift', small: tier < 3, names: [spokenName] }, tier >= 3 ? 4 : 2);
   }
 }
 
@@ -715,7 +737,7 @@ function onFollow(id, name, avatar){
   const who = v ? v.name : sanitizeDisplayName(name);
   broadcast({ t:'follow', id, name: who });
   if (v && CONTENT.zoom.onFollow) enqueueZoom(v.id, 'follow');
-  say(fill(CONTENT.follow.line, { name: spoken(v?.rawName || name || who) }), { tag:'follow' }, 2);
+  say(fill(CONTENT.follow.line, { name: spoken(v?.rawName || name || who) }), { tag:'follow' }, 3);
 }
 function onShare(name){
   const who = sanitizeDisplayName(name);
@@ -731,27 +753,75 @@ function onLikes(id, n, total){
   if (m > mileDone){
     mileDone = m; const count = m * every;
     broadcast({ t:'milestone', n: count });
-    say(fill(CONTENT.milestone.line, { n: count }), { tag:'milestone' }, 2);
+    say(fill(CONTENT.milestone.line, { n: count }), { tag:'milestone' }, 3);
   }
 }
 
-/* ------------------------------------------------------------------ Edge TTS Queue */
-const ttsQueue = []; let ttsBusy = false, ttsSeq = 0;
-function esc(s){ return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])); }
-const MAX_Q = 15, MERGE_OVER = 8;
+/* ------------------------------------------------------------------ Edge TTS Queue & Disk Cache */
+const ttsQueue = []; let ttsBusy = false, ttsSeq = 0, lastTtsEndTime = 0, ttsFailCount = 0;
+const TTS_FAIL_DELAYS = [5000, 10000, 30000];
+const MAX_Q = 8, MERGE_OVER = 5;
 
-// Thang ưu tiên: 4 say thủ công > 3 quà lớn > 2 follow / mốc tim > 1 quà nhỏ > 0 tụng định kỳ / member.
+function esc(s){ return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])); }
+
+// Khóa lưu đĩa cho các câu cố định (pháp ngữ, kinh, lời chào): key = hash(text+voice+pitch+rate)
+function getTtsCacheKey(text, voice, pitch, rate) {
+  const normText = String(text || '').trim().replace(/\s+/g, ' ');
+  return crypto.createHash('sha1').update(`${normText}|${voice}|${pitch}|${rate}`).digest('hex').slice(0, 16);
+}
+
+function getCachedTtsFile(text) {
+  const key = getTtsCacheKey(text, settings.voice, settings.pitch, settings.rate);
+  const fileName = `cache_${key}.mp3`;
+  const filePath = path.join(TTS_DIR, fileName);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+    return { fileName, filePath };
+  }
+  return null;
+}
+
+function saveCachedTtsFile(text, buf) {
+  try {
+    const key = getTtsCacheKey(text, settings.voice, settings.pitch, settings.rate);
+    const fileName = `cache_${key}.mp3`;
+    const filePath = path.join(TTS_DIR, fileName);
+    fs.writeFileSync(filePath, buf);
+    return fileName;
+  } catch (e) {
+    console.error('Lỗi ghi cache TTS:', e?.message);
+    return null;
+  }
+}
+
+// Thang ưu tiên: 5 say thủ công > 4 quà lớn (≥99 xu) > 3 follow / mốc tim > 2 quà nhỏ (<99 xu) > 1 oracle > 0 tụng kinh / member.
+// Khi đầy (max 8): bỏ câu cũ nhất trong nhóm ưu tiên thấp nhất.
 function say(text, meta = {}, prio = 1){
   const cleanText = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
   if (!cleanText) return;
-  const item = { text: cleanText, meta, prio };
+  const item = { text: cleanText, meta, prio, at: Date.now() };
+
   if (ttsQueue.length >= MAX_Q){
-    const low = Math.min(...ttsQueue.map(q => q.prio));
-    if (prio <= low){ addLog('Hàng đợi giọng đọc đầy, bỏ qua 1 câu'); return; }
-    const i = ttsQueue.map(q => q.prio).lastIndexOf(low); ttsQueue.splice(i, 1);
-    addLog('Hàng đợi giọng đọc đầy, bỏ 1 câu ưu tiên thấp');
+    const minPrio = Math.min(...ttsQueue.map(q => q.prio));
+    if (prio < minPrio){
+      addLog(`Hàng đợi giọng đọc đầy (8/8), bỏ qua câu mới do ưu tiên thấp hơn (${meta.tag || 'tts'})`);
+      return;
+    }
+    // Tìm phần tử cũ nhất trong các phần tử có độ ưu tiên thấp nhất
+    let oldestIdx = -1, oldestTime = Infinity;
+    for (let i = 0; i < ttsQueue.length; i++){
+      if (ttsQueue[i].prio === minPrio && ttsQueue[i].at < oldestTime){
+        oldestTime = ttsQueue[i].at;
+        oldestIdx = i;
+      }
+    }
+    if (oldestIdx >= 0){
+      const dropped = ttsQueue.splice(oldestIdx, 1)[0];
+      addLog(`Hàng đợi giọng đọc đầy (8/8), bỏ câu cũ nhất ưu tiên thấp (${dropped.meta?.tag || 'tts'}, prio ${minPrio})`);
+    }
   }
-  let at = ttsQueue.length; while (at > 0 && ttsQueue[at - 1].prio < prio) at--;
+
+  let at = ttsQueue.length;
+  while (at > 0 && ttsQueue[at - 1].prio < prio) at--;
   ttsQueue.splice(at, 0, item);
   if (ttsQueue.length > MERGE_OVER) mergeSmallGifts();
   pumpTTS();
@@ -808,6 +878,10 @@ function explainTTSError(e){
 // Mọi yêu cầu tạo giọng (phát live lẫn nghe thử) xếp hàng một, không chạy song song; lỗi thì thử lại 1 lần.
 let edgeChain = Promise.resolve();
 function synthesizeViaEdge(text){
+  const cached = getCachedTtsFile(text);
+  if (cached) {
+    try { return Promise.resolve(fs.readFileSync(cached.filePath)); } catch {}
+  }
   const run = async () => {
     try { return await synthesizeOnce(text); }
     catch (e1) { addLog('TTS lỗi, thử lại 1 lần: ' + explainTTSError(e1)); await sleep(600); return await synthesizeOnce(text); }
@@ -824,7 +898,7 @@ function reportTTSFail(e, what){
 }
 
 function pruneTtsFiles(){
-  const old = fs.readdirSync(TTS_DIR).sort();
+  const old = fs.readdirSync(TTS_DIR).filter(f => !f.startsWith('cache_')).sort();
   while (old.length > 40) {
     try { fs.unlinkSync(path.join(TTS_DIR, old.shift())); } catch {}
   }
@@ -833,18 +907,44 @@ function pruneTtsFiles(){
 async function pumpTTS(){
   if (ttsBusy || !ttsQueue.length) return;
   ttsBusy = true;
+
+  const minGap = CONTENT.tts?.minGapMs || 2000;
+  const backoff = ttsFailCount > 0 ? TTS_FAIL_DELAYS[Math.min(ttsFailCount - 1, TTS_FAIL_DELAYS.length - 1)] : 0;
+  const waitMs = Math.max(minGap, backoff);
+  const elapsed = Date.now() - lastTtsEndTime;
+  if (elapsed < waitMs) {
+    ttsBusy = false;
+    setTimeout(pumpTTS, waitMs - elapsed);
+    return;
+  }
+
   const { text, meta } = ttsQueue.shift();
   try {
-    const buf = await synthesizeViaEdge(text);
-    const file = `tts_${Date.now()}_${++ttsSeq}.mp3`;
-    fs.writeFileSync(path.join(TTS_DIR, file), buf);
+    const cached = getCachedTtsFile(text);
+    let file = '';
+    if (cached) {
+      file = cached.fileName;
+    } else {
+      const buf = await synthesizeViaEdge(text);
+      ttsFailCount = 0; // reset on success
+      const isFixed = meta.fixed || meta.tag === 'chant' || (CONTENT.chants && CONTENT.chants.includes(text));
+      if (isFixed) {
+        file = saveCachedTtsFile(text, buf) || `tts_${Date.now()}_${++ttsSeq}.mp3`;
+      } else {
+        file = `tts_${Date.now()}_${++ttsSeq}.mp3`;
+        fs.writeFileSync(path.join(TTS_DIR, file), buf);
+      }
+      pruneTtsFiles();
+    }
+    lastTtsEndTime = Date.now();
     broadcast({ t: 'tts', url: `/live/tts/${file}`, text, tag: meta.tag });
-    pruneTtsFiles();
   } catch (e) {
-    reportTTSFail(e, 'Không tạo được giọng đọc, bỏ câu này');
+    ttsFailCount++;
+    lastTtsEndTime = Date.now();
+    reportTTSFail(e, `Không tạo được giọng đọc (lỗi lần ${ttsFailCount}), bỏ câu này`);
   }
   ttsBusy = false;
-  setTimeout(pumpTTS, 80);
+  setTimeout(pumpTTS, 100);
 }
 
 // Tạo file nghe thử cách đọc tên khó riêng trên bảng điều khiển (đọc nguyên câu quà từ content.json, không phát lên overlay)
@@ -878,9 +978,33 @@ async function previewNameTTS(rawName, ws){
 }
 
 let chantIdx = 0, chantTimer = null;
-function chant(){ const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant' }, 0); }
+function chant(){ const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant', fixed: true }, 0); }
 function scheduleChant(){ clearInterval(chantTimer); if (settings.autoChant) chantTimer = setInterval(chant, Math.max(1, settings.chantEveryMin) * 60_000); }
 scheduleChant();
+// Sinh trước chậm rãi các câu cố định khi khởi động để lưu vào đĩa
+async function pregenerateFixedTts(){
+  const fixed = [
+    ...(CONTENT.chants || []),
+    ...(CONTENT.prayers || []),
+    ...((CONTENT.oracles || []).map(o => o.teaching || o.verse).filter(Boolean)),
+  ].filter(Boolean);
+
+  for (const text of fixed){
+    const cached = getCachedTtsFile(text);
+    if (!cached){
+      try {
+        const buf = await synthesizeViaEdge(text);
+        saveCachedTtsFile(text, buf);
+        addLog(`🎙️ Đã lưu đĩa câu cố định: "${text.slice(0, 30)}…"`);
+      } catch (e) {
+        // bỏ qua lỗi nếu không nối được mạng lúc khởi động
+      }
+      await sleep(2500); // sinh chậm rãi cách nhau 2.5s
+    }
+  }
+}
+setTimeout(pregenerateFixedTts, 3000);
+
 
 /* --------------------------------------------------------------- TikTok */
 let TikTokLib = null;
@@ -1082,7 +1206,7 @@ function onControl(m, ws){
       break;
     case 'mo': broadcast({ t:'mo1' }); break;
     case 'chant': chant(); break;
-    case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }, 4); break;
+    case 'say': if (m.text) say(String(m.text).slice(0, 400), { tag:'say' }, 5); break;
     case 'test_name': bg('Nghe thử lỗi', previewNameTTS(m.name, ws)); break;
     case 'settings':
       applySettings(m.settings || {});

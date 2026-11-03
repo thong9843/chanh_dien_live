@@ -135,7 +135,7 @@
     "enabled": true,
     "minCoins": 99,
     "onFollow": true,
-    "scaleFrom": 1.0,
+    "scaleFrom": 1,
     "scaleTo": 1.6,
     "holdSec": 5,
     "outSec": 1.5,
@@ -154,7 +154,7 @@
     "cooldownSec": 300,
     "bow": {
       "dropPct": 0.11,
-      "squashPct": 0.10,
+      "squashPct": 0.1,
       "leanPx": 2,
       "downSec": 0.9,
       "holdSec": 0.6,
@@ -173,9 +173,13 @@
     },
     "stand": {
       "dropPct": 0.09,
-      "squashPct": 0.10,
+      "squashPct": 0.1,
       "waistRatio": 0.46,
-      "headRatio": { "man": 0.17, "woman": 0.17, "granny": 0.24 }
+      "headRatio": {
+        "man": 0.17,
+        "woman": 0.17,
+        "granny": 0.24
+      }
     },
     "kneel": {
       "downSec": 0.4,
@@ -183,7 +187,11 @@
       "prostrateFadeSec": 0.35,
       "scale": 0.9
     },
-    "prostrateExtraDrop": { "man": 0, "woman": 0.04, "granny": 0.08 }
+    "prostrateExtraDrop": {
+      "man": 0,
+      "woman": 0.04,
+      "granny": 0.08
+    }
   },
   "demo": {
     "names": [
@@ -253,12 +261,55 @@
       "y": 990
     },
     "teachers": [
-      { "name": "Thầy Minh Đạo", "skin": "monk", "x": 165, "y": 1345, "s": 0.4, "flip": false },
-      { "name": "Thầy Thiện Hạnh", "skin": "monk", "x": 275, "y": 1335, "s": 0.4, "flip": false },
-      { "name": "Sư Trụ Trì", "skin": "monk", "x": 385, "y": 1325, "s": 0.4, "flip": false, "master": true },
-      { "name": "Thầy Tâm Từ", "skin": "monk", "x": 695, "y": 1325, "s": 0.4, "flip": true },
-      { "name": "Thầy Giác Tâm", "skin": "monk", "x": 805, "y": 1335, "s": 0.4, "flip": true },
-      { "name": "Thầy Pháp Duyên", "skin": "monk", "x": 915, "y": 1345, "s": 0.4, "flip": true }
+      {
+        "name": "Thầy Minh Đạo",
+        "skin": "monk",
+        "x": 165,
+        "y": 1345,
+        "s": 0.4,
+        "flip": false
+      },
+      {
+        "name": "Thầy Thiện Hạnh",
+        "skin": "monk",
+        "x": 275,
+        "y": 1335,
+        "s": 0.4,
+        "flip": false
+      },
+      {
+        "name": "Sư Trụ Trì",
+        "skin": "monk",
+        "x": 385,
+        "y": 1325,
+        "s": 0.4,
+        "flip": false,
+        "master": true
+      },
+      {
+        "name": "Thầy Tâm Từ",
+        "skin": "monk",
+        "x": 695,
+        "y": 1325,
+        "s": 0.4,
+        "flip": true
+      },
+      {
+        "name": "Thầy Giác Tâm",
+        "skin": "monk",
+        "x": 805,
+        "y": 1335,
+        "s": 0.4,
+        "flip": true
+      },
+      {
+        "name": "Thầy Pháp Duyên",
+        "skin": "monk",
+        "x": 915,
+        "y": 1345,
+        "s": 0.4,
+        "flip": true
+      }
     ],
     "floor": {
       "yTop": 1430,
@@ -273,27 +324,87 @@
     },
     "teacherTagGap": 6,
     "buddhaGlow": {
-      "head": { "x": 540, "y": 350, "r": 330, "alpha": 0.34 },
-      "body": { "x": 540, "y": 640, "rx": 330, "ry": 330, "alpha": 0.2 },
+      "head": {
+        "x": 540,
+        "y": 350,
+        "r": 330,
+        "alpha": 0.34
+      },
+      "body": {
+        "x": 540,
+        "y": 640,
+        "rx": 330,
+        "ry": 330,
+        "alpha": 0.2
+      },
       "breathSec": 7,
       "breathAmp": 0.25,
       "nightBoost": 1.4,
-      "vignette": { "alpha": 0.18, "size": 260 }
+      "vignette": {
+        "alpha": 0.18,
+        "size": 260
+      }
     },
     "meritScroll": {
       "top": 1040
     },
     "ui": {
-      "chips": { "top": 240, "left": 24, "right": 1056 },
-      "tips": { "x": 16, "y": 320, "w": 264, "h": 670, "sec": 8, "perPage": 3 },
-      "merit": { "x": 800, "y": 320, "w": 256, "h": 670, "max": 5, "nameMax": 10 },
-      "notice": { "top": 1000, "h": 214, "w": 600 }
+      "chips": {
+        "top": 240,
+        "left": 24,
+        "right": 1056
+      },
+      "tips": {
+        "x": 16,
+        "y": 320,
+        "w": 264,
+        "h": 670,
+        "sec": 8,
+        "perPage": 3
+      },
+      "merit": {
+        "x": 800,
+        "y": 320,
+        "w": 256,
+        "h": 670,
+        "max": 5,
+        "nameMax": 10
+      },
+      "notice": {
+        "top": 1000,
+        "h": 214,
+        "w": 600
+      }
     },
     "safeZones": [
-      { "label": "Thanh trên TikTok", "x": 0, "y": 0, "w": 1080, "h": 230 },
-      { "label": "Cột phải TikTok", "x": 918, "y": 230, "w": 162, "h": 1500 },
-      { "label": "Bình luận + nút (dưới-trái)", "x": 0, "y": 1248, "w": 810, "h": 482 },
-      { "label": "Dải dưới", "x": 0, "y": 1730, "w": 1080, "h": 190 }
+      {
+        "label": "Thanh trên TikTok",
+        "x": 0,
+        "y": 0,
+        "w": 1080,
+        "h": 230
+      },
+      {
+        "label": "Cột phải TikTok",
+        "x": 918,
+        "y": 230,
+        "w": 162,
+        "h": 1500
+      },
+      {
+        "label": "Bình luận + nút (dưới-trái)",
+        "x": 0,
+        "y": 1248,
+        "w": 810,
+        "h": 482
+      },
+      {
+        "label": "Dải dưới",
+        "x": 0,
+        "y": 1730,
+        "w": 1080,
+        "h": 190
+      }
     ]
   },
   "meritScroll": {
@@ -317,5 +428,13 @@
     "showSec": 7,
     "y": 1222,
     "fontPx": 22
+  },
+  "tts": {
+    "minGapMs": 2000
+  },
+  "oracle": {
+    "userCooldownSec": 600,
+    "globalCooldownSec": 20,
+    "tts": "Pháp ngữ gửi Phật tử {name}."
   }
 }
