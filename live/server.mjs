@@ -1147,8 +1147,11 @@ const server = http.createServer((req, res) => {
   if (!file) { res.writeHead(404).end('not found'); return; }
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404).end('not found'); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': p.startsWith('/live/tts/') ? 'no-store' : 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
+    const ext = path.extname(file).toLowerCase();
+    const isAppCode = ext === '.html' || ext === '.js' || ext === '.css' || /(?:overlay|control)\.html$/i.test(file);
+    const cacheCtrl = p.startsWith('/live/tts/') ? 'no-store' : (isAppCode ? 'no-cache' : 'public, max-age=3600');
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': cacheCtrl, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
     if (req.method === 'HEAD') { res.end(); return; }
     fs.createReadStream(file).pipe(res);
   });
