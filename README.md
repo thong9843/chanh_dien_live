@@ -26,15 +26,6 @@ npm start
 
 Chưa live vẫn thử được: dùng **Thử tương tác**, **Đổ người mẫu 15/36/64/100** hoặc **Bot mô phỏng**.
 
-### Xem overlay trên điện thoại (cùng WiFi, mặc định tắt)
-
-Chạy `live\start-lan.bat` (hoặc đặt biến `LAN=1` rồi `npm start`). Server in ra địa chỉ dạng:
-
-- `http://192.168.x.x:3000/live/overlay.html`: vừa khung, thấy trọn màn hình 9:16.
-- `http://192.168.x.x:3000/live/overlay.html?fit=cover`: lấp đầy điện thoại màn hình dài, giữ nguyên chiều dọc, cắt đều hai mép trái/phải (chữ sát mép có thể bị cắt nhẹ).
-
-Mở trên điện thoại cùng WiFi, bấm **Bật âm thanh** một lần. Chỉ overlay mở được qua LAN. Bảng điều khiển và mọi lệnh vẫn chỉ chạy từ `localhost`. Lần đầu Windows có thể hỏi tường lửa: chọn mạng **Private**. Không có mật khẩu, nên chỉ dùng ở WiFi tin cậy.
-
 ### Người xem làm được gì
 
 - **Bình luận bất kỳ**: được vào ngồi (tối đa 100 chỗ, chỗ ngồi tự mở rộng 24 → 36 → 64 → 100). Đầy chỗ thì người im lặng lâu nhất mà chưa tặng quà sẽ nhường chỗ.
@@ -47,7 +38,7 @@ Mở trên điện thoại cùng WiFi, bấm **Bật âm thanh** một lần. Ch
 Dự án được viết để ai tải về chạy cũng an toàn mặc định:
 
 - **Không dùng tài khoản TikTok.** Server chỉ đọc sự kiện công khai của phòng live theo username. Không cần, không hỏi và không lưu mật khẩu, cookie hay session. Không gửi tin nhắn thay bạn.
-- **Chỉ mở trên máy mình.** Server lắng nghe `127.0.0.1`, máy khác trong mạng hay Internet không truy cập được. Chỉ khi bật `LAN=1` (xem mục trên) mới nghe trên mạng nội bộ, và khi đó quyền lấy theo địa chỉ nguồn kết nối: máy trong LAN chỉ xem được overlay, còn bảng điều khiển và lệnh WebSocket vẫn chỉ từ `localhost`; IP công cộng bị từ chối. Đừng đặt biến `HOST` để mở ra ngoài khi chưa có đăng nhập.
+- **Chỉ mở trên máy mình.** Server lắng nghe `127.0.0.1`, máy khác trong mạng hay Internet không truy cập được. Đừng đặt biến `HOST` để mở ra ngoài khi chưa có đăng nhập.
 - **Chặn trang web lạ điều khiển.** WebSocket chỉ nhận kết nối từ chính trang của server (kiểm tra `Origin`), và header `Host` phải là localhost (chống DNS rebinding). Một trang web khác đang mở trong cùng trình duyệt không gửi được lệnh. Cửa sổ overlay chỉ nhận dữ liệu, không gửi lệnh được.
 - **File tĩnh có danh sách trắng.** Chỉ phục vụ `/assets` và `/live`. Chặn file ẩn (`.git`, `.env`), `node_modules`, mã server, `package.json` và mọi đường dẫn `../`.
 - **Không tin dữ liệu vào.** Tên người xem, bình luận và tên quà đều bị cắt độ dài. Cài đặt chỉ nhận đúng khóa, đúng kiểu, trong giới hạn. Văn bản đưa vào giọng đọc được escape XML. Mọi chữ trên màn hình vẽ bằng `textContent` hoặc canvas, không chèn HTML, nên bình luận chứa mã độc chỉ hiện ra như chữ thường.

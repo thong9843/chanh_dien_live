@@ -7,7 +7,6 @@
 //
 import http from 'node:http';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -998,12 +997,7 @@ function setBots(on, n, pace){
 }
 
 /* -------------------------------------------------------------- server */
-// LAN=1 (xem overlay trên điện thoại cùng WiFi): nghe 0.0.0.0, nhưng quyền do ĐỊA CHỈ NGUỒN kết nối quyết định, không do client tự khai.
-//   • 'local' : kết nối từ loopback + Host là localhost  → toàn quyền (control.html, lệnh WebSocket)
-//   • 'lan'   : kết nối từ dải riêng (10/8, 172.16/12, 192.168/16) + Host là IP của chính máy này → chỉ xem overlay
-//   • còn lại (IP công cộng, Host lạ)                    → từ chối
-const LAN = process.env.LAN === '1';
-const HOST = LAN ? '0.0.0.0' : (process.env.HOST || '127.0.0.1');
+const HOST = process.env.HOST || '127.0.0.1';
 const MIME = {
   '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8',
   '.json':'application/json', '.png':'image/png', '.jpg':'image/jpeg', '.webp':'image/webp',
@@ -1012,28 +1006,12 @@ const MIME = {
 const ALLOWED_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`, `[::1]:${PORT}`]);
 const normAddr = a => { a = String(a || ''); return a.startsWith('::ffff:') ? a.slice(7) : a; };
 const isLoopbackAddr = a => a === '::1' || /^127\./.test(a);
-function isPrivateV4(a){
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(a); if (!m) return false;
-  const x = +m[1], y = +m[2];
-  return x === 10 || (x === 172 && y >= 16 && y <= 31) || (x === 192 && y === 168);
-}
-let lanCache = { at: 0, ips: [] };
-function lanIPs(){
-  if (Date.now() - lanCache.at < 10_000) return lanCache.ips;
-  const ips = [];
-  for (const list of Object.values(os.networkInterfaces())) for (const i of list || []) if (i.family === 'IPv4' && !i.internal && isPrivateV4(i.address)) ips.push(i.address);
-  lanCache = { at: Date.now(), ips }; return ips;
-}
-const lanHostSet = () => new Set(lanIPs().map(ip => `${ip}:${PORT}`));
-// → 'local' | 'lan' | null
+// → 'local' | null
 function clientKind(req){
   const host = String(req.headers.host || '').toLowerCase(), addr = normAddr(req.socket.remoteAddress);
   if (ALLOWED_HOSTS.has(host)) return isLoopbackAddr(addr) ? 'local' : null;
-  if (LAN && lanHostSet().has(host) && (isPrivateV4(addr) || isLoopbackAddr(addr))) return 'lan';
   return null;
 }
-// Chỉ cho client LAN lấy đúng những gì overlay cần.
-const lanPathOk = p => p === '/live/overlay.html' || p.startsWith('/live/js/') || p.startsWith('/assets/') || p.startsWith('/live/tts/');
 const SEP = path.sep;
 function resolveStatic(urlPath){
   let p = urlPath === '/' ? '/live/control.html' : urlPath;
@@ -1049,7 +1027,6 @@ const server = http.createServer((req, res) => {
   if (!kind) { res.writeHead(421).end('wrong host'); return; }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
   let p; try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400).end(); return; }
-  if (kind === 'lan' && !lanPathOk(p)) { res.writeHead(403).end('chỉ xem overlay qua LAN'); return; }
   const file = resolveStatic(p);
   if (!file) { res.writeHead(404).end('not found'); return; }
   fs.stat(file, (err, st) => {
@@ -1066,10 +1043,9 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024,
     if (!kind) return cb(false, 401, 'wrong host');
     if (origin) {                                               // OBS / non-browser clients send no Origin
       let oh; try { oh = new URL(origin).host.toLowerCase(); } catch { return cb(false, 401, 'bad origin'); }
-      const ok = kind === 'local' ? ALLOWED_HOSTS.has(oh) : oh === String(req.headers.host).toLowerCase();
+      const ok = ALLOWED_HOSTS.has(oh);
       if (!ok) return cb(false, 401, 'bad origin');
     }
-    if (kind === 'lan' && new URL(req.url, 'http://x').searchParams.get('role') === 'control') return cb(false, 403, 'control chỉ từ localhost');
     req.kind = kind; cb(true);
   } });
 function broadcast(msg, only){
@@ -1096,13 +1072,4 @@ wss.on('connection', (ws, req) => {
 });
 server.listen(PORT, HOST, () => {
   addLog(`Server chạy tại http://localhost:${PORT}  ·  Bảng điều khiển: http://localhost:${PORT}/live/control.html  ·  Overlay: http://localhost:${PORT}/live/overlay.html`);
-  if (!LAN) return;
-  const ips = lanIPs();
-  addLog('📱 Chế độ LAN đang BẬT: điện thoại cùng WiFi chỉ xem được overlay (control vẫn chỉ ở localhost).');
-  if (!ips.length) addLog('📱 Không tìm thấy IP mạng LAN nào (192.168.x.x / 10.x.x.x / 172.16-31.x.x).');
-  for (const ip of ips) {
-    addLog(`📱 Vừa khung (contain): http://${ip}:${PORT}/live/overlay.html`);
-    addLog(`📱 Lấp đầy màn hình (cover): http://${ip}:${PORT}/live/overlay.html?fit=cover`);
-  }
-  addLog('⚠ Không có mật khẩu: ai trong cùng WiFi cũng xem được overlay (tên, avatar, bình luận người xem). Chỉ dùng WiFi tin cậy.');
 });
