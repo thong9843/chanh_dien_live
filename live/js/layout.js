@@ -35,11 +35,20 @@
     return out;
   }
 
+  // MỘT hệ tỉ lệ chung cho mọi người đang ngồi (người xem VÀ các thầy): phối cảnh tuyến tính theo y, nội/ngoại suy từ hai mốc seats.yMin/yMax.
+  function seatedScale(cfg, y) {
+    const S = cfg.seats, t = (y - S.yMin) / Math.max(1, S.yMax - S.yMin);
+    return clamp(lerp(S.scaleTop, S.scaleBottom, t), 0.08, 1.2);
+  }
+  // Nửa bề rộng ảnh ngồi đã vẽ (ảnh c_*.png vẽ với hệ số 1,05 như Character.draw)
+  const halfSprite = (cfg, scale) => scale * 1.05 * cfg.baseW / 2;
+  const clampX = (x, half) => clamp(x, 8 + half, 1072 - half);   // cả ảnh nằm trong khung 8–1072
+
   // Chỗ ngồi hai bên lối giữa: lấp đầy y∈[yMin,yMax], không bao giờ chạm lối giữa/thảm; phối cảnh: càng xuống càng to.
   // Mỗi bên perSide chỗ, thứ tự ưu tiên chọn chỗ: chỗ không bị thẻ chữ che trước, hàng trước (y lớn) trước, sát lối giữa trước, xen kẽ trái–phải.
   function buildSeats(cfg, hideRects) {
     const S = cfg.seats, A = cfg.aisle, perSide = S.perSide;
-    const scaleAt = y => lerp(S.scaleTop, S.scaleBottom, clamp((y - S.yMin) / Math.max(1, S.yMax - S.yMin), 0, 1));
+    const scaleAt = y => seatedScale(cfg, y);
     const rowsFor = n => { const ys = []; for (let r = 0; r < n; r++) ys.push(n === 1 ? (S.yMin + S.yMax) / 2 : S.yMin + (S.yMax - S.yMin) * r / (n - 1)); return ys; };
     const sideSeats = side => {
       const gen = n => {
@@ -50,7 +59,7 @@
           const avail = x1 - x0; if (avail < w) continue;
           const spacing = w * S.gapK, cols = Math.max(1, Math.floor((avail - w) / spacing) + 1);
           for (let k = 0; k < cols; k++) {
-            const x = cols === 1 ? (x0 + x1) / 2 : x0 + w / 2 + k * (avail - w) / (cols - 1);
+            const x = clampX(cols === 1 ? (x0 + x1) / 2 : x0 + w / 2 + k * (avail - w) / (cols - 1), halfSprite(cfg, sc));
             list.push({ x, y, scale: sc, side: side < 0 ? 'L' : 'R', flip: side > 0, edgeDist: side < 0 ? (e.l - x) : (x - e.r) });
           }
         }
@@ -80,8 +89,12 @@
   }
   function pathLen(pts) { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y); return L; }
 
-  // Tỉ lệ vẽ các thầy: rộng thầy ≈ spriteK × rộng bồ đoàn tại độ sâu đó (monkSpriteW = rộng ảnh c_monk.png)
-  function monkScale(cfg, m, monkSpriteW) { return cushionW(cfg.cushions, m.y) * cfg.monkWidthK / (monkSpriteW || cfg.baseW); }
+  // Thầy ngồi CÙNG hệ tỉ lệ với người xem: cao ảnh thầy = cao ảnh người xem ở cùng độ sâu y × monkWidthK (1,05). imgH = cao ảnh thầy (c_monk.png),
+  // baseH = cao ảnh chuẩn (260). Trả về { s: tỉ lệ vẽ, x: toạ độ x đã kẹp để cả ảnh nằm trong 8–1072 }.
+  function monkPlace(cfg, m, imgW, imgH) {
+    const s = seatedScale(cfg, m.y) * 1.05 * cfg.monkWidthK * (cfg.baseH / (imgH || cfg.baseH));
+    return { s, x: clampX(m.x, s * (imgW || cfg.baseW) / 2) };
+  }
 
-  g.LayoutV3 = { aisleAt, cushionW, buildSpots, buildSeats, route, pathLen, monkScale };
+  g.LayoutV3 = { aisleAt, cushionW, buildSpots, buildSeats, route, pathLen, seatedScale, monkPlace };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

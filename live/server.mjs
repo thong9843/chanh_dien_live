@@ -221,7 +221,7 @@ function loadContent(){
             return { name: cStr(mm.name, dm.name, 30), skin: ['monk', 'nun', 'granny', 'man', 'woman', 'child'].includes(mm.skin) ? mm.skin : dm.skin,
                      x: cNum(mm.x, -100, 1180, dm.x), y: cNum(mm.y, 900, 1800, dm.y), flip: typeof mm.flip === 'boolean' ? mm.flip : dm.flip, master: !!mm.master }; });
           return {
-            baseW: cNum(v.baseW, 100, 400, dv.baseW), spriteK: cNum(v.spriteK, 0.5, 2, dv.spriteK), monkWidthK: cNum(v.monkWidthK, 0.5, 2, dv.monkWidthK), monks,
+            baseW: cNum(v.baseW, 100, 400, dv.baseW), baseH: cNum(v.baseH, 100, 500, dv.baseH), spriteK: cNum(v.spriteK, 0.5, 2, dv.spriteK), monkWidthK: cNum(v.monkWidthK, 0.5, 2, dv.monkWidthK), monks,
             cushions: { back: row('back'), front: row('front'), footDy: cNum(cu.footDy, -40, 80, dcu.footDy) },
             aisle: { yTop, topL: cNum(ai.topL, 0, 540, dai.topL), topR: cNum(ai.topR, 540, 1080, dai.topR), yBot, botL: cNum(ai.botL, 0, 540, dai.botL), botR: cNum(ai.botR, 540, 1080, dai.botR) },
             seats: { perSide: Math.round(cNum(se.perSide, 4, 80, dse.perSide)), yMin, yMax, scaleTop: cNum(se.scaleTop, 0.05, 1, dse.scaleTop), scaleBottom: cNum(se.scaleBottom, 0.05, 1, dse.scaleBottom),

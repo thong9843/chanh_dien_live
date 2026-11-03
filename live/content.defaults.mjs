@@ -460,7 +460,8 @@ export default {
     "v3": {
       "baseW": 227,
       "spriteK": 0.9,
-      "monkWidthK": 1.1,
+      "baseH": 260,
+    "monkWidthK": 1.05,
       "monks": [
         {
           "name": "Thầy Minh Đạo",

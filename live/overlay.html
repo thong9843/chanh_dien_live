@@ -750,7 +750,7 @@ function drawLabel(v, headY, alpha){
     v._lbKey = key; v._lbH = H; v._lbW = w;
   }
   ctx.save(); ctx.globalAlpha = alpha;
-  ctx.drawImage(v._lbCan, Math.round(v.x - v._lbW / 2), Math.round(headY - 4 - v._lbH));
+  ctx.drawImage(v._lbCan, Math.round(Math.max(8, Math.min(1072 - v._lbW, v.x - v._lbW / 2))), Math.round(headY - 4 - v._lbH));   // thẻ tên không bao giờ vượt mép 8–1072
   ctx.restore();
 }
 function bubble(text,x,y,s){
@@ -839,9 +839,9 @@ function renderStatic(){
       if (V3 && window.LayoutV3 && A.monk.naturalWidth){
         ctx=bg;   // thầy vẽ thẳng vào lớp nền DOM (sau ảnh nền, trước mọi thứ động)
         for (const m of [...V3.monks].sort((a,b)=>a.y-b.y)){
-          const im = A[m.skin] || A.monk, sc = window.LayoutV3.monkScale(V3, m, im.naturalWidth);
-          if (m.flip){ ctx.save(); ctx.translate(m.x,0); ctx.scale(-1,1); sprite(im,0,m.y,sc); ctx.restore(); }
-          else sprite(im,m.x,m.y,sc);
+          const im = A[m.skin] || A.monk, pl = window.LayoutV3.monkPlace(V3, m, im.naturalWidth, im.naturalHeight);
+          if (m.flip){ ctx.save(); ctx.translate(pl.x,0); ctx.scale(-1,1); sprite(im,0,m.y,pl.s); ctx.restore(); }
+          else sprite(im,pl.x,m.y,pl.s);
         }
       }
       return;
