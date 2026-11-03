@@ -211,23 +211,30 @@ function loadContent(){
                    // vùng thông báo chung (hàng đợi duy nhất): rộng ≤ 600, căn giữa x 540, nằm dưới vùng tượng
                    notice: (() => { const nt = sb('notice'), dnt = du.notice; return { top: cNum(nt.top, 900, 1500, dnt.top), h: cNum(nt.h, 100, 400, dnt.h), w: cNum(nt.w, 300, 600, dnt.w) }; })() }; })(),
         v3: (() => {
-          const v = sub('v3'), dv = D.v3, so = (src, k) => (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k])) ? src[k] : {};
-          const xs = (arr, d) => { const a = Array.isArray(arr) && arr.length === d.length ? arr.map((x, i) => cNum(x, 0, 1080, d[i])) : d.slice(); return a; };
-          const cu = so(v, 'cushions'), dcu = dv.cushions, row = (name) => { const r = so(cu, name), dr = dcu[name]; return { y: cNum(r.y, 900, 1700, dr.y), w: cNum(r.w, 40, 300, dr.w), x: xs(r.x, dr.x) }; };
-          const ai = so(v, 'aisle'), dai = dv.aisle, se = so(v, 'seats'), dse = dv.seats, ro = so(v, 'route'), dro = dv.route, lb = so(v, 'labels'), dlb = dv.labels;
-          let yMin = cNum(se.yMin, 1000, 1900, dse.yMin), yMax = cNum(se.yMax, 1000, 1920, dse.yMax); if (yMin >= yMax - 100) { yMin = dse.yMin; yMax = dse.yMax; }
-          let yTop = cNum(ai.yTop, 1000, 1800, dai.yTop), yBot = cNum(ai.yBot, 1100, 2000, dai.yBot); if (yTop >= yBot - 100) { yTop = dai.yTop; yBot = dai.yBot; }
-          const monks = (Array.isArray(v.monks) && v.monks.length ? v.monks : dv.monks).slice(0, 8).map((m, i) => { const dm = dv.monks[i] || dv.monks[0], mm = (m && typeof m === 'object') ? m : {};
+          const v = sub('v3'), dv = D.v3, so = (src, k) => (src && src[k] && typeof src[k] === 'object' && !Array.isArray(src[k])) ? src[k] : {};
+          const num = (src, d, k, lo, hi) => cNum(src[k], lo, hi, d[k]);
+          // cushions[]: tối đa 16 bồ đoàn {x, y, w}; hỏng/thiếu thì dùng bộ mặc định
+          const cuRaw = Array.isArray(v.cushions) && v.cushions.length ? v.cushions.slice(0, 16) : dv.cushions;
+          const cushions = cuRaw.map((c, i) => { const dc = dv.cushions[i % dv.cushions.length], cc = (c && typeof c === 'object') ? c : {};
+            return { x: cNum(cc.x, 0, 1080, dc.x), y: cNum(cc.y, 900, 1800, dc.y), w: cNum(cc.w, 30, 300, dc.w) }; });
+          const ai = so(v, 'aisle'), dai = dv.aisle, rg = so(v, 'rug'), drg = dv.rug, se = so(v, 'seats'), dse = dv.seats, ro = so(v, 'route'), dro = dv.route, lb = so(v, 'labels'), dlb = dv.labels;
+          let yTop = num(ai, dai, 'yTop', 1000, 1800), yBottom = num(ai, dai, 'yBottom', 1100, 2000); if (yTop >= yBottom - 100) { yTop = dai.yTop; yBottom = dai.yBottom; }
+          const poly = (arr, d) => { const p = Array.isArray(arr) ? arr.slice(0, 12).filter(q => Array.isArray(q) && q.length === 2 && Number.isFinite(+q[0]) && Number.isFinite(+q[1])).map(q => [cNum(+q[0], 0, 1080, 0), cNum(+q[1], 1000, 1920, 1000)]) : []; return p.length >= 3 ? p : d; };
+          const sa = so(v, 'seatArea');
+          const sc = (src, d) => { const o = (src && typeof src === 'object') ? src : {}; return { y: cNum(o.y, 1000, 1920, d.y), s: cNum(o.s, 0.05, 1.5, d.s) }; };
+          let far = sc(se.seatScaleFar, dse.seatScaleFar), near = sc(se.seatScaleNear, dse.seatScaleNear); if (far.y >= near.y - 50) { far = dse.seatScaleFar; near = dse.seatScaleNear; }
+          const monks = (Array.isArray(v.monkSpots) && v.monkSpots.length ? v.monkSpots : dv.monkSpots).slice(0, 8).map((m, i) => { const dm = dv.monkSpots[i] || dv.monkSpots[0], mm = (m && typeof m === 'object') ? m : {};
             return { name: cStr(mm.name, dm.name, 30), skin: ['monk', 'nun', 'granny', 'man', 'woman', 'child'].includes(mm.skin) ? mm.skin : dm.skin,
-                     x: cNum(mm.x, -100, 1180, dm.x), y: cNum(mm.y, 900, 1800, dm.y), flip: typeof mm.flip === 'boolean' ? mm.flip : dm.flip, master: !!mm.master }; });
+                     x: cNum(mm.x, -100, 1180, dm.x), y: cNum(mm.y, 900, 1920, dm.y), flip: typeof mm.flip === 'boolean' ? mm.flip : dm.flip, master: !!mm.master }; });
           return {
-            baseW: cNum(v.baseW, 100, 400, dv.baseW), baseH: cNum(v.baseH, 100, 500, dv.baseH), spriteK: cNum(v.spriteK, 0.5, 2, dv.spriteK), monkWidthK: cNum(v.monkWidthK, 0.5, 2, dv.monkWidthK), monks,
-            cushions: { back: row('back'), front: row('front'), footDy: cNum(cu.footDy, -40, 80, dcu.footDy) },
-            aisle: { yTop, topL: cNum(ai.topL, 0, 540, dai.topL), topR: cNum(ai.topR, 540, 1080, dai.topR), yBot, botL: cNum(ai.botL, 0, 540, dai.botL), botR: cNum(ai.botR, 540, 1080, dai.botR) },
-            seats: { perSide: Math.round(cNum(se.perSide, 4, 80, dse.perSide)), yMin, yMax, scaleTop: cNum(se.scaleTop, 0.05, 1, dse.scaleTop), scaleBottom: cNum(se.scaleBottom, 0.05, 1, dse.scaleBottom),
-                     gapK: cNum(se.gapK, 0.3, 2, dse.gapK), margin: cNum(se.margin, 0, 200, dse.margin), edgeGap: cNum(se.edgeGap, 0, 200, dse.edgeGap) },
-            route: { laneK: cNum(ro.laneK, 0, 1, dro.laneK), entryY: cNum(ro.entryY, 1000, 1900, dro.entryY), gateY: cNum(ro.gateY, 1000, 1900, dro.gateY), backGapDy: cNum(ro.backGapDy, 0, 200, dro.backGapDy) },
-            labels: { recentMax: Math.round(cNum(lb.recentMax, 1, 100, dlb.recentMax)), avatarPx: Math.round(cNum(lb.avatarPx, 16, 80, dlb.avatarPx)), nameMax: Math.round(cNum(lb.nameMax, 4, 20, dlb.nameMax)), nameFontPx: Math.round(cNum(lb.nameFontPx, 10, 30, dlb.nameFontPx)) },
+            baseW: num(v, dv, 'baseW', 100, 400), baseH: num(v, dv, 'baseH', 100, 500), spriteK: num(v, dv, 'spriteK', 0.3, 2), monkWidthK: num(v, dv, 'monkWidthK', 0.5, 2),
+            monkSpots: monks, cushions, footDy: num(v, dv, 'footDy', -40, 80),
+            rug: { x: num(rg, drg, 'x', 0, 1080), y: num(rg, drg, 'y', 900, 1800), w: num(rg, drg, 'w', 100, 1080), h: num(rg, drg, 'h', 20, 600) },
+            aisle: { yTop, yBottom, topX0: num(ai, dai, 'topX0', 0, 540), topX1: num(ai, dai, 'topX1', 540, 1080), bottomX0: num(ai, dai, 'bottomX0', 0, 540), bottomX1: num(ai, dai, 'bottomX1', 540, 1080) },
+            seatArea: { left: poly(sa.left, dv.seatArea.left), right: poly(sa.right, dv.seatArea.right) },
+            seats: { perSide: Math.round(num(se, dse, 'perSide', 4, 80)), gapK: num(se, dse, 'gapK', 0.3, 2), seatScaleFar: far, seatScaleNear: near },
+            route: { laneK: num(ro, dro, 'laneK', 0, 1), entryDy: num(ro, dro, 'entryDy', -100, 300), gateDy: num(ro, dro, 'gateDy', -200, 200), backGapDy: num(ro, dro, 'backGapDy', 0, 200) },
+            labels: { recentMax: Math.round(num(lb, dlb, 'recentMax', 1, 100)), avatarPx: Math.round(num(lb, dlb, 'avatarPx', 16, 80)), nameMax: Math.round(num(lb, dlb, 'nameMax', 4, 20)), nameFontPx: Math.round(num(lb, dlb, 'nameFontPx', 10, 30)) },
           };
         })(),
         safeZones: (Array.isArray(L.safeZones) && L.safeZones.length ? L.safeZones.slice(0, 8) : D.safeZones).map((z, i) => {

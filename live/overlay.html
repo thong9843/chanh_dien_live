@@ -838,7 +838,7 @@ function renderStatic(){
     if (!legacy){   // cảnh ảnh mới: sáu thầy ngồi hai bên (layout.v3.monks), rộng ≈ 1,1 × rộng bồ đoàn theo độ sâu, bên trái quay phải, bên phải quay trái
       if (V3 && window.LayoutV3 && A.monk.naturalWidth){
         ctx=bg;   // thầy vẽ thẳng vào lớp nền DOM (sau ảnh nền, trước mọi thứ động)
-        for (const m of [...V3.monks].sort((a,b)=>a.y-b.y)){
+        for (const m of [...V3.monkSpots].sort((a,b)=>a.y-b.y)){
           const im = A[m.skin] || A.monk, pl = window.LayoutV3.monkPlace(V3, m, im.naturalWidth, im.naturalHeight);
           if (m.flip){ ctx.save(); ctx.translate(pl.x,0); ctx.scale(-1,1); sprite(im,0,m.y,pl.s); ctx.restore(); }
           else sprite(im,pl.x,m.y,pl.s);
