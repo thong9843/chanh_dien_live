@@ -2,7 +2,7 @@
 // Dùng:  node scripts/bench.mjs <số phút> <nhãn> [file kết quả]
 // Biến môi trường: BENCH_EDGE (đường dẫn msedge.exe), BENCH_EDGE_FLAGS (cờ Edge thêm, cách nhau bằng dấu cách).
 // Mọi lệnh CDP có timeout 10s: treo thì bỏ mẫu, ghi log, và luôn đóng Edge + server sạch khi kết thúc.
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -119,12 +119,22 @@ async function main() {
   const cmd = o => { try { ctl.send(JSON.stringify({ t: 'ctl', ...o })); } catch (e) { log('Gửi lệnh lỗi:', e.message); } };
   cmd({ cmd: 'bots', on: true, n: 100, pace: 'fast' });
   await sleep(15000);                               // cho 100 chỗ đầy
+  try { await pg.send('Page.bringToFront'); } catch (e) { log('bringToFront lỗi:', e.message); }   // một lần sau khi bot ngồi đủ (cửa sổ vừa mở có thể còn nằm sau)
 
-  const cpuNow = async () => {
-    const l = (await br.send('SystemInfo.getProcessInfo')).result.processInfo; let t = 0; const byType = {};
-    for (const p of l) { t += p.cpuTime; byType[p.type] = (byType[p.type] || 0) + p.cpuTime; }
-    return { t, byType };
-  };
+  // CPU các tiến trình Edge của phiên đo lấy bằng PowerShell Get-Process theo PID (không qua CDP nên không treo theo trình duyệt).
+  // Lọc tiến trình msedge có --user-data-dir của phiên này; loại tiến trình lấy từ --type= (không có = browser).
+  const PS = `$u=$env:BENCH_UDD; $r=@(); foreach($p in (Get-CimInstance Win32_Process -Filter "Name='msedge.exe'")){ if($p.CommandLine -and $p.CommandLine.Contains($u)){ $t='browser'; if($p.CommandLine -match '--type=([a-z-]+)'){ $t=$Matches[1] }; $g=Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue; if($g){ $r+=[pscustomobject]@{type=$t;cpu=$g.TotalProcessorTime.TotalSeconds} } } }; ConvertTo-Json -Compress -InputObject @($r)`;
+  const cpuNow = () => new Promise((resolve, reject) => {
+    execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', PS], { timeout: CDP_TIMEOUT_MS, windowsHide: true, env: { ...process.env, BENCH_UDD: UDD } }, (err, out) => {
+      if (err) return reject(new Error('Get-Process lỗi/treo >10s: ' + (err.killed ? 'timeout' : err.message)));
+      try {
+        const l = JSON.parse(out); let t = 0; const byType = {};
+        for (const p of l) { t += p.cpu; const k = p.type === 'gpu-process' ? 'GPU' : p.type; byType[k] = (byType[k] || 0) + p.cpu; }
+        if (!l.length) return reject(new Error('không thấy tiến trình Edge của phiên đo'));
+        resolve({ t, byType });
+      } catch (e) { reject(e); }
+    });
+  });
   const heap = async () => Object.fromEntries((await pg.send('Performance.getMetrics')).result.metrics.map(x => [x.name, x.value]));
   const evalNum = async ex => (await pg.send('Runtime.evaluate', { expression: ex })).result.result.value;
   const nodeMem = () => {
@@ -147,7 +157,6 @@ async function main() {
       await sleep(6000);
     }
     try {
-      await pg.send('Page.bringToFront');
       const vis = (await pg.send('Runtime.evaluate', { expression: 'document.visibilityState' })).result.result.value;
       const c1 = await cpuNow(), f1 = await evalNum('window.__f'), t1 = Date.now();
       const dt = (t1 - t0) / 1000, m = await heap();
