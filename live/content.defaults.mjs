@@ -182,9 +182,10 @@ export default {
     "kneel": {
       "downSec": 0.4,
       "upSec": 0.4,
-      "prostrateFadeSec": 0.35
+      "prostrateFadeSec": 0.35,
+      "scale": 0.9
     },
-    "prostrateExtraDrop": { "man": 0, "woman": 0, "granny": 0.06 }
+    "prostrateExtraDrop": { "man": 0, "woman": 0.04, "granny": 0.08 }
   },
   "demo": {
     "names": [

@@ -267,7 +267,22 @@
   }
 
   // Hạ thêm người ở pha lạy (prostrate) theo từng skin, tỉ lệ chiều cao ảnh; server kẹp 0–0.12 (content.json → ceremony.prostrateExtraDrop)
-  const PROSTRATE_EXTRA = { man: 0, woman: 0, granny: 0.06 };
+  const PROSTRATE_EXTRA = { man: 0, woman: 0.04, granny: 0.08 };
+  // Hệ số thu nhỏ riêng cho ảnh quỳ/lạy (server gửi ceremony.kneel.scale, kẹp 0.5–1.2): ảnh quỳ gốc hơi lớn so với thầy ngồi cùng hàng
+  let KNEEL_SCALE = 0.9;
+  function setKneelScale(v) { if (Number.isFinite(+v)) KNEEL_SCALE = clamp(+v, 0.5, 1.2); }
+
+  // Bóng elip mờ dưới chân/gối (vẽ sẵn một lần): bám chân nhân vật khi đứng, quỳ, lạy
+  let footShadow = null;
+  function getFootShadow() {
+    if (footShadow) return footShadow;
+    const c = makeCanvas(256, 64), x = c.getContext('2d');
+    x.translate(128, 32); x.scale(1, 0.25);
+    const g = x.createRadialGradient(0, 0, 0, 0, 0, 128);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.55, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(0, 0, 128, 0, Math.PI * 2); x.fill();
+    return (footShadow = c);
+  }
   function setProstrateExtraDrop(c) {
     if (!c || typeof c !== 'object') return;
     for (const k of Object.keys(c)) {
@@ -677,6 +692,14 @@
         }
       }
       if (standImg) {
+        // bóng elip dưới chân/gối theo bề rộng trung bình của các lớp đang hiện (không nhún theo bước chân)
+        let sw = 0;
+        for (const L of poseLayers) if (L.img && L.img.naturalWidth) sw += L.w * L.img.naturalWidth * drawScale * (L.kind === 'stand' ? 1 : KNEEL_SCALE);
+        if (sw > 1) {
+          const sh = getFootShadow(), w = sw * 1.15, h = w * 0.26;
+          ctx.globalAlpha = effAlpha * mix * 0.35;
+          ctx.drawImage(sh, -w / 2, -h * 0.5, w, h);
+        }
         ctx.translate(0, -this.walkBobPx);
         let first = true;
         for (const L of poseLayers) {
@@ -685,8 +708,8 @@
           ctx.globalAlpha = a;
           let h;
           if (L.kind === 'stand') h = drawStandCharacter(ctx, L.img, drawScale, ws, this.bowPose, a, skinImgKey);
-          else if (L.kind === 'kneel') h = drawKneelCharacter(ctx, L.img, drawScale, ws);
-          else h = drawProstrateCharacter(ctx, L.img, drawScale, ws, L.extra);
+          else if (L.kind === 'kneel') h = drawKneelCharacter(ctx, L.img, drawScale * KNEEL_SCALE, ws * KNEEL_SCALE);
+          else h = drawProstrateCharacter(ctx, L.img, drawScale * KNEEL_SCALE, ws * KNEEL_SCALE, L.extra);
           if (first) { topY = h; first = false; }
         }
       }
@@ -1726,6 +1749,7 @@
         if (kc && typeof kc === 'object' && this.kind !== 'incense' && hasKneelSet(this.assets, skinKey)) {
           this.kneel = { downSec: clamp(+kc.downSec || 0.4, 0.1, 2), upSec: clamp(+kc.upSec || 0.4, 0.1, 2), prostrateFadeSec: clamp(+kc.prostrateFadeSec || 0.35, 0.1, 2) };
           setProstrateExtraDrop(msg.prostrateExtraDrop);
+          setKneelScale(kc.scale);
         }
         this.phase = 'rise';
       } else {
@@ -2057,6 +2081,7 @@
     setBowConfig,
     setStandConfig,
     setProstrateExtraDrop,
+    setKneelScale,
     hasPoseSet,
     getBowConfig: () => Object.assign({}, BOW_CFG),
     bowTotalSec,

@@ -123,7 +123,8 @@ function loadContent(){
       })(),
       kneel: (() => {
         const k = (ce.kneel && typeof ce.kneel === 'object' && !Array.isArray(ce.kneel)) ? ce.kneel : {}, dk = dce.kneel;
-        return { downSec: cNum(k.downSec, 0.1, 2, dk.downSec), upSec: cNum(k.upSec, 0.1, 2, dk.upSec), prostrateFadeSec: cNum(k.prostrateFadeSec, 0.1, 2, dk.prostrateFadeSec) };
+        return { downSec: cNum(k.downSec, 0.1, 2, dk.downSec), upSec: cNum(k.upSec, 0.1, 2, dk.upSec), prostrateFadeSec: cNum(k.prostrateFadeSec, 0.1, 2, dk.prostrateFadeSec),
+                 scale: cNum(k.scale, 0.5, 1.2, dk.scale) };   // hệ số thu nhỏ ảnh quỳ/lạy so với ảnh đứng
       })(),
       prostrateExtraDrop: (() => {
         const e = (ce.prostrateExtraDrop && typeof ce.prostrateExtraDrop === 'object' && !Array.isArray(ce.prostrateExtraDrop)) ? ce.prostrateExtraDrop : {}, out = {};
