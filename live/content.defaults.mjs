@@ -679,6 +679,57 @@ export default {
         "avatarPx": 28,
         "nameMax": 10,
         "nameFontPx": 14
+      },
+      "nameTag": {
+        "avatar": 22,
+        "avatarBorder": 1.5,
+        "font": 11,
+        "fontWeight": 600,
+        "bg": "rgba(0,0,0,0.55)",
+        "padding": [2, 6],
+        "maxChars": 8,
+        "maxTags": 12,
+        "maxHeight": 24,
+        "maxWidth": 110,
+        "gapHead": 4
+      },
+      "ceremony": {
+        "drawInCode": true,
+        "cushion": {
+          "w": 76,
+          "h": "auto",
+          "img": "assets/cushion.png"
+        },
+        "rows": [
+          {
+            "yFoot": 1418,
+            "xs": [402, 494, 586, 678]
+          },
+          {
+            "yFoot": 1478,
+            "xs": [402, 494, 586, 678]
+          }
+        ],
+        "carpet": {
+          "x": 340,
+          "y": 1372,
+          "w": 400,
+          "h": 132,
+          "color": "#8e1b17",
+          "border": "#c99a3b"
+        },
+        "abbots": [
+          {
+            "x": 290,
+            "yFoot": 1480,
+            "flip": false
+          },
+          {
+            "x": 790,
+            "yFoot": 1480,
+            "flip": true
+          }
+        ]
       }
     },
     "safeZones": [

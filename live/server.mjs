@@ -29,6 +29,7 @@ const PORT = +process.env.PORT || 3000;
    Chỉ thoát khi không mở được cổng, hoặc lỗi lặp quá 20 lần trong 60 giây (tránh vòng lặp lỗi vô tận). */
 const crashTimes = [];
 function survive(kind, err){
+  lastRecordedError = `${kind}: ${String(err?.message || err).slice(0, 120)}`;
   console.error(`[${kind}]`, err?.stack || err);
   try { addLog(`⚠ ${kind}: ${String(err?.message || err).replace(/\s+/g, ' ').slice(0, 200)} (server vẫn chạy)`); } catch {}
   if (err?.code === 'EADDRINUSE' || err?.code === 'EACCES') { console.error('Không mở được cổng, thoát.'); process.exit(1); }
@@ -265,6 +266,55 @@ function loadContent(){
             };
           });
           const lb = so(v, 'labels'), dlb = dv.labels || {};
+          const nt = so(v, 'nameTag'), dnt = dv.nameTag || {};
+          const nameTag = {
+            avatar: Math.round(cNum(nt.avatar, 10, 60, dnt.avatar || 22)),
+            avatarBorder: cNum(nt.avatarBorder, 0.5, 5, dnt.avatarBorder || 1.5),
+            font: Math.round(cNum(nt.font, 8, 24, dnt.font || 11)),
+            fontWeight: cNum(nt.fontWeight, 400, 900, dnt.fontWeight || 600),
+            bg: cStr(nt.bg, dnt.bg || 'rgba(0,0,0,0.55)', 40),
+            padding: Array.isArray(nt.padding) && nt.padding.length === 2 ? [cNum(nt.padding[0], 0, 20, 2), cNum(nt.padding[1], 0, 30, 6)] : (dnt.padding || [2, 6]),
+            maxChars: Math.round(cNum(nt.maxChars, 3, 30, dnt.maxChars || 8)),
+            maxTags: Math.round(cNum(nt.maxTags, 1, 30, dnt.maxTags || 12)),
+            maxHeight: Math.round(cNum(nt.maxHeight, 16, 50, dnt.maxHeight || 24)),
+            maxWidth: Math.round(cNum(nt.maxWidth, 50, 200, dnt.maxWidth || 110)),
+            gapHead: Math.round(cNum(nt.gapHead, 0, 30, dnt.gapHead || 4)),
+          };
+          const ce = so(v, 'ceremony'), dce = dv.ceremony || {};
+          const ceremony = {
+            drawInCode: typeof ce.drawInCode === 'boolean' ? ce.drawInCode : (dce.drawInCode !== false),
+            cushion: {
+              w: cNum(ce.cushion?.w, 20, 200, dce.cushion?.w || 76),
+              h: ce.cushion?.h === 'auto' ? 'auto' : cNum(ce.cushion?.h, 10, 100, dce.cushion?.h || 30),
+              img: cStr(ce.cushion?.img, dce.cushion?.img || 'assets/cushion.png', 100),
+            },
+            rows: (Array.isArray(ce.rows) && ce.rows.length ? ce.rows : (dce.rows || [])).slice(0, 4).map((r, i) => {
+              const dr = (dce.rows && dce.rows[i]) || { yFoot: 1418, xs: [402, 494, 586, 678] };
+              const rr = (r && typeof r === 'object') ? r : {};
+              const cleanXs = (arr, dArr) => (Array.isArray(arr) && arr.length ? arr : dArr).map(x => cNum(+x, 0, 1080, 540));
+              return {
+                yFoot: cNum(rr.yFoot, 1000, 1920, dr.yFoot),
+                xs: cleanXs(rr.xs, dr.xs),
+              };
+            }),
+            carpet: {
+              x: cNum(ce.carpet?.x, 0, 1080, dce.carpet?.x || 340),
+              y: cNum(ce.carpet?.y, 1000, 1920, dce.carpet?.y || 1372),
+              w: cNum(ce.carpet?.w, 100, 1080, dce.carpet?.w || 400),
+              h: cNum(ce.carpet?.h, 50, 600, dce.carpet?.h || 132),
+              color: cStr(ce.carpet?.color, dce.carpet?.color || '#8e1b17', 20),
+              border: cStr(ce.carpet?.border, dce.carpet?.border || '#c99a3b', 20),
+            },
+            abbots: (Array.isArray(ce.abbots) && ce.abbots.length ? ce.abbots : (dce.abbots || [])).slice(0, 4).map((a, i) => {
+              const da = (dce.abbots && dce.abbots[i]) || { x: i === 0 ? 290 : 790, yFoot: 1480 };
+              const aa = (a && typeof a === 'object') ? a : {};
+              return {
+                x: cNum(aa.x, 0, 1080, da.x),
+                yFoot: cNum(aa.yFoot, 1000, 1920, da.yFoot),
+                flip: typeof aa.flip === 'boolean' ? aa.flip : (i > 0)
+              };
+            }),
+          };
           return {
             seatHeight: num(v, dv, 'seatHeight', 50, 300),
             maxVisible: Math.round(num(v, dv, 'maxVisible', 10, 100)),
@@ -275,7 +325,9 @@ function loadContent(){
               avatarPx: Math.round(num(lb, dlb, 'avatarPx', 16, 80)),
               nameMax: Math.round(num(lb, dlb, 'nameMax', 4, 20)),
               nameFontPx: Math.round(num(lb, dlb, 'nameFontPx', 10, 30))
-            }
+            },
+            nameTag,
+            ceremony
           };
         })(),
         safeZones: (Array.isArray(L.safeZones) && L.safeZones.length ? L.safeZones.slice(0, 8) : D.safeZones).map((z, i) => {
@@ -337,6 +389,60 @@ const settings = {
 };
 const viewers = new Map();           // id -> { id, rawName, name, skin, avatar, coins, joinedAt, lastAt, lastText, lastTextAt, demo }
 const startedAt = Date.now();
+const LOGS_DIR = path.join(ROOT, 'logs');
+try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
+const STARTUP_LOG = path.join(LOGS_DIR, 'startup.log');
+const recordedMilestones = new Set();
+function recordStartupMilestone(name, ms, extra = '') {
+  if (recordedMilestones.has(name)) return;
+  recordedMilestones.add(name);
+  const line = `[startup] ${name}: ${ms}ms${extra ? ' ' + extra : ''}`;
+  console.log(line);
+  try {
+    fs.appendFileSync(STARTUP_LOG, `[${new Date().toISOString()}] ${line}\n`);
+  } catch (e) {
+    console.error('Lỗi ghi startup.log:', e?.message);
+  }
+}
+
+// VIỆC 4: Ghi log cho buổi live 2 giờ (mỗi 60s ghi 1 dòng JSON vào logs/live_YYYYMMDD_HHmm.jsonl)
+let lastRecordedError = null;
+let eventCountWindow = 0;
+let overlayStats = { fps: 30, heapMb: null, domNodes: null, updatedAt: 0 };
+function trackEvent() { eventCountWindow++; }
+
+const pad2 = n => String(n).padStart(2, '0');
+const liveStartD = new Date();
+const liveLogFilename = `live_${liveStartD.getFullYear()}${pad2(liveStartD.getMonth() + 1)}${pad2(liveStartD.getDate())}_${pad2(liveStartD.getHours())}${pad2(liveStartD.getMinutes())}.jsonl`;
+const LIVE_LOG_PATH = path.join(LOGS_DIR, liveLogFilename);
+
+function writeLiveLogLine() {
+  try {
+    const mem = process.memoryUsage();
+    const serverHeapMb = Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10;
+    const nowMs = Date.now();
+    const recentOverlay = (nowMs - overlayStats.updatedAt < 90_000);
+    const lineObj = {
+      time: new Date().toISOString(),
+      fps: recentOverlay && Number.isFinite(overlayStats.fps) ? overlayStats.fps : 30,
+      heap: {
+        serverMb: serverHeapMb,
+        overlayMb: recentOverlay && overlayStats.heapMb !== null ? overlayStats.heapMb : null
+      },
+      domNodes: recentOverlay && overlayStats.domNodes !== null ? overlayStats.domNodes : 0,
+      seated: viewers.size,
+      waiting: overflow.size,
+      ttsQueueLen: ttsQueue.length,
+      eventsPerMin: eventCountWindow,
+      lastError: lastRecordedError || null
+    };
+    eventCountWindow = 0;
+    fs.appendFileSync(LIVE_LOG_PATH, JSON.stringify(lineObj) + '\n');
+  } catch (e) {
+    console.error('Lỗi ghi live log:', e?.message);
+  }
+}
+setInterval(writeLiveLogLine, 60_000).unref?.();
 let silentUntil = 0;                 // trạng thái chung toàn hệ thống (thiền im lặng)
 let silentEndTimer = null;
 let tiktok = null, tiktokState = { status: 'idle', uniqueId: '', error: '' };
@@ -466,7 +572,7 @@ function safeAvatar(u){
   } catch { return ''; }
 }
 function pub(v){ return { id:v.id, name:v.name, skin:v.skin, avatar:v.avatar||'', coins:v.coins, demo:!!v.demo, seat:v.seat }; }
-function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), more: overflow.size, cap: capacity(), startedAt, silentUntil, tiktok: tiktokState, vieneu: vieneuState, content: CLIENT_CONTENT }; }
+function snapshot(){ scanPoseSkins(); return { t:'state', poseSkins: [...POSE_SKINS], poseFiles: POSE_FILES, settings, viewers:[...viewers.values()].map(pub), more: overflow.size, cap: capacity(), startedAt, ttsWarmupDone, silentUntil, tiktok: tiktokState, vieneu: vieneuState, content: CLIENT_CONTENT }; }
 
 /* ------------------------------------------- Silent mode, Altar Ceremony & Camera Zoom */
 const zoomQueue = [];
@@ -483,7 +589,39 @@ const ceremonyCooldowns = new Map();
 let ceremonyGapTimer = null, ceremonyNextAt = 0;
 
 const OLD_SPOT = () => { const a = CONTENT.layout.altarSpot; return { i: 0, row: 'front', x: a.x, y: a.y, cy: a.y, w: 0, scale: a.scale, gapX: a.x, legacy: true }; };
-const spotList = () => settings.scene === 'old' ? [OLD_SPOT()] : V3_SPOTS;
+function getV4CeremonySpots() {
+  const ce = CONTENT.layout?.v4?.ceremony;
+  if (!ce || !Array.isArray(ce.rows) || !ce.rows.length) return null;
+  const seatH = CONTENT.layout?.v4?.seatHeight || 115;
+  const scale = seatH / 260;
+  const spots = [];
+  const sortedRows = [...ce.rows].sort((a, b) => b.yFoot - a.yFoot);
+  const frontY = sortedRows[0].yFoot;
+  for (const row of sortedRows) {
+    const isFront = row.yFoot === frontY;
+    const xs = [...row.xs].sort((a, b) => Math.abs(a - 540) - Math.abs(b - 540) || a - b);
+    for (const x of xs) {
+      spots.push({
+        i: spots.length,
+        row: isFront ? 'front' : 'back',
+        x,
+        y: row.yFoot,
+        cy: row.yFoot,
+        w: ce.cushion?.w || 76,
+        scale,
+        gapX: x,
+        legacy: false,
+      });
+    }
+  }
+  return spots.length ? spots : null;
+}
+const spotList = () => {
+  if (settings.scene === 'old') return [OLD_SPOT()];
+  const v4Spots = getV4CeremonySpots();
+  if (v4Spots) return v4Spots;
+  return V3_SPOTS;
+};
 function takeSpot(){ for (const s of spotList()) if (!spotsBusy.has(s.i)) return s; return null; }
 
 function isAtAltarSpot(id){
@@ -804,6 +942,7 @@ setInterval(() => {
 }, 30_000).unref?.();
 
 function onChat(id, name, text, avatar){
+  trackEvent();
   text = String(text || '').replace(/[\u0000-\u001F]/g, '').trim().slice(0, 120);
   if (!text) return;
   if (!chatAllowed(id)) return;
@@ -854,6 +993,7 @@ function sayGiftCombo(c){
 }
 
 function onGift(id, name, giftName, count, diamonds, avatar){
+  trackEvent();
   const cleanGift = sanitizeGiftName(giftName);
   count = Math.max(1, Math.min(9999, +count || 1));
   const { v } = seat(id, name, { avatar, force: true });
@@ -922,6 +1062,7 @@ function onShare(name){
   broadcast({ t:'share', name: who });
 }
 function onLikes(id, n, total){
+  trackEvent();
   n = Math.max(1, Math.min(100000, +n || 1));
   broadcast({ t:'like', id, n });
   const before = likeTotal;
@@ -938,6 +1079,43 @@ function onLikes(id, n, total){
 /* ------------------------------------------------------------------ TTS Queue, VieNeu Sidecar & Disk Cache */
 const VIENEU_PORT = process.env.VIENEU_PORT || '8765';
 const VIENEU_BASE = (process.env.VIENEU_URL || `http://127.0.0.1:${VIENEU_PORT}`).replace(/\/+$/, '');
+
+let ttsWarmupDone = false;
+async function warmupTTS() {
+  const maxWait = 60_000;
+  const t0 = Date.now();
+  addLog('🎙️ Đang khởi động ấm VieNeu TTS sidecar (chờ tối đa 60s)...');
+  while (Date.now() - t0 < maxWait) {
+    try {
+      const res = await fetch(`${VIENEU_BASE}/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: 'Nam Mô A Di Đà Phật',
+          voice: CONTENT.tts?.vieneuVoice || 'Thiền Tâm Đức',
+          speed: 0.9,
+        }),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        if (buf && buf.byteLength > 0) {
+          const elapsed = Date.now() - startedAt;
+          recordStartupMilestone('sidecar TTS trả lời lần đầu', elapsed);
+          ttsWarmupDone = true;
+          broadcast({ t: 'warmup_done', ok: true, ms: elapsed });
+          addLog(`🎙️ VieNeu TTS warm-up thành công sau ${Date.now() - t0}ms (không phát tiếng)`);
+          return;
+        }
+      }
+    } catch {}
+    await sleep(1000);
+  }
+  addLog('⚠️ VieNeu TTS sidecar không phản hồi warm-up sau 60s (offline/chưa khởi động)');
+  recordStartupMilestone('sidecar TTS trả lời lần đầu', 60000, '(quá hạn 60s)');
+  ttsWarmupDone = true;
+  broadcast({ t: 'warmup_done', ok: false, ms: 60000 });
+}
 
 let vieneuState = {
   online: false,
@@ -1529,6 +1707,7 @@ async function connectTikTok(uniqueId, opts = {}){
     ttAttempt = 0;
     ttUnknownAttempt = 0;
     tiktokState = { status: 'connected', uniqueId, error: '', roomId: st?.roomId || roomId || '', key: tiktokState.key, stopped: false };
+    recordStartupMilestone('kết nối TikTok', Date.now() - startedAt);
     addLog(`✅ [3/3] Đã kết nối live @${uniqueId}`);
   } catch (e) {
     await abandon();
@@ -1756,13 +1935,29 @@ wss.on('connection', (ws, req) => {
     if (ws.role === 'control') ws.send(JSON.stringify({ t:'logs', lines: log }));
   } catch (e) { console.error('[ws] gửi snapshot lỗi:', e?.message); }
   ws.on('message', buf => {
-    if (ws.role !== 'control') return;                          // overlays only listen
     try {
       const m = JSON.parse(buf);
+      if (m && m.t === 'startup_metric') {
+        recordStartupMilestone(m.name, m.ms, m.extra || '');
+        return;
+      }
+      if (m && m.t === 'overlay_stats') {
+        overlayStats = {
+          fps: Number.isFinite(m.fps) ? m.fps : 30,
+          heapMb: Number.isFinite(m.heapMb) ? m.heapMb : null,
+          domNodes: Number.isFinite(m.domNodes) ? m.domNodes : null,
+          updatedAt: Date.now()
+        };
+        return;
+      }
+      if (ws.role !== 'control') return;                          // overlays only listen
       if (m && m.t === 'ctl') { const r = onControl(m, ws); if (r?.catch) r.catch(e => addLog('Lệnh lỗi: ' + (e?.message || e))); }
     } catch (e) { addLog('Lệnh lỗi: ' + (e?.message || e)); }
   });
 });
 server.listen(PORT, HOST, () => {
+  const readyMs = Date.now() - startedAt;
+  recordStartupMilestone('server sẵn sàng', readyMs);
   addLog(`Server chạy tại http://localhost:${PORT}  ·  Bảng điều khiển: http://localhost:${PORT}/live/control.html  ·  Overlay: http://localhost:${PORT}/live/overlay.html`);
+  setTimeout(warmupTTS, 100);
 });

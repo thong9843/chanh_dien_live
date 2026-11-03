@@ -84,6 +84,10 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 #unmute{position:absolute;z-index:9;left:50%;top:960px;transform:translateX(-50%);font:600 36px var(--body);padding:22px 44px;border-radius:24px;border:3px solid var(--gold2);background:var(--red);color:#fff4dc;cursor:pointer}
 #conn{position:absolute;z-index:4;right:16px;bottom:12px;font-size:20px;color:var(--muted);opacity:.6}
 @media (prefers-reduced-motion:reduce){#noticeBox > div{transition:none}}
+
+#prepScreen{position:absolute;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:rgba(12,7,5,.45);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:opacity .6s ease;pointer-events:none}
+#prepScreen.dismissed{opacity:0}
+.prep-pill{padding:14px 34px;border-radius:999px;background:rgba(24,11,6,.85);border:1.5px solid rgba(226,176,79,.6);font-family:var(--display);font-size:24px;color:var(--gold2);letter-spacing:1px;box-shadow:0 8px 24px rgba(0,0,0,.6)}
 </style>
 </head>
 <body>
@@ -112,6 +116,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   <div id="safe"></div>
   <button id="unmute">🔔 Bấm để bật âm thanh</button>
   <div id="conn">đang kết nối…</div>
+  <div id="prepScreen"><div class="prep-pill">Chánh điện đang chuẩn bị…</div></div>
 </div></div>
 
 <script src="/live/js/layout.js"></script>
@@ -137,6 +142,7 @@ const {
   CameraZoomController,
   CeremonyManager,
   setV3Config,
+  setV4Config,
   ALTAR_DEFAULT,
   setBowConfig,
   setStandConfig,
@@ -153,7 +159,7 @@ let silentUntil = 0;
 const A = {};
 const IMG = {
   hall:'/assets/hall.jpg', monk:'/assets/c_monk.png', nun:'/assets/c_nun.png', granny:'/assets/c_granny.png',
-  man:'/assets/c_man.png', woman:'/assets/c_woman.png', child:'/assets/c_child.png',
+  man:'/assets/c_man.png', woman:'/assets/c_woman.png', child:'/assets/c_child.png', cushion:'/assets/cushion.png',
   lotus:'/assets/fx_lotus.png', halo:'/assets/fx_halo.png', bell:'/assets/fx_bell.png',
   incense:'/assets/fx_incense.png', petal:'/assets/fx_petal.png', scroll:'/assets/fx_scroll.png',
 };
@@ -289,6 +295,13 @@ const visitors = new Map();  // id -> Character
 let order = [];               // ids in seating order (bố cục cũ)
 // Chánh điện cũ (scene "old") dùng lưới theo số người; mọi cảnh ảnh mới dùng bố cục v3/v4: chỗ cố định hai bên lối giữa, server cấp chỉ số chỗ (p.seat).
 let V3 = null, V4 = null, V3_SEATS = [];
+
+function isCeremonyCode(){
+  const p = new URLSearchParams(location.search);
+  if (p.get('ceremony') === 'code') return true;
+  return !!(V4?.ceremony?.drawInCode);
+}
+
 const isV3 = () => resolveScene() !== 'old' && (!!V4 || !!V3) && V3_SEATS.length > 0;
 function reseat(){
   order = order.filter(id => visitors.has(id));
@@ -367,7 +380,7 @@ function applyContent(c){
     applyUiLayout(c.layout);
     FLOOR = c.layout.floor; LAYOUT = c.layout; TEACHERS = c.layout.teachers; TAG_GAP = c.layout.teacherTagGap ?? 22; layoutVer++;
     V3 = c.layout.v3 || null; setV3Config(V3);
-    V4 = c.layout.v4 || null;
+    V4 = c.layout.v4 || null; if (typeof setV4Config === 'function') setV4Config(V4);
     V3_SEATS = (V4 && window.LayoutV3?.buildSeatsV4) ? window.LayoutV3.buildSeatsV4(V4) : ((V3 && window.LayoutV3) ? window.LayoutV3.buildSeats(V3, [c.layout.ui.tips, c.layout.ui.merit]) : []);
     layout(cap);
   }
@@ -702,6 +715,7 @@ function handleMsg(m){
     switch(m.t){
       case 'batch': for (const x of (Array.isArray(m.msgs) ? m.msgs : [])){ try { handleMsg(x); } catch (err) { console.error('[overlay] lỗi xử lý bản tin', x && x.t, err); } } break;
       case 'state':
+        if (m.ttsWarmupDone) { ttsWarmupDone = true; checkPrepDone(); }
         loadPoseFiles(m.poseFiles);
         ceremonyManager.reset(visitors);
         applyContent(m.content);
@@ -747,6 +761,66 @@ function applySettings(){
 }
 connect();
 
+
+/* ======================= VIỆC 1: Khởi động ấm & Đo mốc thời gian ======================= */
+const overlayStartTime = performance.now();
+function sendStartupMetric(name, ms, extra = ''){
+  console.log(`[startup] ${name}: ${ms}ms${extra ? ' ' + extra : ''}`);
+  if (ws && ws.readyState === 1){
+    try { ws.send(JSON.stringify({ t: 'startup_metric', name, ms, extra })); } catch {}
+  }
+}
+
+let isPreparing = true, decodeDone = false, ttsWarmupDone = false;
+const prepQueue = [];
+
+function checkPrepDone(){
+  if (decodeDone && ttsWarmupDone) finishPrep();
+}
+
+const prepTimeout = setTimeout(() => { finishPrep(); }, 90000);
+
+function finishPrep(){
+  if (!isPreparing) return;
+  isPreparing = false;
+  clearTimeout(prepTimeout);
+  const el = document.getElementById('prepScreen');
+  if (el){
+    el.classList.add('dismissed');
+    setTimeout(() => { try { el.remove(); } catch {} }, 700);
+  }
+  flushPrepEvents();
+}
+
+function flushPrepEvents(){
+  if (!prepQueue.length) return;
+  const timer = setInterval(() => {
+    if (!prepQueue.length){ clearInterval(timer); return; }
+    const m = prepQueue.shift();
+    handleMsg(m, true);
+  }, 200);
+}
+
+// FPS stability measurement & 60s live logger stats
+let fpsMeasureWindowStart = performance.now(), fpsFramesInSec = 0, stableSecsCount = 0, hasReportedStableFps = false;
+let last60sFrameCount = 0, last60sTime = performance.now();
+setInterval(() => {
+  const now = performance.now();
+  const dtSec = (now - last60sTime) / 1000;
+  const currentDrawn = window.__drawnFrames || 0;
+  const fps = Math.round(((currentDrawn - last60sFrameCount) / Math.max(1, dtSec)) * 10) / 10;
+  last60sFrameCount = currentDrawn;
+  last60sTime = now;
+  let heapMb = null;
+  if (performance?.memory?.usedJSHeapSize){
+    heapMb = Math.round((performance.memory.usedJSHeapSize / 1024 / 1024) * 10) / 10;
+  }
+  const domNodes = document.getElementsByTagName('*').length;
+  if (ws && ws.readyState === 1){
+    try { ws.send(JSON.stringify({ t: 'overlay_stats', fps, heapMb, domNodes })); } catch {}
+  }
+}, 60000);
+
 /* ======================= render ======================= */
 const mainCtx=mainCanvas.getContext('2d');
 let ctx=mainCtx;   // đổi tạm sang canvas ẩn khi vẽ lớp tĩnh (renderStatic)
@@ -766,51 +840,92 @@ function tag(text,x,y,s,style,av,maxW){
 function boxesIntersect(a, b){
   return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
 }
-// Thẻ tên người lên lễ: thẻ tên nhỏ gọn (không có avatar) ngay sát đỉnh đầu
+// VIỆC 2: Thẻ tên phật tử nhỏ gọn (content.json → layout.v4.nameTag)
+function getNameTagConfig(){
+  const NT = V4?.nameTag || {};
+  return {
+    avatar: NT.avatar ?? 22,
+    avatarBorder: NT.avatarBorder ?? 1.5,
+    font: NT.font ?? 11,
+    fontWeight: NT.fontWeight ?? 600,
+    bg: NT.bg ?? 'rgba(0,0,0,0.55)',
+    padY: (NT.padding && NT.padding[0]) ?? 2,
+    padX: (NT.padding && NT.padding[1]) ?? 6,
+    maxChars: NT.maxChars ?? 8,
+    maxTags: NT.maxTags ?? 12,
+    maxHeight: NT.maxHeight ?? 24,
+    maxWidth: NT.maxWidth ?? 110,
+    gapHead: NT.gapHead ?? 4,
+  };
+}
+
+// Nhãn người đang lễ ("Lễ n"): chỉ 1 nhãn mỗi người, cập nhật số tại chỗ (không tạo nhãn mới), cùng kiểu pill 11px
 function drawCeremonyTag(v, headY, alpha){
-  const LB = V3?.labels || { nameMax: 10, nameFontPx: 13 };
-  const fs = Math.min(13, LB.nameFontPx || 13);
-  const nm = String(v.name || '');
-  const name = Array.from(nm).length > LB.nameMax ? Array.from(nm).slice(0, LB.nameMax - 1).join('').trimEnd() + '…' : nm;
-  const key = 'cTag|' + name + '|' + (v.coins >= 99 ? 1 : 0);
+  const cfg = getNameTagConfig();
+  const fs = cfg.font;
+  const nm = String(v.ceremonyTagText || v.name || '');
+  const chars = Array.from(nm);
+  const name = chars.length > cfg.maxChars ? chars.slice(0, cfg.maxChars).join('').trimEnd() + '…' : nm;
+  const gold = v.coins >= 99;
+  const key = 'cTag|' + name + '|' + (gold ? 1 : 0);
   if (v._cTagKey !== key){
-    const font = `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`;
+    const font = `${cfg.fontWeight} ${fs}px "Be Vietnam Pro",system-ui,sans-serif`;
     const m = (v._cTagCan || (v._cTagCan = document.createElement('canvas'))), mx = m.getContext('2d');
     mx.font = font;
-    const tw = mx.measureText(name).width, h = Math.round(fs * 1.4), w = Math.ceil(tw + 14);
-    m.width = w; m.height = h;
-    mx.fillStyle = 'rgba(18,9,5,.82)';
-    mx.beginPath(); if (mx.roundRect) mx.roundRect(0, 0, w, h, h / 2); else mx.rect(0, 0, w, h); mx.fill();
-    mx.strokeStyle = v.coins >= 99 ? '#e2b04f' : 'rgba(226,176,79,.5)';
+    const tw = mx.measureText(name).width;
+    const pillW = Math.min(cfg.maxWidth, Math.max(28, Math.ceil(cfg.padX * 2 + tw)));
+    const pillH = Math.min(cfg.maxHeight, 24);
+    m.width = pillW; m.height = pillH;
+    mx.fillStyle = cfg.bg;
+    mx.beginPath(); if (mx.roundRect) mx.roundRect(0, 0, pillW, pillH, pillH / 2); else mx.rect(0, 0, pillW, pillH); mx.fill();
+    mx.strokeStyle = gold ? '#e2b04f' : 'rgba(226,176,79,.45)';
     mx.lineWidth = 1; mx.stroke();
-    mx.font = font; mx.fillStyle = v.coins >= 99 ? '#ffd98a' : '#f6e9cf';
-    mx.textAlign = 'center'; mx.textBaseline = 'middle'; mx.fillText(name, w / 2, h / 2 + 1);
-    v._cTagKey = key; v._cTagW = w; v._cTagH = h;
+    mx.font = font; mx.fillStyle = gold ? '#ffd98a' : '#f6e9cf';
+    mx.textAlign = 'center'; mx.textBaseline = 'middle'; mx.fillText(name, pillW / 2, pillH / 2 + 0.5);
+    v._cTagKey = key; v._cTagW = pillW; v._cTagH = pillH;
   }
   const tagX = Math.round(Math.max(8, Math.min(1072 - v._cTagW, v.x - v._cTagW / 2)));
-  const tagY = Math.round(headY - 4 - v._cTagH);
+  const tagY = Math.round(headY - cfg.gapHead - v._cTagH);
   ctx.save(); ctx.globalAlpha = alpha;
   ctx.drawImage(v._cTagCan, tagX, tagY);
   ctx.restore();
   return { x: tagX, y: tagY, w: v._cTagW, h: v._cTagH };
 }
-// Nhãn trên đầu người xem ngồi: vòng tròn đại diện avatarPx, tên ngay dưới vòng tròn
+
+// Thẻ tên người xem ngồi: avatar tròn 22px viền 1.5px, tên cỡ 11px, pill đen mờ 55%, padding 2x6px, cao <= 24, rộng <= 110
 function getLabelBox(v, headY){
-  const LB = (V4 && V4.labels) ? V4.labels : (V3 ? V3.labels : { recentMax: 12, avatarPx: 28, nameMax: 10, nameFontPx: 14 });
-  const px = LB.avatarPx, fs = LB.nameFontPx, nm = String(v.name || '');
+  const cfg = getNameTagConfig();
+  const avPx = cfg.avatar, fs = cfg.font, nm = String(v.name || '');
   const im = avatar(v.avatar), gold = v.coins >= 99, key = nm + '|' + (gold ? 1 : 0) + '|' + (im ? im.src : 'L');
   if (v._lbKey !== key){
-    const name = Array.from(nm).length > LB.nameMax ? Array.from(nm).slice(0, LB.nameMax - 1).join('').trimEnd() + '…' : nm;
-    const font = `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`, m = (v._lbCan || (v._lbCan = document.createElement('canvas'))), mx = m.getContext('2d');
-    mx.font = font; const tw = mx.measureText(name).width, h = Math.round(fs * 1.4), w = Math.ceil(Math.max(px, tw + 12)) + 2, H = px + 3 + h;
-    m.width = w; m.height = H;
-    mx.drawImage(avatarCircle(v, px), (w - px) / 2, 0, px, px);
-    mx.fillStyle = 'rgba(18,9,5,.74)'; mx.beginPath(); if (mx.roundRect) mx.roundRect((w - tw - 12) / 2, px + 3, tw + 12, h, h / 2); else mx.rect((w - tw - 12) / 2, px + 3, tw + 12, h); mx.fill();
-    mx.font = font; mx.fillStyle = gold ? '#ffd98a' : '#f6e9cf'; mx.textAlign = 'center'; mx.textBaseline = 'middle'; mx.fillText(name, w / 2, px + 3 + h / 2 + 1);
-    v._lbKey = key; v._lbH = H; v._lbW = w;
+    const chars = Array.from(nm);
+    let displayName = chars.length > cfg.maxChars ? chars.slice(0, cfg.maxChars).join('').trimEnd() + '…' : nm;
+    const font = `${cfg.fontWeight} ${fs}px "Be Vietnam Pro",system-ui,sans-serif`;
+    const m = (v._lbCan || (v._lbCan = document.createElement('canvas'))), mx = m.getContext('2d');
+    mx.font = font;
+    const avImg = avatarCircle(v, avPx);
+    let tw = mx.measureText(displayName).width;
+    const gap = 4;
+    while (displayName.length > 1 && (cfg.padX * 2 + avPx + gap + tw) > cfg.maxWidth) {
+      displayName = displayName.slice(0, -2).trimEnd() + '…';
+      tw = mx.measureText(displayName).width;
+    }
+    const pillW = Math.min(cfg.maxWidth, Math.ceil(cfg.padX * 2 + avPx + gap + tw));
+    const pillH = Math.min(cfg.maxHeight, 24);
+    m.width = pillW; m.height = pillH;
+    mx.fillStyle = cfg.bg;
+    mx.beginPath(); if (mx.roundRect) mx.roundRect(0, 0, pillW, pillH, pillH / 2); else mx.rect(0, 0, pillW, pillH); mx.fill();
+    mx.strokeStyle = gold ? '#e2b04f' : 'rgba(226,176,79,.35)';
+    mx.lineWidth = 1; mx.stroke();
+    const avY = Math.round((pillH - avPx) / 2);
+    mx.drawImage(avImg, cfg.padX, avY, avPx, avPx);
+    mx.font = font; mx.fillStyle = gold ? '#ffd98a' : '#f6e9cf';
+    mx.textAlign = 'left'; mx.textBaseline = 'middle';
+    mx.fillText(displayName, cfg.padX + avPx + gap, pillH / 2 + 0.5);
+    v._lbKey = key; v._lbH = pillH; v._lbW = pillW;
   }
   const x = Math.round(Math.max(8, Math.min(1072 - v._lbW, v.x - v._lbW / 2)));
-  const y = Math.round(headY - 4 - v._lbH);
+  const y = Math.round(headY - cfg.gapHead - v._lbH);
   return { x, y, w: v._lbW, h: v._lbH };
 }
 function drawLabelDirect(v, box, alpha){
@@ -905,12 +1020,63 @@ function renderStatic(){
     ctx=staticT1.getContext('2d'); ctx.clearRect(0,0,1080,1920);
     ctx=staticT2.getContext('2d'); ctx.clearRect(0,0,1080,1920);
     if (!legacy){   // cảnh ảnh mới: 2 trụ trì (v4) hoặc 6 thầy (v3), vẽ thẳng vào lớp nền DOM
-      if (V4 && V4.abbots && A.monk.naturalWidth){
+      if (V4 && A.monk.naturalWidth){
         ctx = bg;
+        const codeCeremony = isCeremonyCode();
+        const ce = V4.ceremony;
+        if (codeCeremony && ce){
+          // Vẽ thảm (rect bo 6 px, viền vàng 3 px)
+          if (ce.carpet){
+            const cp = ce.carpet;
+            ctx.save();
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(cp.x, cp.y, cp.w, cp.h, 6);
+            else ctx.rect(cp.x, cp.y, cp.w, cp.h);
+            ctx.fillStyle = cp.color || '#8e1b17';
+            ctx.fill();
+            ctx.strokeStyle = cp.border || '#c99a3b';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.restore();
+          }
+          // Vẽ gối (cushion.png; nếu thiếu thì ellipse nâu đậm) + bóng mờ ellipse đen 25% (rộng 90%, cao 10px)
+          if (Array.isArray(ce.rows)){
+            const cw = ce.cushion?.w || 76;
+            const imCushion = A.cushion && A.cushion.naturalWidth ? A.cushion : null;
+            const ch = imCushion ? Math.round(cw * (imCushion.naturalHeight / imCushion.naturalWidth)) : 41;
+            for (const row of ce.rows){
+              for (const x of row.xs){
+                ctx.save();
+                // Bóng mờ ellipse đen 25% dưới gối (rộng 90%, cao 10 px)
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                ctx.beginPath();
+                ctx.ellipse(x, row.yFoot + 2, (cw * 0.9) / 2, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (imCushion){
+                  ctx.drawImage(imCushion, x - cw / 2, row.yFoot - ch / 2, cw, ch);
+                } else {
+                  ctx.fillStyle = '#5c2c16';
+                  ctx.beginPath();
+                  ctx.ellipse(x, row.yFoot, cw / 2, ch / 2, 0, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.strokeStyle = '#c99a3b';
+                  ctx.lineWidth = 1.5;
+                  ctx.stroke();
+                }
+                ctx.restore();
+              }
+            }
+          }
+        }
+        // Vẽ 2 trụ trì
+        const abbotsToDraw = (codeCeremony && ce?.abbots && ce.abbots.length) ? ce.abbots : (V4.abbots || []);
         const s = (V4.seatHeight || 115) / (A.monk.naturalHeight || 260);
-        for (const m of V4.abbots){
+        for (let i = 0; i < abbotsToDraw.length; i++){
+          const m = abbotsToDraw[i];
           const im = A.monk;
-          if (m.flip){
+          const isFlip = typeof m.flip === 'boolean' ? m.flip : (i > 0);
+          if (isFlip){
             ctx.save();
             ctx.translate(m.x, 0);
             ctx.scale(-1, 1);
@@ -942,7 +1108,7 @@ function renderStatic(){
 }
 function staticKeyNow(){
   const sc = resolveScene(), im = sceneImg(sc);
-  return [layoutVer, sc, !!(im && im.naturalWidth), A.monk.naturalWidth > 0, fontsOk].join('|');
+  return [layoutVer, sc, !!(im && im.naturalWidth), A.monk.naturalWidth > 0, A.cushion?.naturalWidth > 0, isCeremonyCode(), fontsOk].join('|');
 }
 
 let lastDraw=performance.now(), lastProfileV3=null;
@@ -950,6 +1116,25 @@ function frame(now){
   requestAnimationFrame(frame);
   if (now - lastDraw < MIN_FRAME_MS) return;      // giới hạn 30 fps; mọi chuyển động tính theo dt nên tốc độ không đổi
   window.__drawnFrames = (window.__drawnFrames || 0) + 1; window.__f = window.__drawnFrames;
+  if (window.__drawnFrames === 1){
+    const ffMs = Math.round(performance.now() - overlayStartTime);
+    sendStartupMetric('khung hình đầu tiên', ffMs);
+  }
+  fpsFramesInSec++;
+  if (now - fpsMeasureWindowStart >= 1000){
+    const curFps = fpsFramesInSec / ((now - fpsMeasureWindowStart) / 1000);
+    fpsMeasureWindowStart = now; fpsFramesInSec = 0;
+    if (curFps >= 28){
+      stableSecsCount++;
+      if (stableSecsCount >= 10 && !hasReportedStableFps){
+        hasReportedStableFps = true;
+        const ms = Math.round(performance.now() - overlayStartTime);
+        sendStartupMetric('fps ổn định ≥28 trong 10 s liên tiếp', ms);
+      }
+    } else {
+      stableSecsCount = 0;
+    }
+  }
   const dt=Math.min((now-lastDraw)/1000,.1); lastDraw=now; const t=now/1000;
   const sk=staticKeyNow(); if (sk!==staticKey){ staticKey=sk; renderStatic(); }
   ctx.clearRect(0,0,1080,1920);
@@ -1032,17 +1217,21 @@ function frame(now){
     }
     if (!v3){ if (!v.atAltarSpot && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null; }
   }
-  // Thẻ tên người lên lễ: thẻ tên nhỏ (không avatar) ngay sát đỉnh đầu
+  // Thẻ tên người lên lễ: chỉ 1 nhãn mỗi người, cập nhật số tại chỗ (không tạo nhãn mới)
+  const drawnCeremonyIds = new Set();
   const drawnTagBoxes = [];
   for (const [cv, ch, ca] of ceremonyLabels){
+    if (drawnCeremonyIds.has(cv.id)) continue;
+    drawnCeremonyIds.add(cv.id);
     const b = drawCeremonyTag(cv, ch, ca);
     if (b) drawnTagBoxes.push(b);
   }
   // Thẻ người xem ngồi: tối đa 12 thẻ tên, không chồng lấn (bỏ qua thẻ cắt thẻ đã vẽ, không đè thảm lễ)
   seatedCandidates.sort((a, b) => (b[0].lastActive || 0) - (a[0].lastActive || 0));
   let seatedTagCount = 0;
-  const rugBox = V3?.rug || { x: 148, y: 1330, w: 784, h: 158 };
-  const maxTags = (V4 && V4.labels && V4.labels.recentMax) || V3?.labels?.recentMax || 12;
+  const rugBox = isCeremonyCode() && V4?.ceremony?.carpet ? V4.ceremony.carpet : (V3?.rug || { x: 148, y: 1330, w: 784, h: 158 });
+  const cfg = getNameTagConfig();
+  const maxTags = cfg.maxTags || 12;
   for (const [lv, lh, la] of seatedCandidates){
     if (seatedTagCount >= maxTags) break;
     const box = getLabelBox(lv, lh);
@@ -1094,11 +1283,47 @@ function drawCredit(now){
   ctx.restore();
 }
 layout(24); updateAmbientBadge();
-// Chờ phông chữ (Noto Serif, Be Vietnam Pro) nạp xong rồi mới vẽ khung đầu, để thẻ tên/Sổ Vàng không đo chữ bằng phông dự phòng. Quá 4s thì vẽ luôn.
-Promise.race([
-  Promise.all(['600 30px "Be Vietnam Pro"','500 26px "Be Vietnam Pro"','700 24px "Noto Serif"','italic 700 42px "Noto Serif"'].map(f=>document.fonts.load(f).catch(()=>[]))).then(()=>document.fonts.ready),
-  new Promise(r=>setTimeout(r,4000)),
-]).catch(()=>{}).then(()=>{ fontsOk=true; lastDraw=performance.now(); requestAnimationFrame(frame); });
+// VIỆC 1: Preload + img.decode() toàn bộ nền đang chọn + c_* + pose_* TRƯỚC khi vẽ khung đầu
+async function initStartup(){
+  try {
+    await Promise.race([
+      Promise.all(['600 30px "Be Vietnam Pro"','500 26px "Be Vietnam Pro"','700 24px "Noto Serif"','italic 700 42px "Noto Serif"'].map(f=>document.fonts.load(f).catch(()=>[]))).then(()=>document.fonts.ready),
+      new Promise(r=>setTimeout(r,3000)),
+    ]);
+  } catch {}
+  fontsOk = true;
+
+  // 1. Decode nền đang chọn
+  const sc = resolveScene();
+  const bgImg = sceneImg(sc);
+  if (bgImg){
+    try { if (bgImg.decode) await bgImg.decode(); } catch {}
+  }
+  const bgMs = Math.round(performance.now() - overlayStartTime);
+  sendStartupMetric('ảnh nền decode xong', bgMs);
+
+  // 2. Decode toàn bộ sprite c_*, pose_*, cushion, fx_*
+  const sprites = [
+    A.monk, A.nun, A.granny, A.man, A.woman, A.child,
+    A.cushion, A.lotus, A.halo, A.bell, A.incense, A.petal, A.scroll
+  ].filter(Boolean);
+  for (const [k, im] of Object.entries(A)){
+    if (k.startsWith('pose_') && !sprites.includes(im)) sprites.push(im);
+  }
+  await Promise.allSettled(sprites.map(async im => {
+    if (im?.decode) { try { await im.decode(); } catch {} }
+  }));
+  const spMs = Math.round(performance.now() - overlayStartTime);
+  sendStartupMetric('tất cả sprite decode xong', spMs);
+  decodeDone = true;
+  checkPrepDone();
+
+  // 3. Bắt đầu vẽ
+  renderStatic();
+  lastDraw = performance.now();
+  requestAnimationFrame(frame);
+}
+initStartup();
 </script>
 </body>
 </html>

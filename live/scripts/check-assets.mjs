@@ -90,7 +90,7 @@ const files = new Set(fs.readdirSync(DIR));
 console.log('Tên file');
 const need = [...SCENES, ...Object.keys(CHARS).map(n => n + '.png'), ...FX.map(n => n + '.png')];
 for (const n of need) files.has(n) ? ok(n) : bad('thiếu ' + n);
-const EXTRAS = ['candle_body', 'candle_flame', 'wish_card'];   // dành cho Đợt 3 (nến + thẻ nguyện ước): chỉ cho phép có mặt và kiểm tra alpha, chưa dùng trong code
+const EXTRAS = ['candle_body', 'candle_flame', 'wish_card', 'cushion'];   // dành cho Đợt 3 / v4.2 (nến + thẻ nguyện ước + gối): chỉ cho phép có mặt và kiểm tra alpha
 const known = new Set([...need, ...EXTRAS.map(n => n + '.png'), 'music', 'fonts', 'README.md', '_unused']);
 for (const n of files) if (!known.has(n) && !isPoseFile(n)) warn(n.startsWith('anim_') ? `${n}: sprite cũ, nên xoá (code tự hiện tư thế ngồi)` : `file lạ: ${n}`);
 

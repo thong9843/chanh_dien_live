@@ -1634,6 +1634,8 @@
   const root = global;
   let V3_CFG = null;   // content.json → layout.v3 (overlay gán khi nhận snapshot); null = bố cục cũ
   function setV3Config(c) { V3_CFG = c && typeof c === 'object' ? c : null; }
+  let V4_CFG = null;   // content.json → layout.v4 (overlay gán khi nhận snapshot)
+  function setV4Config(c) { V4_CFG = c && typeof c === 'object' ? c : null; }
 
   class CeremonyDirector {
     constructor() {
@@ -1758,7 +1760,8 @@
       this.spot = msg.spot || null;
       this.altarX = Number.isFinite(spot.x) ? spot.x : ALTAR_DEFAULT.x;
       this.altarY = Number.isFinite(spot.y) ? spot.y : ALTAR_DEFAULT.y;
-      this.altarScale = Number.isFinite(spot.scale) ? spot.scale : ALTAR_DEFAULT.scale;
+      const v4SeatH = (V4_CFG?.seatHeight || 115);
+      this.altarScale = V4_CFG ? (v4SeatH / 260) : (Number.isFinite(spot.scale) ? spot.scale : ALTAR_DEFAULT.scale);
 
       this.fadeSec = clamp(+msg.fadeSec || 0.6, 0.2, 3.0);
       this.incenseBoostSec = clamp(+msg.incenseBoostSec || 6.0, 1.0, 30.0);
@@ -2125,11 +2128,13 @@
       let len = 0;
       for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
       // scale theo y cho cả đoạn đường: càng đi lên (y nhỏ) càng nhỏ, tới altarSpot đúng bằng altarScale
-      this.path = { pts, len: Math.max(1, len), y0: v.y, ds0: v.scale * 1.05 };
+      const v4Scale = V4_CFG ? (V4_CFG.seatHeight || 115) / 260 : null;
+      this.path = { pts, len: Math.max(1, len), y0: v.y, ds0: v4Scale || (v.scale * 1.05) };
     }
 
     // Một hàm scale theo y cho cả đường đi (phối cảnh): nội suy từ 0,95 tại y1900 tới 0,74 tại y1348
     _scaleAtY(y) {
+      if (V4_CFG) return (V4_CFG.seatHeight || 115) / 260;
       const t = clamp((y - 1348) / (1900 - 1348), 0, 1);
       return lerp(0.74, 0.95, t);
     }
@@ -2294,6 +2299,7 @@
     CeremonyDirector,
     CeremonyManager,
     setV3Config,
+    setV4Config,
     ALTAR_DEFAULT,
     setBowConfig,
     setStandConfig,
