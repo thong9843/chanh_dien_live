@@ -17,7 +17,9 @@
 html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(--body);color:var(--fg)}
 #fit{position:fixed;inset:0;overflow:hidden}
 #stage{position:absolute;left:50%;top:50%;width:1080px;height:1920px;transform-origin:center center;overflow:hidden;background:var(--bg)}
-#c{position:absolute;inset:0;width:1080px;height:1920px}
+#c{position:absolute;inset:0;width:1080px;height:1920px;z-index:1}
+/* Nền tĩnh (ảnh cảnh + sáu thầy) là hai canvas DOM riêng, mờ chéo bằng CSS: canvas chính chỉ vẽ phần động nên GPU không phải xoá + vẽ lại cả khung 1080x1920 mỗi khung hình */
+.bgl{position:absolute;inset:0;width:1080px;height:1920px;opacity:0;transform-origin:0 0;pointer-events:none}
 .ui{position:absolute;z-index:3}
 /* title plaque: dòng chữ Nam Mô A Di Đà Phật mạ vàng chạm khắc thanh tịnh trên cùng */
 #plaque{display:none;position:absolute;left:50%;transform:translateX(-50%);top:185px;width:100%;max-width:440px;text-align:center;pointer-events:none;z-index:2}
@@ -77,6 +79,8 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 </head>
 <body>
 <div id="fit"><div id="stage">
+  <canvas id="bgA" class="bgl" width="1080" height="1920"></canvas>
+  <canvas id="bgB" class="bgl" width="1080" height="1920"></canvas>
   <canvas id="c" width="1080" height="1920"></canvas>
   <div id="plaque" class="ui"><span id="plaqueText">Nam Mô A Di Đà Phật</span></div>
   <div id="chipCount" class="pill ui"><span class="dot"></span><span id="count">0/24</span><small id="watchLbl">đang<br>thiền</small></div>
@@ -194,7 +198,15 @@ function loadPoseFiles(files){
 /* ---- Ảnh đại diện: chỉ https + máy chủ CDN của TikTok (content.json → avatar.hosts; server cũng lọc một lần nữa). Ảnh nạp xong được vẽ sẵn
    thành vòng tròn avatarPx (có viền vàng) và cache; chưa có / lỗi / không hợp lệ thì dùng vòng tròn chữ cái đầu của tên. */
 const AVATAR_HOSTS_DEFAULT = ['tiktokcdn.com','tiktokcdn-us.com','tiktokcdn-eu.com','tiktokv.com','tiktokv.us','ibyteimg.com','ibytedtos.com','muscdn.com'];
+const safeUrlCache = new Map();   // kết quả kiểm tra theo chuỗi gốc: không phân tích URL lại mỗi khung hình
 function safeAvatarUrl(u){
+  u = String(u || '');
+  if (!u) return '';
+  let r = safeUrlCache.get(u);
+  if (r === undefined){ r = safeAvatarUrlCheck(u); if (safeUrlCache.size > 600) safeUrlCache.clear(); safeUrlCache.set(u, r); }
+  return r;
+}
+function safeAvatarUrlCheck(u){
   try {
     const url = new URL(String(u || '').slice(0, 400));
     if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) return '';
@@ -777,7 +789,7 @@ function drawVignette(c){
   edge(0,0,0,n,0,0,1080,n); edge(0,1920,0,1920-n,0,1920-n,1080,n); edge(0,0,n,0,0,0,n,1920); edge(1080,0,1080-n,0,1080-n,0,n,1920);   // 4 mép tối dần vào trong
 }
 const mkLayer=()=>{ const c=document.createElement('canvas'); c.width=1080; c.height=1920; return c; };
-let bgFrom=mkLayer(), bgTo=mkLayer(); const staticT1=mkLayer(), staticT2=mkLayer();   // bgTo = cảnh hiện tại, bgFrom = cảnh trước (chỉ dùng trong 2 giây mờ chéo)
+let bgFrom=document.getElementById('bgA'), bgTo=document.getElementById('bgB'); const staticT1=mkLayer(), staticT2=mkLayer();   // bgTo = cảnh hiện tại, bgFrom = cảnh trước (chỉ dùng trong 2 giây mờ chéo)
 let bgToScene='', bgToValid=false, fadeStart=-1e9;
 let layoutVer=0, staticKey='', fontsOk=false, TAG_GAP=22;   // TAG_GAP: khoảng cách thẻ tên thầy tới đỉnh đầu (content.json → layout.teacherTagGap)
 const tagFont = tc => { const fs = Math.max(15, Math.round(30 * tc.s / .4)); return [fs, `600 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`]; };
@@ -789,10 +801,28 @@ function drawTeachers(from, to, crowded){
     if (!crowded || tc.master) tag(tc.name, tc.x, tc.y - tc.s*260 - TAG_GAP, tc.s, 'gold');
   }
 }
+// Hiển thị hai lớp nền DOM. Cảnh ảnh mới: lớp "tới" mờ dần 0→1 trong scene.fadeSec giây bằng CSS (lớp "từ" nằm dưới, tắt sau khi xong).
+// Chánh điện cũ: ẩn cả hai lớp DOM, canvas chính tự vẽ nền (cần cộng sáng lên nền như trước).
+let bgFadeToken = 0;
+function showBgLayers(legacy, swapped){
+  const tok = ++bgFadeToken;
+  if (legacy){ bgFrom.style.opacity = bgTo.style.opacity = '0'; return; }
+  bgTo.style.zIndex = '1'; bgFrom.style.zIndex = '0';
+  if (!swapped){ bgTo.style.transition = 'none'; bgTo.style.opacity = '1'; bgFrom.style.opacity = '0'; return; }
+  const sec = Math.max(0, sceneCfg().fadeSec);
+  bgTo.style.transition = 'none'; bgTo.style.opacity = '0'; void bgTo.offsetWidth;
+  bgTo.style.transition = `opacity ${sec}s linear`; bgTo.style.opacity = '1';
+  setTimeout(() => { if (tok === bgFadeToken) bgFrom.style.opacity = '0'; }, sec * 1000 + 100);
+}
+let bgXform = '';
+function applyBgZoom(css){   // lớp nền DOM phóng to/dịch cùng camera zoom của canvas chính
+  if (css === bgXform) return; bgXform = css; bgFrom.style.transform = bgTo.style.transform = css || '';
+}
 function renderStatic(){
   const sc = resolveScene(), im = sceneImg(sc), legacy = sc === 'old';
   if (bgToValid && bgToScene !== sc && !(im && im.naturalWidth)) return;   // ảnh cảnh mới chưa nạp xong: giữ cảnh cũ, khoá khoá tĩnh đổi khi ảnh tới thì vẽ lại
-  if (bgToValid && bgToScene !== sc){ [bgFrom, bgTo] = [bgTo, bgFrom]; fadeStart = performance.now(); }   // đổi cảnh: giữ cảnh cũ làm lớp "từ", vẽ cảnh mới vào lớp "tới"
+  const swapped = bgToValid && bgToScene !== sc;
+  if (swapped){ [bgFrom, bgTo] = [bgTo, bgFrom]; fadeStart = performance.now(); }   // đổi cảnh: giữ cảnh cũ làm lớp "từ", vẽ cảnh mới vào lớp "tới"
   const bg=bgTo.getContext('2d'); bg.clearRect(0,0,1080,1920);
   if (im && im.naturalWidth) bg.drawImage(im,0,0,1080,1920);
   if (legacy){   // chỉ Chánh điện cũ còn vignette + lớp phủ đêm bằng code; cảnh ảnh mới dùng nguyên ảnh (ảnh đêm đã tối sẵn)
@@ -800,13 +830,14 @@ function renderStatic(){
     if (!sceneIsDay(sc)) ambientFX.drawNightShade(bg);
   }
   bgToScene = sc; bgToValid = !!(im && im.naturalWidth);
+  showBgLayers(legacy, swapped);
   const prev=ctx;
   try {
     ctx=staticT1.getContext('2d'); ctx.clearRect(0,0,1080,1920);
     ctx=staticT2.getContext('2d'); ctx.clearRect(0,0,1080,1920);
     if (!legacy){   // cảnh ảnh mới: sáu thầy ngồi hai bên (layout.v3.monks), rộng ≈ 1,1 × rộng bồ đoàn theo độ sâu, bên trái quay phải, bên phải quay trái
       if (V3 && window.LayoutV3 && A.monk.naturalWidth){
-        ctx=staticT1.getContext('2d');
+        ctx=bg;   // thầy vẽ thẳng vào lớp nền DOM (sau ảnh nền, trước mọi thứ động)
         for (const m of [...V3.monks].sort((a,b)=>a.y-b.y)){
           const im = A[m.skin] || A.monk, sc = window.LayoutV3.monkScale(V3, m, im.naturalWidth);
           if (m.flip){ ctx.save(); ctx.translate(m.x,0); ctx.scale(-1,1); sprite(im,0,m.y,sc); ctx.restore(); }
@@ -846,9 +877,12 @@ function frame(now){
   cameraZoom.applyTransform(ctx);
   // Nền: cảnh hiện tại; đang đổi cảnh thì mờ chéo từ cảnh cũ sang cảnh mới trong scene.fadeSec giây (chỉ lúc đó mới vẽ hai lớp)
   const sceneNow = resolveScene(), legacy = sceneNow === 'old', fadeMs = Math.max(1, sceneCfg().fadeSec * 1000);
-  if (now - fadeStart < fadeMs){
-    ctx.drawImage(bgFrom,0,0); ctx.globalAlpha = (now - fadeStart) / fadeMs; ctx.drawImage(bgTo,0,0); ctx.globalAlpha = 1;
-  } else ctx.drawImage(bgTo,0,0);
+  applyBgZoom(legacy ? '' : cameraZoom.cssTransform());
+  if (legacy){
+    if (now - fadeStart < fadeMs){
+      ctx.drawImage(bgFrom,0,0); ctx.globalAlpha = (now - fadeStart) / fadeMs; ctx.drawImage(bgTo,0,0); ctx.globalAlpha = 1;
+    } else ctx.drawImage(bgTo,0,0);
+  }
 
   haloPulse=Math.max(0,haloPulse-dt*.4);
   if (legacy){
@@ -867,10 +901,12 @@ function frame(now){
   incenseFX.updateAndDraw(ctx, dt, t, 540, LAYOUT.incense.y);
 
   // 4. Sáu vị thầy hai bên bàn thờ (lối giữa để trống): vẽ từ lớp tĩnh; hào quang thầy trụ trì vẫn vẽ mỗi khung, nằm giữa hai nửa lớp.
-  ctx.drawImage(staticT1,0,0);
-  const master=legacy ? TEACHERS.find(tc=>tc.master) : null;
-  if (master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,master.x,master.y-120,.9,.5); ctx.restore(); }
-  ctx.drawImage(staticT2,0,0);
+  if (legacy){
+    ctx.drawImage(staticT1,0,0);
+    const master=TEACHERS.find(tc=>tc.master);
+    if (master){ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=.35+.1*Math.sin(t*1.5); sprite(A.halo,master.x,master.y-120,.9,.5); ctx.restore(); }
+    ctx.drawImage(staticT2,0,0);
+  }
 
   // 5. Phật tử ngồi thiền & hành lễ (cập nhật Lerp + Perspective Scaling + 12-Frame Bowing + Lotus Aura 5 phút)
   const bubbles=[], labels=[], v3=!legacy;

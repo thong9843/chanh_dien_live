@@ -1478,6 +1478,15 @@
       ctx.restore();
     }
 
+    // Cùng phép biến đổi với applyTransform nhưng dưới dạng CSS (cho các lớp nền DOM); '' khi không zoom
+    cssTransform() {
+      if (!this.active || Math.abs(this.scale - 1.0) <= 0.001) return '';
+      const s = this.scale;
+      const cx = clamp(this.focusX, 540 / s, 1080 - 540 / s);
+      const cy = clamp(this.focusY, 960 / s, 1920 - 960 / s);
+      return `matrix(${s.toFixed(4)},0,0,${s.toFixed(4)},${(540 - s * cx).toFixed(2)},${(960 - s * cy).toFixed(2)})`;
+    }
+
     isHighlighting(v) {
       return this.active && this.highlightAlpha > 0.02 && v && v.id === this.targetId && !v.inCeremony;
     }
