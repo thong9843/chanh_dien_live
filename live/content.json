@@ -24,17 +24,18 @@
   "plaque": {
     "enabled": true,
     "text": "Nam Mô A Di Đà Phật",
-    "top": 118,
-    "width": 420,
-    "height": 56
+    "top": 20,
+    "width": 400,
+    "height": 50
   },
   "guide": {
-    "title": "💬 Bình luận để tương tác",
+    "title": "💬 Bình luận để lễ Phật",
     "lines": [
       "Gõ **Nam mô A Di Đà Phật** để vào thiền",
-      "**!xinquẻ** nhận pháp ngữ hôm nay",
+      "**!xinquẻ** nhận pháp ngữ",
       "**!thắp nhang** dâng hương",
-      "**!quỳ lạy** lễ Phật"
+      "**!cúng bái** lạy Phật 3 lạy",
+      "**!quỳ lạy** quỳ lạy lâu"
     ]
   },
   "prayers": [
@@ -177,7 +178,7 @@
     "bigLine": "Nam mô A Di Đà Phật. Tùy hỷ tâm thành của Phật tử {name}. Nguyện hồi hướng công đức này đến gia quyến và khắp pháp giới chúng sinh."
   },
   "member": {
-    "line": "Hoan hỷ chào đón phật tử {name} bước vào chánh điện tịnh tâm. Nguyện cầu thân tâm thường an lạc."
+    "line": "Chào mừng Phật tử {name} đến chánh điện."
   },
   "follow": {
     "line": "Hoan hỷ đón Phật tử {name} về chánh điện."
@@ -208,11 +209,11 @@
     "fadeSec": 0.6,
     "incenseBoostSec": 6,
     "inviteSec": 3,
-    "gapSec": 0.8,
+    "gapSec": 0.3,
     "incenseHoldSec": 2.2,
     "tailSec": 0.35,
     "maxQueue": 20,
-    "cooldownSec": 300,
+    "cooldownSec": 60,
     "bow": {
       "dropPct": 0.11,
       "squashPct": 0.1,
@@ -308,7 +309,7 @@
   },
   "layout": {
     "halo": {
-      "y": 320,
+      "y": 270,
       "scale": 1.9,
       "alpha": 0.12
     },
@@ -319,7 +320,7 @@
       "h": 1050
     },
     "incense": {
-      "y": 990
+      "y": 900
     },
     "teachers": [
       {
@@ -373,7 +374,7 @@
       }
     ],
     "floor": {
-      "yTop": 1430,
+      "yTop": 1240,
       "yBot": 1870,
       "halfTop": 330,
       "halfBot": 470
@@ -387,15 +388,15 @@
     "buddhaGlow": {
       "head": {
         "x": 540,
-        "y": 355,
-        "r": 175,
+        "y": 280,
+        "r": 150,
         "alpha": 0.38
       },
       "body": {
         "x": 540,
-        "y": 625,
-        "rx": 195,
-        "ry": 285,
+        "y": 520,
+        "rx": 240,
+        "ry": 290,
         "alpha": 0.26
       },
       "breathSec": 7,
@@ -417,17 +418,17 @@
       },
       "tips": {
         "x": 16,
-        "y": 560,
-        "w": 264,
-        "h": 240,
-        "sec": 8,
-        "perPage": 3
+        "y": 540,
+        "w": 248,
+        "h": 205,
+        "sec": 6,
+        "perPage": 2
       },
       "merit": {
-        "x": 800,
-        "y": 560,
-        "w": 264,
-        "h": 240,
+        "x": 816,
+        "y": 540,
+        "w": 248,
+        "h": 205,
         "max": 3,
         "nameMax": 12
       },
@@ -562,18 +563,18 @@
       ],
       "footDy": 14,
       "rug": {
-        "x": 148,
-        "y": 1330,
-        "w": 784,
-        "h": 158
+        "x": 150,
+        "y": 1265,
+        "w": 780,
+        "h": 50
       },
       "aisle": {
-        "yTop": 1489,
+        "yTop": 1240,
         "yBottom": 1920,
-        "topX0": 452,
-        "topX1": 628,
-        "bottomX0": 452,
-        "bottomX1": 628
+        "topX0": 455,
+        "topX1": 625,
+        "bottomX0": 400,
+        "bottomX1": 680
       },
       "seatArea": {
         "left": [
@@ -639,105 +640,177 @@
       }
     },
     "v4": {
-      "seatHeight": 115,
-      "maxVisible": 50,
+      "seatHeight": 96,
+      "maxVisible": 94,
       "abbots": [
         {
-          "x": 190,
-          "yFoot": 1480,
+          "x": 58,
+          "yFoot": 1335,
           "flip": false
         },
         {
-          "x": 890,
-          "yFoot": 1480,
+          "x": 1022,
+          "yFoot": 1335,
           "flip": true
         }
       ],
       "seats": {
         "rows": [
           {
-            "yFoot": 1600,
+            "yFoot": 1407,
             "leftXs": [
-              66,
-              138,
-              210,
-              282,
-              354
+              397,
+              327,
+              257,
+              187,
+              117,
+              47
             ],
             "rightXs": [
-              690,
-              762,
-              834,
-              906,
+              683,
+              753,
+              823,
+              893,
+              963,
+              1033
+            ]
+          },
+          {
+            "yFoot": 1469,
+            "leftXs": [
+              392,
+              322,
+              252,
+              182,
+              112,
+              42
+            ],
+            "rightXs": [
+              688,
+              758,
+              828,
+              898,
+              968,
+              1038
+            ]
+          },
+          {
+            "yFoot": 1531,
+            "leftXs": [
+              387,
+              317,
+              247,
+              177,
+              107
+            ],
+            "rightXs": [
+              693,
+              763,
+              833,
+              903,
+              973
+            ]
+          },
+          {
+            "yFoot": 1593,
+            "leftXs": [
+              382,
+              312,
+              242,
+              172,
+              102
+            ],
+            "rightXs": [
+              698,
+              768,
+              838,
+              908,
               978
             ]
           },
           {
-            "yFoot": 1672,
+            "yFoot": 1655,
             "leftXs": [
-              102,
-              174,
-              246,
-              318,
-              390
+              377,
+              307,
+              237,
+              167,
+              97
             ],
             "rightXs": [
-              726,
-              798,
-              870,
-              942,
-              1014
+              703,
+              773,
+              843,
+              913,
+              983
             ]
           },
           {
-            "yFoot": 1744,
+            "yFoot": 1717,
             "leftXs": [
-              66,
-              138,
-              210,
-              282,
-              354
+              372,
+              302,
+              232,
+              162,
+              92
             ],
             "rightXs": [
-              690,
-              762,
-              834,
-              906,
-              978
+              708,
+              778,
+              848,
+              918,
+              988
             ]
           },
           {
-            "yFoot": 1816,
+            "yFoot": 1779,
             "leftXs": [
-              102,
-              174,
-              246,
-              318,
-              390
+              367,
+              297,
+              227,
+              157,
+              87
             ],
             "rightXs": [
-              726,
-              798,
-              870,
-              942,
-              1014
+              713,
+              783,
+              853,
+              923,
+              993
             ]
           },
           {
-            "yFoot": 1888,
+            "yFoot": 1841,
             "leftXs": [
-              66,
-              138,
-              210,
-              282,
-              354
+              362,
+              292,
+              222,
+              152,
+              82
             ],
             "rightXs": [
-              690,
-              762,
-              834,
-              906,
-              978
+              718,
+              788,
+              858,
+              928,
+              998
+            ]
+          },
+          {
+            "yFoot": 1903,
+            "leftXs": [
+              357,
+              287,
+              217,
+              147,
+              77
+            ],
+            "rightXs": [
+              723,
+              793,
+              863,
+              933,
+              1003
             ]
           }
         ]
@@ -749,65 +822,58 @@
         "nameFontPx": 14
       },
       "nameTag": {
-        "avatar": 22,
+        "avatar": 20,
         "avatarBorder": 1.5,
-        "font": 11,
-        "fontWeight": 600,
+        "font": 15,
+        "fontWeight": 700,
         "bg": "rgba(0,0,0,0.55)",
         "padding": [
           2,
-          6
+          4
         ],
-        "maxChars": 8,
+        "maxChars": 6,
         "maxTags": 12,
         "maxHeight": 24,
-        "maxWidth": 110,
-        "gapHead": 4
+        "maxWidth": 86,
+        "gapHead": 3
       },
       "ceremony": {
         "drawInCode": true,
         "cushion": {
-          "w": 76,
+          "w": 84,
           "h": "auto",
           "img": "assets/cushion.png"
         },
         "rows": [
           {
-            "yFoot": 1418,
+            "yFoot": 1300,
             "xs": [
-              402,
-              494,
-              586,
-              678
-            ]
-          },
-          {
-            "yFoot": 1478,
-            "xs": [
-              402,
-              494,
-              586,
-              678
+              216,
+              324,
+              432,
+              540,
+              648,
+              756,
+              864
             ]
           }
         ],
         "carpet": {
-          "x": 340,
-          "y": 1372,
-          "w": 400,
-          "h": 132,
-          "color": "#8e1b17",
-          "border": "#c99a3b"
+          "enabled": false,
+          "x": 150,
+          "y": 1265,
+          "w": 780,
+          "h": 60
         },
         "abbots": [
           {
-            "x": 290,
-            "yFoot": 1480,
+            "x": 58,
+            "yFoot": 1335,
             "flip": false
           },
           {
-            "x": 790,
-            "yFoot": 1480,
+            "x": 1022,
+            "yFoot": 1335,
             "flip": true
           }
         ]
@@ -837,10 +903,11 @@
     "fontPx": 22
   },
   "tts": {
-    "minGapMs": 2000,
+    "minGapMs": 800,
     "cacheMaxMB": 200,
     "order": [
       "vieneu",
+      "edge",
       "cached"
     ],
     "vieneuVoice": "Thiền Tâm Đức",
@@ -850,8 +917,8 @@
   },
   "oracle": {
     "title": "Pháp ngữ hôm nay",
-    "userCooldownSec": 600,
-    "globalCooldownSec": 20,
+    "userCooldownSec": 120,
+    "globalCooldownSec": 0,
     "tts": "Pháp ngữ gửi Phật tử {name}."
   },
   "scene": {
@@ -860,8 +927,8 @@
     "nightFromHour": 18,
     "halo": {
       "x": 540,
-      "y": 320,
-      "r": 145,
+      "y": 270,
+      "r": 130,
       "alpha": 0.16,
       "breathSec": 7,
       "breathAmp": 0.3

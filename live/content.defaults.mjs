@@ -230,11 +230,11 @@ export default {
     "fadeSec": 0.6,
     "incenseBoostSec": 6,
     "inviteSec": 3,
-    "gapSec": 0.8,
+    "gapSec": 0.3,
     "incenseHoldSec": 2.2,
     "tailSec": 0.35,
     "maxQueue": 20,
-    "cooldownSec": 300,
+    "cooldownSec": 60,
     "bow": {
       "dropPct": 0.11,
       "squashPct": 0.1,
@@ -696,37 +696,40 @@ export default {
       "ceremony": {
         "drawInCode": true,
         "cushion": {
-          "w": 76,
+          "w": 84,
           "h": "auto",
           "img": "assets/cushion.png"
         },
         "rows": [
           {
-            "yFoot": 1418,
-            "xs": [402, 494, 586, 678]
-          },
-          {
-            "yFoot": 1478,
-            "xs": [402, 494, 586, 678]
+            "yFoot": 1300,
+            "xs": [
+              216,
+              324,
+              432,
+              540,
+              648,
+              756,
+              864
+            ]
           }
         ],
         "carpet": {
-          "x": 340,
-          "y": 1372,
-          "w": 400,
-          "h": 132,
-          "color": "#8e1b17",
-          "border": "#c99a3b"
+          "enabled": false,
+          "x": 150,
+          "y": 1265,
+          "w": 780,
+          "h": 60
         },
         "abbots": [
           {
-            "x": 290,
-            "yFoot": 1480,
+            "x": 58,
+            "yFoot": 1335,
             "flip": false
           },
           {
-            "x": 790,
-            "yFoot": 1480,
+            "x": 1022,
+            "yFoot": 1335,
             "flip": true
           }
         ]
@@ -786,9 +789,13 @@ export default {
     "fontPx": 22
   },
   "tts": {
-    "minGapMs": 2000,
+    "minGapMs": 800,
     "cacheMaxMB": 200,
-    "order": ["vieneu", "cached"],
+    "order": [
+      "vieneu",
+      "edge",
+      "cached"
+    ],
     "vieneuVoice": "Thiền Tâm Đức",
     "vieneuSpeed": 0.9,
     "minGiftWhenBusy": 10,
@@ -803,8 +810,8 @@ export default {
   },
   "oracle": {
     "title": "Pháp ngữ hôm nay",
-    "userCooldownSec": 600,
-    "globalCooldownSec": 20,
+    "userCooldownSec": 120,
+    "globalCooldownSec": 0,
     "tts": "Pháp ngữ gửi Phật tử {name}."
   }
 };

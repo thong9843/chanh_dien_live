@@ -48,18 +48,18 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 /* Thẻ gợi ý bình luận (trái x 16–280, y 560–800) và Tri Ân (phải x 800–1064, y 560–800): ngoài vùng bình luận TikTok, gọn, bán trong suốt */
 .card{background:rgba(20,10,6,.75);border:1.5px solid var(--line);border-radius:14px;padding:8px 12px;font-size:16px;line-height:1.25}
 #tips{left:16px;top:560px;width:264px;height:240px;box-sizing:border-box;display:flex;flex-direction:column;text-align:left;overflow:hidden}
-#tips h3{margin:0 0 4px;font-family:var(--display);font-size:15px;line-height:1.2;color:var(--gold2);text-align:center;white-space:nowrap}
+#tips h3{margin:0 0 6px;font-family:var(--display);font-size:18px;line-height:1.2;color:var(--gold2);text-align:center;white-space:nowrap}
 #tipsBody{display:grid}
-#tipsBody .pg{grid-area:1/1;display:flex;flex-direction:column;gap:4px;opacity:0;transition:opacity .5s;pointer-events:none}
+#tipsBody .pg{grid-area:1/1;display:flex;flex-direction:column;gap:8px;opacity:0;transition:opacity .5s;pointer-events:none}
 #tipsBody .pg.show{opacity:1;pointer-events:auto}
-#tipsBody .pg div{font-size:15px;line-height:1.24}
-#tipsBody b{color:var(--gold2)}
+#tipsBody .pg div{font-size:22px;line-height:1.25;font-weight:600}
+#tipsBody b{color:var(--gold2);font-size:25px;font-weight:800}
 #merit{left:800px;top:560px;width:264px;height:240px;box-sizing:border-box;text-align:center;overflow:hidden}
-#merit h3{margin:0 0 4px;font-family:var(--display);font-size:16px;line-height:1.2;color:var(--gold2);letter-spacing:.02em;white-space:nowrap}
-#merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:4px}
+#merit h3{margin:0 0 6px;font-family:var(--display);font-size:19px;line-height:1.2;color:var(--gold2);letter-spacing:.02em;white-space:nowrap}
+#merit ol{margin:0;padding:0;list-style:none;text-align:left;display:grid;gap:7px}
 #merit li{display:block;border-bottom:1px solid rgba(226,176,79,.25);padding-bottom:3px}
-#merit li .nm{display:block;font-size:16px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#merit .empty{color:var(--muted);text-align:center;border:0;font-size:15px}
+#merit li .nm{display:block;font-size:21px;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#merit .empty{color:var(--muted);text-align:center;border:0;font-size:18px}
 /* Thông báo: MỘT hàng đợi duy nhất, mọi thẻ dùng chung vùng #noticeBox (y 1000–1214, rộng ≤ 600, căn giữa x 540). Không bao giờ hai thẻ cùng lúc. */
 #noticeBox{left:240px;top:1080px;width:600px;height:220px;display:grid;place-items:center;pointer-events:none;z-index:5}
 #noticeBox > div{grid-area:1/1;width:100%;box-sizing:border-box;text-align:center;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s}
@@ -582,12 +582,50 @@ function showChant(text){
     });
   });
 }
+const oracleQueue = [];
+let oracleCur = null, oracleNextAt = 0;
+window.oracleCardHistory = [];
 function enqueueOracle(m){
-  const el = $el('oracleCard');
-  noticeEnqueue({ type:'oracle', prio:2, dur:Math.max(4, +(m.showSec || 8)) * 1000, maxWait:30000,
-    show(){ $el('oracleTitle').textContent = m.title || 'Pháp ngữ hôm nay'; $el('oracleVerse').textContent = '“' + (m.verse || '') + '”'; el.classList.add('show'); chimeOracle(); },
-    hide(){ el.classList.remove('show'); } });
+  if (oracleQueue.length >= 50) return;
+  oracleQueue.push(m);
+  stepOracle();
 }
+function stepOracle(){
+  const now = performance.now();
+  const el = $el('oracleCard');
+  if (oracleCur){
+    if (now >= oracleCur.endAt){
+      el.classList.remove('show');
+      const durSec = +((now - oracleCur.showAt) / 1000).toFixed(2);
+      window.oracleCardHistory.push({ index: oracleCur.index, title: oracleCur.m.title, durationSec: durSec });
+      oracleCur = null;
+      oracleNextAt = now + 600;
+    }
+    return;
+  }
+  if (now < oracleNextAt) return;
+  if (!oracleQueue.length) return;
+  const m = oracleQueue.shift();
+  const showMs = Math.max(4, +(m.showSec || 8)) * 1000;
+  const elTitle = $el('oracleTitle');
+  if (elTitle) elTitle.textContent = m.title || 'Pháp ngữ hôm nay';
+  const elVerse = $el('oracleVerse');
+  if (elVerse) elVerse.textContent = '“' + (m.verse || '') + '”';
+  const elAdv = $el('oracleAdvice');
+  if (elAdv) elAdv.textContent = m.advice || '';
+
+  // Đảm bảo reflow để thẻ nạp nội dung trước khi bật hiệu ứng hiện
+  void el.offsetWidth;
+  el.classList.add('show');
+  chimeOracle();
+
+  // Thời lượng cấu hình (mặc định 8s) được tính từ lúc thẻ thực sự hiện (sau 400ms fade-in)
+  const FADE_IN_MS = 400;
+  window.__oracleCount = (window.__oracleCount || 0) + 1;
+  const cardIdx = window.__oracleCount;
+  oracleCur = { m, index: cardIdx, showAt: now, endAt: now + FADE_IN_MS + showMs };
+}
+setInterval(stepOracle, 100);
 
 /* ======================= audio ======================= */
 let AC=null, master=null, musicGain=null, sfx=null, settings={ music:true, mo:true, moBpm:52, scene:'auto', zoomEnabled:true, musicTrack:'shuffle' };
@@ -608,23 +646,39 @@ if (new URLSearchParams(location.search).has('shot')) {
   document.getElementById('unmute')?.remove();
 }
 function startAudio(){
-  AC = new (window.AudioContext||window.webkitAudioContext)();
+  if (!AC) {
+    AC = new (window.AudioContext||window.webkitAudioContext)();
+  }
   AC.resume?.().catch(()=>{});
-  master = AC.createGain(); master.gain.value=.9; master.connect(AC.destination);
-  musicGain = AC.createGain(); musicGain.gain.value=settings.music?.5:0; musicGain.connect(master);
-  sfx = AC.createGain(); sfx.gain.value=1; sfx.connect(master);
-  nextTrack(); scheduleMo(); bell(); playTTS();
+  if (!master) {
+    master = AC.createGain(); master.gain.value=.9; master.connect(AC.destination);
+    musicGain = AC.createGain(); musicGain.gain.value=settings.music?.5:0; musicGain.connect(master);
+    sfx = AC.createGain(); sfx.gain.value=1; sfx.connect(master);
+    nextTrack(); scheduleMo(); bell();
+  }
+  playTTS();
 }
+window.startAudio = startAudio;
 // Chỉ MỘT phần tử Audio cho nhạc nền, nối vào đồ thị âm thanh đúng một lần; đổi bài = đổi src. (Mỗi lần new Audio + createMediaElementSource
 // đều bị Chrome giữ lại mãi: rò listener và node DOM.)
 function nextTrack(){
   if (!musicEl){
     musicEl = new Audio(); const src=AC.createMediaElementSource(musicEl); src.connect(musicGain);
     musicEl.onended = nextTrack;
+    musicEl.onerror = () => setTimeout(nextTrack, 2000);          // v5: bài lỗi → sang bài khác
+    musicEl.onstalled = () => setTimeout(() => { if (musicEl.readyState < 3) nextTrack(); }, 4000);
   }
   const i=pickTrack(); lastTrack=i; trackMode=settings.musicTrack||'shuffle';
   musicEl.src = TRACKS[i]; musicEl.play().catch(()=>{});
 }
+// v5: watchdog nhạc nền mỗi 10 s — bật mà đang dừng thì phát tiếp; thời gian đứng yên 20 s thì sang bài
+let _mwLast = -1, _mwStuck = 0;
+setInterval(() => {
+  if (!AC || !musicEl || !settings.music) return;
+  if (musicEl.paused && !musicEl.ended){ musicEl.play().catch(() => nextTrack()); return; }
+  if (musicEl.currentTime === _mwLast){ if (++_mwStuck >= 2){ _mwStuck = 0; nextTrack(); } } else _mwStuck = 0;
+  _mwLast = musicEl.currentTime;
+}, 10000);
 function duck(on){ if(!musicGain) return; const t=AC.currentTime, target = !settings.music ? 0 : on ? .14 : .5; musicGain.gain.cancelScheduledValues(t); musicGain.gain.setValueAtTime(musicGain.gain.value,t); musicGain.gain.linearRampToValueAtTime(target,t+.5); }
 let haloPulse=0;
 function bell(big){
@@ -650,30 +704,83 @@ let moTimer=null; function scheduleMo(){ clearInterval(moTimer); if (AC && setti
 
 // Hàng đợi phát giọng đọc tuần tự ở Client (chống chồng lấp, phát .mp3 Edge TTS)
 const ttsQ=[]; let ttsPlaying=false;
-function queueTTS(url, onStart){ if (ttsQ.length < 25) ttsQ.push({url,onStart}); playTTS(); }
-// Giọng đọc: cũng chỉ MỘT phần tử Audio + một nút nguồn + một gain, dùng lại cho mọi câu (xem ghi chú ở nextTrack).
-// Mỗi câu chỉ gán handler (thuộc tính on…, ghi đè chứ không cộng dồn) và đổi src; phát xong thì gỡ handler và bỏ nguồn để nhả bộ đệm âm thanh.
+let ttsReadIndex = 0;
+function sendLogToServer(txt){
+  try {
+    if (ws && ws.readyState === 1){
+      ws.send(JSON.stringify({ t: 'log', text: txt }));
+    }
+  } catch {}
+}
+function queueTTS(itemOrUrl, name, text){
+  if (ttsQ.length >= 200) return;
+  const item = (typeof itemOrUrl === 'object' && itemOrUrl !== null)
+    ? itemOrUrl
+    : { url: itemOrUrl, name: name || '', text: text || '' };
+  ttsQ.push(item);
+  playTTS();
+}
+// Giọng đọc: dùng lại phần tử Audio, phát tuần tự
 let ttsEl=null;
 function ttsElement(){
-  if (!ttsEl){ ttsEl=new Audio(); const src=AC.createMediaElementSource(ttsEl); const g=AC.createGain(); g.gain.value=1.25; src.connect(g); g.connect(master); }
+  if (!ttsEl){
+    ttsEl = new Audio();
+    if (AC && master) {
+      try {
+        const src = AC.createMediaElementSource(ttsEl);
+        const g = AC.createGain();
+        g.gain.value = 1.25;
+        src.connect(g);
+        g.connect(master);
+      } catch {}
+    }
+  }
   return ttsEl;
 }
 function playTTS(){
+  if (!AC) {
+    try { startAudio(); } catch {}
+  }
   if (ttsPlaying || !ttsQ.length || !AC) return;
-  ttsPlaying=true;
-  const {url,onStart}=ttsQ.shift();
-  const el=ttsElement();
-  let done=false, watchdog=null;
-  const finish=delay=>{
-    if(done) return; done=true; clearTimeout(watchdog);
-    el.onplay=el.onended=el.onerror=null;
-    try{ el.pause(); el.removeAttribute('src'); el.load(); }catch{}
-    duck(false); ttsPlaying=false; setTimeout(playTTS,delay);
+  ttsPlaying = true;
+  const item = ttsQ.shift();
+  const url = item.url;
+  const onStart = item.onStart;
+  const targetName = (item.name || '').trim();
+  const readIdx = ++ttsReadIndex;
+
+  const el = ttsElement();
+  let done = false, watchdog = null;
+  let started = false;
+
+  const logStart = () => {
+    if (started) return;
+    started = true;
+    sendLogToServer(`▶ Bắt đầu đọc #${readIdx} ${targetName}`.trim());
   };
-  el.onplay=()=>{ duck(true); onStart&&onStart(); };
-  el.onended=el.onerror=()=>finish(380);
-  watchdog=setTimeout(()=>finish(0),90000);   // chốt chặn: câu kẹt (không ended, không error) không được chặn hàng đợi mãi
-  el.src=url; el.play().catch(()=>finish(400));
+
+  const finish = delay => {
+    if (done) return;
+    done = true;
+    clearTimeout(watchdog);
+    el.onplay = el.onended = el.onerror = null;
+    try { el.pause(); el.removeAttribute('src'); el.load(); } catch {}
+    duck(false);
+    ttsPlaying = false;
+    if (!started) logStart();
+    sendLogToServer(`✔ Đọc xong #${readIdx} ${targetName}`.trim());
+    setTimeout(playTTS, delay);
+  };
+
+  el.onplay = () => {
+    duck(true);
+    logStart();
+    onStart && onStart();
+  };
+  el.onended = el.onerror = () => finish(380);
+  watchdog = setTimeout(() => finish(0), 90000);   // chốt chặn câu kẹt
+  el.src = url;
+  el.play().catch(() => finish(400));
 }
 
 /* ======================= effects ======================= */
@@ -744,7 +851,7 @@ function handleMsg(m){
       case 'oracle': { const v=touch(m.id); if(v){ v.glow=.9; v.triggerBow(1,0); } enqueueOracle(m); } break;
       case 'gift': { const v=touch(m.id); if(v){ v.coins=m.total; giftFx(v,m); } renderMerit(); if ((m.tier||1) < 3) showGift(m); } break;
       case 'like': { const v=touch(m.id); if(v) hearts(v,m.n); } break;
-      case 'tts': queueTTS(m.url); break;
+      case 'tts': queueTTS({ url: m.url, name: m.name || '', text: m.text || '' }); break;
       case 'chant': showChant(m.text); bell(); break;
       case 'bell': bell(true); break;
       case 'music_next': if (musicEl && (settings.musicTrack||'shuffle')==='shuffle') nextTrack(); break;
@@ -778,10 +885,10 @@ let isPreparing = true, decodeDone = false, ttsWarmupDone = false;
 const prepQueue = [];
 
 function checkPrepDone(){
-  if (decodeDone && ttsWarmupDone) finishPrep();
+  if (decodeDone) finishPrep();      // v5: không chờ giọng đọc (bảng điều khiển hiện trạng thái VieNeu)
 }
 
-const prepTimeout = setTimeout(() => { finishPrep(); }, 90000);
+const prepTimeout = setTimeout(() => { finishPrep(); }, 15000);
 
 function finishPrep(){
   if (!isPreparing) return;
@@ -1034,7 +1141,7 @@ function renderStatic(){
         const ce = V4.ceremony;
         if (codeCeremony && ce){
           // Vẽ thảm (rect bo 6 px, viền vàng 3 px)
-          if (ce.carpet){
+          if (ce.carpet && ce.carpet.enabled !== false){
             const cp = ce.carpet;
             ctx.save();
             ctx.beginPath();
@@ -1237,7 +1344,7 @@ function frame(now){
   // Thẻ người xem ngồi: tối đa 12 thẻ tên, không chồng lấn (bỏ qua thẻ cắt thẻ đã vẽ, không đè thảm lễ)
   seatedCandidates.sort((a, b) => (b[0].lastActive || 0) - (a[0].lastActive || 0));
   let seatedTagCount = 0;
-  const rugBox = isCeremonyCode() && V4?.ceremony?.carpet ? V4.ceremony.carpet : (V3?.rug || { x: 148, y: 1330, w: 784, h: 158 });
+  const rugBox = isCeremonyCode() && V4?.ceremony?.carpet && V4.ceremony.carpet.enabled !== false ? V4.ceremony.carpet : (V3?.rug || { x: 148, y: 1330, w: 784, h: 158 });
   const cfg = getNameTagConfig();
   const maxTags = cfg.maxTags || 12;
   for (const [lv, lh, la] of seatedCandidates){

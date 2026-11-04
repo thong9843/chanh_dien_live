@@ -14,5 +14,5 @@ tts_sidecar/.venv/
 *.pth
 *.safetensors
 shots/
-logs/
 BASELINE.md
+*.zip

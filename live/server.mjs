@@ -144,7 +144,7 @@ function loadContent(){
         const allowed = ['vieneu', 'edge', 'cached'];
         const raw = Array.isArray(o('tts')?.order) ? o('tts').order : D.tts?.order;
         const filtered = (raw || []).filter(x => allowed.includes(x));
-        return filtered.length ? filtered : ['vieneu', 'cached'];
+        return filtered.length ? filtered : ['vieneu', 'edge', 'cached'];
       })(),
       vieneuVoice: cStr(o('tts')?.vieneuVoice, D.tts?.vieneuVoice || 'Thiền Tâm Đức', 80),
       vieneuSpeed: cNum(o('tts')?.vieneuSpeed, 0.7, 1.2, D.tts?.vieneuSpeed || 0.9),
@@ -298,6 +298,7 @@ function loadContent(){
               };
             }),
             carpet: {
+              enabled: ce.carpet?.enabled !== false,
               x: cNum(ce.carpet?.x, 0, 1080, dce.carpet?.x || 340),
               y: cNum(ce.carpet?.y, 1000, 1920, dce.carpet?.y || 1372),
               w: cNum(ce.carpet?.w, 100, 1080, dce.carpet?.w || 400),
@@ -521,18 +522,14 @@ function pickOracle(){
   lastOracleIdx = idx;
   return list[idx];
 }
-let lastGlobalOracleAt = 0;
 function triggerOracle(id, name, avatar, bypassCooldown = false){
   const now = Date.now();
-  const userCooldownMs = (CONTENT.oracle?.userCooldownSec || 600) * 1000;
-  const globalCooldownMs = (CONTENT.oracle?.globalCooldownSec || 20) * 1000;
+  const userCooldownMs = (CONTENT.oracle?.userCooldownSec || 120) * 1000;
 
   if (!bypassCooldown){
-    if (now - lastGlobalOracleAt < globalCooldownMs) return false;
     const prev = oracleCooldown.get(id) || 0;
-    if (now - prev < userCooldownMs) return false;
+    if (now - prev < userCooldownMs){ addLog(`📜 ${sanitizeDisplayName(name)} đã xin quẻ, chờ thêm ${Math.ceil((userCooldownMs - (now - prev)) / 1000)} s`); return false; }
   }
-  lastGlobalOracleAt = now;
   oracleCooldown.set(id, now);
   const oracle = pickOracle();
   const safeName = sanitizeDisplayName(name);
@@ -552,7 +549,7 @@ function triggerOracle(id, name, avatar, bypassCooldown = false){
   const spokenName = spoken(name);
   const ttsTpl = CONTENT.oracle?.tts || 'Pháp ngữ gửi Phật tử {name}.';
   const ttsText = fill(ttsTpl, { name: spokenName });
-  say(ttsText, { tag: 'oracle' }, 1);
+  say(ttsText, { tag: 'oracle', name: spokenName }, 1);
 
   return true;
 }
@@ -779,7 +776,7 @@ function requestCeremony(id, kind, bypassUserCooldown = false){
   const now = Date.now();
   if (!bypassUserCooldown){
     const last = ceremonyCooldowns.get(id) || 0;
-    if (now - last < CONTENT.ceremony.cooldownSec * 1000) return false;
+    if (now - last < CONTENT.ceremony.cooldownSec * 1000){ addLog(`🙏 ${v.name} vừa lễ xong, chờ thêm ${Math.ceil((CONTENT.ceremony.cooldownSec * 1000 - (now - last)) / 1000)} s`); return false; }
   }
 
   const spot = !ceremonyQueue.length && now >= ceremonyNextAt ? takeSpot() : null;
@@ -896,7 +893,8 @@ function removeViewer(id){
 function clearAllViewers(){ viewers.clear(); seatOwner.fill(null); overflow.clear(); moreSent = 0; }
 function evictCandidate(force){
   const pool = [...viewers.values()].filter(x => !isProtectedCeremonyViewer(x.id)), oldest = l => l.reduce((b, x) => (!b || x.lastAt < b.lastAt) ? x : b, null);
-  const c = oldest(pool.filter(x => x.coins === 0)) || (force ? oldest(pool) : null);
+  // v5: ưu tiên mời ra người chỉ vào xem (chưa bình luận), rồi người không tặng quà im lâu nhất; force = bỏ qua điều kiện rotateAfterMin
+  const c = oldest(pool.filter(x => x.coins === 0 && !x.chatted)) || oldest(pool.filter(x => x.coins === 0)) || (force ? oldest(pool) : null);
   if (!c) return null;
   if (!force && Date.now() - c.lastAt < CONTENT.limits.rotateAfterMin * 60_000) return null;
   return c;
@@ -948,8 +946,13 @@ function onChat(id, name, text, avatar){
   if (!text) return;
   if (!chatAllowed(id)) return;
   const want = skinFromText(text);
-  const { v, isNew } = seat(id, name, { avatar, skin: want || undefined });
-  if (!v) return;
+  const { v, isNew } = seat(id, name, { avatar, skin: want || undefined, force: true });
+  if (!v){                                   // v5: không có ghế vẫn xử lý xin quẻ, không bỏ lệnh im lặng
+    if (isOracleRequest(text)) triggerOracle(id, sanitizeDisplayName(name), avatar || '', false);
+    else addLog(`Bình luận của ${sanitizeDisplayName(name)} không có chỗ ngồi (bồ đoàn đầy người đang lễ)`);
+    return;
+  }
+  v.chatted = true;
   if (!isNew && want && want !== v.skin){ v.skin = want; broadcast({ t:'skin', id, skin: want }); }
 
   const ceremonyKind = parseCeremonyCommand(text);
@@ -981,16 +984,11 @@ function queueGiftTts(v, gift, count, coins, prayer){
 }
 function sayGiftCombo(c){
   const v = viewers.get(c.id), big = c.coins >= 99;
-  if (ttsQueue.length >= CONTENT.tts.busyQueueLen && c.coins < CONTENT.tts.minGiftWhenBusy){
-    if (ttsQueue.some(q => q.meta?.generic)) return;                // đã có một câu chung đang chờ, không chất thêm
-    say(getFallbackTextWithoutName({ tag: 'gift' }), { tag: 'gift', fixed: true, generic: true, small: true, names: [] }, 2);
-    return;
-  }
   const spokenName = spoken(c.name || v?.name);
   const giftTpl = big ? (CONTENT.gift.bigLine || CONTENT.gift.line) : (CONTENT.gift.smallLine || CONTENT.gift.line);
   const line = fill(giftTpl, { name: spokenName, gift: c.gift, count: c.count, total: v ? v.coins : c.coins, prayer: c.prayer,
     times: c.count > 1 ? fill(CONTENT.gift.timesSpoken, { count: c.count }) : '' });
-  say(line, { tag: 'gift', small: !big, names: [spokenName] }, big ? 4 : 2);
+  say(line, { tag: 'gift', small: !big, names: [spokenName], name: spokenName }, big ? 4 : 2);
 }
 
 function onGift(id, name, giftName, count, diamonds, avatar){
@@ -1032,21 +1030,24 @@ function onGift(id, name, giftName, count, diamonds, avatar){
 }
 
 let lastMemberTtsAt = 0;
+const greeted = new Set();
 function onMember(id, name, avatar){
-  if (!settings.joinOnEnter) return;
-  const { v, isNew } = seat(id, name, { avatar });
-  if (!v || !isNew) return;
-  if (settings.readMemberJoin && ttsQueue.length < 3 && Date.now() - lastMemberTtsAt > 12_000){
-    lastMemberTtsAt = Date.now();
-    const spokenName = spoken(v.rawName || name || v.name);
-    const line = fill(CONTENT.member.line, { name: spokenName });
-    say(line, { tag: 'member' }, 0);
-  }
+  let v = null;
+  if (settings.joinOnEnter) ({ v } = seat(id, name, { avatar }));
+  if (!settings.readMemberJoin) return;
+  const key = String(id || name || '');
+  if (!key || greeted.has(key)) return;
+  if (ttsQueue.length > 30 || Date.now() - lastMemberTtsAt < 8_000) return;
+  greeted.add(key); if (greeted.size > 5000) greeted.delete(greeted.values().next().value);
+  lastMemberTtsAt = Date.now();
+  const spokenName = spoken(v?.rawName || name || v?.name || '');
+  if (!spokenName) return;
+  say(fill(CONTENT.member.line, { name: spokenName }), { tag: 'member', name: spokenName }, 1);
 }
 
 /* follow / share / mốc tim. "Buổi" = từ lúc chạy server đến lúc kết nối sang phòng khác. */
 const followed = new Set(); const FOLLOWED_MAX = 5000; let likeTotal = 0, mileDone = null;   // followed có trần: đầy thì bỏ người cũ nhất
-function resetSession(){ followed.clear(); likeTotal = 0; mileDone = null; resetZoom(); resetCeremony(); }
+function resetSession(){ greeted.clear(); followed.clear(); likeTotal = 0; mileDone = null; resetZoom(); resetCeremony(); }
 function onFollow(id, name, avatar){
   id = String(id || '').slice(0, 64); if (!id) return;
   if (followed.has(id)) return;
@@ -1056,7 +1057,7 @@ function onFollow(id, name, avatar){
   const who = v ? v.name : sanitizeDisplayName(name);
   broadcast({ t:'follow', id, name: who });
   if (v && CONTENT.zoom.onFollow) enqueueZoom(v.id, 'follow');
-  say(fill(CONTENT.follow.line, { name: spoken(v?.rawName || name || who) }), { tag:'follow' }, 3);
+  say(fill(CONTENT.follow.line, { name: spoken(v?.rawName || name || who) }), { tag:'follow', name: spoken(v?.rawName || name || who) }, 3);
 }
 function onShare(name){
   const who = sanitizeDisplayName(name);
@@ -1214,8 +1215,8 @@ setInterval(checkVieNeuHealth, 8000);
 setTimeout(checkVieNeuHealth, 1000);
 
 const ttsQueue = []; let ttsBusy = false, ttsSeq = 0, lastTtsEndTime = 0, ttsFailCount = 0;
-const TTS_FAIL_DELAYS = [5000, 10000, 30000];
-const MAX_Q = 8, MERGE_OVER = 5;
+const TTS_FAIL_DELAYS = [2000, 3000, 5000];
+const MAX_Q = 200, MERGE_OVER = 5;
 
 function esc(s){ return String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c])); }
 
@@ -1279,28 +1280,32 @@ function say(text, meta = {}, prio = 1){
   const item = { text: cleanText, meta, prio, at: Date.now() };
 
   if (ttsQueue.length >= MAX_Q){
-    const minPrio = Math.min(...ttsQueue.map(q => q.prio));
-    if (prio < minPrio){
-      addLog(`Hàng đợi giọng đọc đầy (8/8), bỏ qua câu mới do ưu tiên thấp hơn (${meta.tag || 'tts'})`);
+    if (meta.tag === 'member' || meta.tag === 'chant'){
+      addLog(`Hàng đợi giọng đọc đầy (${MAX_Q}/${MAX_Q}), bỏ qua câu mới (${meta.tag})`);
       return;
     }
-    let oldestIdx = -1, oldestTime = Infinity;
-    for (let i = 0; i < ttsQueue.length; i++){
-      if (ttsQueue[i].prio === minPrio && ttsQueue[i].at < oldestTime){
-        oldestTime = ttsQueue[i].at;
-        oldestIdx = i;
+    let dropIdx = -1;
+    for (let i = ttsQueue.length - 1; i >= 0; i--){
+      const tag = ttsQueue[i].meta?.tag;
+      if (tag === 'member' || tag === 'chant'){
+        dropIdx = i;
+        break;
       }
     }
-    if (oldestIdx >= 0){
-      const dropped = ttsQueue.splice(oldestIdx, 1)[0];
-      addLog(`Hàng đợi giọng đọc đầy (8/8), bỏ câu cũ nhất ưu tiên thấp (${dropped.meta?.tag || 'tts'}, prio ${minPrio})`);
+    if (dropIdx >= 0){
+      const dropped = ttsQueue.splice(dropIdx, 1)[0];
+      addLog(`Hàng đợi giọng đọc đầy (${MAX_Q}/${MAX_Q}), bỏ câu mới nhất nhóm phụ (${dropped.meta?.tag || 'tts'})`);
     }
   }
 
-  let at = ttsQueue.length;
-  while (at > 0 && ttsQueue[at - 1].prio < prio) at--;
-  ttsQueue.splice(at, 0, item);
-  if (ttsQueue.length > MERGE_OVER) mergeSmallGifts();
+  if (prio === 5 || meta.tag === 'say'){
+    ttsQueue.unshift(item);
+  } else {
+    ttsQueue.push(item);
+  }
+  addLog(`🎙️ Vào hàng đợi TTS (${ttsQueue.length}): "${cleanText.slice(0, 50)}"`);
+
+  broadcast({ t: 'tts_queue', queueLen: ttsQueue.length }, 'control');
   pumpTTS();
 }
 
@@ -1321,7 +1326,7 @@ function mergeSmallGifts(){
 let vieneuSentCount = 0;
 async function synthesizeViaVieNeu(text){
   const clean = String(text || '').slice(0, 300).trim();
-  const timeoutMs = (vieneuSentCount < 3) ? 30_000 : 15_000;
+  const timeoutMs = (vieneuSentCount < 3) ? 40_000 : 25_000;
   vieneuSentCount++;
 
   let res;
@@ -1520,6 +1525,7 @@ async function pumpTTS(){
   }
 
   const { text, meta } = ttsQueue.shift();
+  addLog(`🎙️ Bắt đầu phát TTS (${ttsQueue.length} câu đang chờ): "${text.slice(0, 50)}"`);
   broadcast({ t: 'tts_queue', queueLen: ttsQueue.length }, 'control');
   try {
     const res = await synthesizeForQueue(text, meta);
@@ -1538,7 +1544,13 @@ async function pumpTTS(){
     }
     ttsFailCount = 0; // reset on success
     lastTtsEndTime = Date.now();
-    broadcast({ t: 'tts', url: `/live/tts/${file}`, text, tag: meta.tag });
+    let ttsName = meta.name || (meta.names && meta.names[0]) || '';
+    if (!ttsName) {
+      const match = text.match(/(?:Phật tử|chào đón|gửi)\s+([^,.]+)/i);
+      if (match) ttsName = match[1].trim();
+      else ttsName = text.slice(0, 30);
+    }
+    broadcast({ t: 'tts', url: `/live/tts/${file}`, text, tag: meta.tag, name: ttsName });
   } catch (e) {
     ttsFailCount++;
     lastTtsEndTime = Date.now();
@@ -1625,17 +1637,28 @@ function pruneStaleTtsCache(){
   } catch {}
   return removed;
 }
+{ // v5: cache cũ có thể là giọng Edge lưu dưới khoá VieNeu → xoá sạch 1 lần
+  const VF = path.join(TTS_DIR, '.cache_version');
+  let cur = ''; try { cur = fs.readFileSync(VF, 'utf8').trim(); } catch {}
+  if (cur !== 'vieneu-v2'){
+    let n = 0; try { for (const f of fs.readdirSync(TTS_DIR)) if (/^(cache_|tts_).+\.(mp3|wav)$/.test(f)){ try { fs.unlinkSync(path.join(TTS_DIR, f)); n++; } catch {} } } catch {}
+    try { fs.mkdirSync(TTS_DIR, { recursive: true }); fs.writeFileSync(VF, 'vieneu-v2'); } catch {}
+    console.log(`Đã xoá ${n} file giọng đọc cũ (đổi sang chỉ VieNeu)`);
+  }
+}
 { const n = pruneStaleTtsCache(); if (n) console.log(`Đã xoá ${n} file cache giọng đọc cũ không còn khớp câu cố định nào`); }
 
 async function pregenerateFixedTts(){
-  const fixed = fixedTtsTexts();
+  // v5: chỉ tạo trước 5 câu dự phòng ngắn; KHÔNG đọc trước kinh/pháp ngữ dài lúc khởi động (sidecar 1 luồng → chặn câu quà)
+  const fixed = fixedTtsTexts().filter(t => t.length <= 60);
 
   for (const text of fixed){
     const cached = getCachedTtsFile(text);
     if (!cached){
       try {
         let buf = null, ext = 'mp3';
-        const order = CONTENT.tts?.order || ['vieneu', 'edge'];
+        while (ttsQueue.length || ttsBusy) await sleep(3000);   // có câu thật đang chờ → nhường
+        const order = ['vieneu'];
         for (const engine of order){
           if (engine === 'vieneu'){
             try {
@@ -1663,7 +1686,12 @@ async function pregenerateFixedTts(){
 setTimeout(pregenerateFixedTts, 3000);
 
 let chantIdx = 0, chantTimer = null;
-function chant(){ const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length]; broadcast({ t:'chant', text }); say(text, { tag:'chant', fixed: true }, 0); }
+function chant(){
+  if (ttsQueue.length > 0) return;
+  const text = CONTENT.chants[chantIdx++ % CONTENT.chants.length];
+  broadcast({ t:'chant', text });
+  say(text, { tag:'chant', fixed: true }, 0);
+}
 function scheduleChant(){ clearInterval(chantTimer); if (settings.autoChant) chantTimer = setInterval(chant, Math.max(1, settings.chantEveryMin) * 60_000); }
 scheduleChant();
 
@@ -1842,7 +1870,7 @@ function clearSeats(){ clearAllViewers(); resetZoom(); resetCeremony(); broadcas
 
 /* ------------------------------------------------------------- control */
 function onControl(m, ws){
-  switch (m.cmd){
+  switch (m.cmd || m.action){
     case 'connect': if (typeof m.uniqueId === 'string') bg('Kết nối TikTok lỗi', connectTikTok(m.uniqueId)); else addLog('Lệnh kết nối thiếu username'); break;
     case 'disconnect': bg('Ngắt TikTok lỗi', disconnectTikTok()); addLog('Đã ngắt kết nối TikTok'); break;
     case 'chat': { const raw = String(m.name || 'Khách').slice(0, 80); onChat('sim_' + sanitizeDisplayName(raw), raw, String(m.text || 'Nam mô A Di Đà Phật').slice(0, 120)); break; }
@@ -1850,8 +1878,18 @@ function onControl(m, ws){
     case 'ceremony': {
       const raw = String(m.name || 'Khách').slice(0, 80);
       const kind = ['incense', 'worship', 'prostrate'].includes(m.kind) ? m.kind : 'incense';
-      const { v } = seat('sim_' + sanitizeDisplayName(raw), raw);
-      if (v) requestCeremony(v.id, kind, true);
+      const { v } = seat('sim_' + sanitizeDisplayName(raw), raw, { force: true });
+      if (v){ v.chatted = true; requestCeremony(v.id, kind, true); }
+      break;
+    }
+    case 'ceremony_many': {                     // v5: thử nhiều người khác nhau lên lễ cùng lúc (tối đa = số bồ đoàn)
+      const kind = ['incense', 'worship', 'prostrate'].includes(m.kind) ? m.kind : 'worship';
+      const n = clamp(m.n, 1, spotList().length);
+      const pool = [...DEMO_NAMES].sort(() => Math.random() - 0.5).slice(0, n);
+      pool.forEach((nm, i) => setTimeout(() => {
+        const { v } = seat('sim_le_' + i + '_' + Date.now(), nm, { force: true });
+        if (v){ v.chatted = true; requestCeremony(v.id, kind, true); }
+      }, i * 250));
       break;
     }
     case 'gift': { const raw = String(m.name || 'Khách').slice(0, 80); onGift('sim_' + sanitizeDisplayName(raw), raw, String(m.gift || 'Hoa Sen').slice(0, 30), clamp(m.count, 1, 99), clamp(m.diamonds, 1, 50000)); break; }
@@ -1911,7 +1949,8 @@ function setBots(on, n, pace){
     const every = { slow: 4000, mid: 1800, fast: 700 }[pace] || 1800;
     botTimer = setInterval(() => {
       const i = Math.floor(Math.random() * botCount), id = 'bot_' + i, name = DEMO_NAMES[(i + 7) % DEMO_NAMES.length] + ' ·bot', r = Math.random();
-      if (r < .62) onChat(id, name, BOT_LINES[Math.floor(Math.random() * BOT_LINES.length)]);
+      if (r < .56) onChat(id, name, BOT_LINES[Math.floor(Math.random() * BOT_LINES.length)]);
+      else if (r < .62) onChat(id, name, ['!cúng bái', '!quỳ lạy', '!thắp nhang'][Math.floor(Math.random() * 3)]);   // v5: bot cũng lên lễ
       else if (r < .88) onLikes(id, 1 + Math.floor(Math.random() * 4));
       else if (r < .96) onGift(id, name, 'Hoa hồng', 1 + Math.floor(Math.random() * 3), 1);
       else onGift(id, name, 'Đèn hoa sen', 1, 99);
@@ -2035,6 +2074,10 @@ wss.on('connection', (ws, req) => {
   ws.on('message', buf => {
     try {
       const m = JSON.parse(buf);
+      if (m && m.t === 'log' && (m.text || m.line)) {
+        addLog(String(m.text || m.line).slice(0, 300));
+        return;
+      }
       if (m && m.t === 'startup_metric') {
         recordStartupMilestone(m.name, m.ms, m.extra || '');
         return;
