@@ -624,7 +624,7 @@ export default {
         "backGapDy": 32
       },
       "labels": {
-        "recentMax": 12,
+        "recentMax": 94,
         "avatarPx": 36,
         "nameMax": 10,
         "nameFontPx": 15
@@ -632,7 +632,7 @@ export default {
     },
     "v4": {
       "seatHeight": 115,
-      "maxVisible": 50,
+      "maxVisible": 94,
       "abbots": [
         {
           "x": 190,
@@ -675,7 +675,7 @@ export default {
         ]
       },
       "labels": {
-        "recentMax": 12,
+        "recentMax": 94,
         "avatarPx": 28,
         "nameMax": 10,
         "nameFontPx": 14
@@ -688,7 +688,7 @@ export default {
         "bg": "rgba(0,0,0,0.55)",
         "padding": [2, 6],
         "maxChars": 8,
-        "maxTags": 12,
+        "maxTags": 94,
         "maxHeight": 24,
         "maxWidth": 110,
         "gapHead": 4

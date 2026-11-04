@@ -384,7 +384,7 @@ const settings = {
   musicTrack: 'shuffle',             // 'shuffle' (ngẫu nhiên, không lặp tới khi hết 5 bài) | '1'…'5' (lặp một bài)
   safeZone: false,                   // phủ đỏ các vùng TikTok che (chỉ để canh bố cục, không dùng khi phát)
   zoomEnabled: CONTENT.zoom.enabled, // bật/tắt zoom vào Phật tử khi quà ≥99 xu hoặc follow
-  joinOnEnter: false,                // also seat viewers who only enter the room
+  joinOnEnter: true,                // also seat viewers who only enter the room
   readMemberJoin: false,             // xướng tên chào đón người mới vào phòng (khi bật joinOnEnter)
   gifts: { readAll: true, minDiamonds: 1 },
 };
@@ -394,6 +394,23 @@ const LOGS_DIR = path.join(ROOT, 'logs');
 try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch {}
 const STARTUP_LOG = path.join(LOGS_DIR, 'startup.log');
 const recordedMilestones = new Set();
+let systemReadyLogged = false;
+function checkSystemReady() {
+  if (systemReadyLogged) return;
+  const hasServer = recordedMilestones.has('server sẵn sàng');
+  const hasSidecar = recordedMilestones.has('sidecar warm-up xong');
+  const hasOverlay = recordedMilestones.has('khung hình đầu tiên');
+  if (hasServer && hasSidecar && hasOverlay) {
+    systemReadyLogged = true;
+    const totalSec = ((Date.now() - startedAt) / 1000).toFixed(2);
+    const readyLine = `✅ Hệ thống sẵn sàng sau ${totalSec} s`;
+    console.log(readyLine);
+    addLog(readyLine);
+    try {
+      fs.appendFileSync(STARTUP_LOG, `[${new Date().toISOString()}] ${readyLine}\n`);
+    } catch {}
+  }
+}
 function recordStartupMilestone(name, ms, extra = '') {
   if (recordedMilestones.has(name)) return;
   recordedMilestones.add(name);
@@ -404,6 +421,7 @@ function recordStartupMilestone(name, ms, extra = '') {
   } catch (e) {
     console.error('Lỗi ghi startup.log:', e?.message);
   }
+  checkSystemReady();
 }
 
 // VIỆC 4: Ghi log cho buổi live 2 giờ (mỗi 60s ghi 1 dòng JSON vào logs/live_YYYYMMDD_HHmm.jsonl)
@@ -514,15 +532,15 @@ function isOracleRequest(text){
   if (!norm) return false;
   return ORACLE_TRIGGERS.some(kw => norm.includes(kw));
 }
-function pickOracle(){
+function pickOracle(forcedIdx){
   const list = CONTENT.oracles;
   if (!list.length) return { title: 'Quẻ Đại An', verse: 'Tâm tịnh tức cõi Phật tịnh.', advice: 'Giữ tâm an nhiên, vạn sự cát tường.' };
-  let idx = Math.floor(Math.random() * list.length);
-  if (list.length > 1 && idx === lastOracleIdx) idx = (idx + 1) % list.length;
+  let idx = (typeof forcedIdx === "number" && forcedIdx >= 0 && forcedIdx < list.length) ? forcedIdx : Math.floor(Math.random() * list.length);
+  if (forcedIdx === undefined && list.length > 1 && idx === lastOracleIdx) idx = (idx + 1) % list.length;
   lastOracleIdx = idx;
   return list[idx];
 }
-function triggerOracle(id, name, avatar, bypassCooldown = false){
+function triggerOracle(id, name, avatar, bypassCooldown = false, forcedIdx){
   const now = Date.now();
   const userCooldownMs = (CONTENT.oracle?.userCooldownSec || 120) * 1000;
 
@@ -531,7 +549,7 @@ function triggerOracle(id, name, avatar, bypassCooldown = false){
     if (now - prev < userCooldownMs){ addLog(`📜 ${sanitizeDisplayName(name)} đã xin quẻ, chờ thêm ${Math.ceil((userCooldownMs - (now - prev)) / 1000)} s`); return false; }
   }
   oracleCooldown.set(id, now);
-  const oracle = pickOracle();
+  const oracle = pickOracle(forcedIdx);
   const safeName = sanitizeDisplayName(name);
   broadcast({
     t: 'oracle',
@@ -940,6 +958,14 @@ setInterval(() => {
   for (const [id, at] of chatLast) if (at < cut) chatLast.delete(id);
 }, 30_000).unref?.();
 
+function isCommandText(text){
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (t.startsWith('!')) return true;
+  if (parseCeremonyCommand(t)) return true;
+  if (isOracleRequest(t)) return true;
+  return false;
+}
 function onChat(id, name, text, avatar){
   trackEvent();
   text = String(text || '').replace(/[\u0000-\u001F]/g, '').trim().slice(0, 120);
@@ -961,7 +987,7 @@ function onChat(id, name, text, avatar){
     v.lastText = text;
     v.lastTextAt = Date.now();
   }
-  broadcast({ t:'chat', id, name: v.name, text });
+  broadcast({ t:'chat', id, name: v.name, text, isCmd: isCommandText(text) });
   if (ceremonyKind){
     requestCeremony(v.id, ceremonyKind, false);
   } else if (askOracle){
@@ -1874,7 +1900,8 @@ function onControl(m, ws){
     case 'connect': if (typeof m.uniqueId === 'string') bg('Kết nối TikTok lỗi', connectTikTok(m.uniqueId)); else addLog('Lệnh kết nối thiếu username'); break;
     case 'disconnect': bg('Ngắt TikTok lỗi', disconnectTikTok()); addLog('Đã ngắt kết nối TikTok'); break;
     case 'chat': { const raw = String(m.name || 'Khách').slice(0, 80); onChat('sim_' + sanitizeDisplayName(raw), raw, String(m.text || 'Nam mô A Di Đà Phật').slice(0, 120)); break; }
-    case 'oracle': { const raw = String(m.name || 'Khách').slice(0, 80); const { v } = seat('sim_' + sanitizeDisplayName(raw), raw); if (v) triggerOracle(v.id, v.name, v.avatar, true); break; }
+    case 'member': { const raw = String(m.name || 'Khách').slice(0, 80); onMember('sim_' + sanitizeDisplayName(raw), raw); break; }
+    case 'oracle': { const raw = String(m.name || 'Khách').slice(0, 80); const clean = sanitizeDisplayName(raw); const { v } = seat('sim_' + clean, raw, { force: true }); triggerOracle(v ? v.id : ('sim_' + clean), raw, v?.avatar || '', true, m.index); break; }
     case 'ceremony': {
       const raw = String(m.name || 'Khách').slice(0, 80);
       const kind = ['incense', 'worship', 'prostrate'].includes(m.kind) ? m.kind : 'incense';

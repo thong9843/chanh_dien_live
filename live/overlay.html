@@ -76,7 +76,7 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   box-shadow:0 18px 55px rgba(0,0,0,.72),0 0 0 3px #e5b553,0 0 42px rgba(255,208,110,.38)}
 #oracleTitle{font-family:var(--display);font-weight:700;font-size:31px;color:#7a180e;margin:0 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 0 rgba(255,255,255,.7)}
 #oracleRecipient{font-family:var(--display);font-weight:600;font-size:22px;color:#8c2015;margin:0 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 0 rgba(255,255,255,.5)}
-#oracleVerse{font-family:var(--display);font-style:italic;font-weight:700;font-size:26px;line-height:1.35;color:#220e05;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-wrap:balance}
+#oracleVerse{font-family:var(--display);font-style:italic;font-weight:700;font-size:26px;line-height:1.35;color:#220e05;margin:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;text-wrap:balance}
 
 /* lớp phủ vùng an toàn TikTok (bật từ bảng điều khiển, chỉ để canh bố cục) */
 #safe{position:absolute;inset:0;z-index:30;pointer-events:none;display:none}
@@ -831,6 +831,19 @@ function connect(){
   ws.onclose=()=>{ st.textContent=L('lost','mất kết nối server… đang thử lại'); setTimeout(connect,2000); };
   ws.onmessage=e=>{ let m; try { m=JSON.parse(e.data); } catch { return; } handleMsg(m); };
 }
+function isCommandComment(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (t.startsWith('!')) return true;
+  const norm = t.toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
+  const stripped = norm.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd');
+  if (/(?:^|\s)!?\s*thap\s*nhang(?:\b|$)/.test(stripped)) return true;
+  if (/(?:^|\s)!?\s*cung\s*bai(?:\b|$)/.test(stripped)) return true;
+  if (/(?:^|\s)!?\s*quy\s*lay(?:\b|$)/.test(stripped)) return true;
+  const oracleTriggers = ['!xinquẻ', '!xinque', 'xin quẻ', 'xin que', 'cầu an', 'cau an', 'tịnh tâm', 'tinh tam', '!loiphatday', 'loiphatday'];
+  if (oracleTriggers.some(kw => norm.includes(kw) || stripped.includes(kw))) return true;
+  return false;
+}
 function handleMsg(m){
     switch(m.t){
       case 'batch': for (const x of (Array.isArray(m.msgs) ? m.msgs : [])){ try { handleMsg(x); } catch (err) { console.error('[overlay] lỗi xử lý bản tin', x && x.t, err); } } break;
@@ -857,7 +870,16 @@ function handleMsg(m){
       case 'join': if (m.cap!==cap) layout(m.cap); addVisitor(m.v, m.v.demo && visitors.size>8); updateCount(); break;
       case 'leave': removeVisitor(m.id); updateCount(); renderMerit(); break;
       case 'skin': { const v=touch(m.id); if(v){ v.skin=m.skin; v.glow=.85; v.triggerBow(1,0); } } break;
-      case 'chat': { const v=touch(m.id); if(v){ v.bubble={text:m.text, until:performance.now()+6000}; if(!v.isBowing) v.triggerBow(1,0); } } break;
+      case 'chat': {
+        const v = touch(m.id);
+        if (v) {
+          const isCmd = m.isCmd || isCommandComment(m.text);
+          if (!isCmd) {
+            v.bubble = { text: m.text, until: performance.now() + 6000, createdAt: performance.now() };
+          }
+          if (!v.isBowing) v.triggerBow(1, 0);
+        }
+      } break;
       case 'oracle': { const v=touch(m.id); if(v){ v.glow=.9; v.triggerBow(1,0); } enqueueOracle(m); } break;
       case 'gift': { const v=touch(m.id); if(v){ v.coins=m.total; giftFx(v,m); } renderMerit(); if ((m.tier||1) < 3) showGift(m); } break;
       case 'like': { const v=touch(m.id); if(v) hearts(v,m.n); } break;
@@ -1326,12 +1348,12 @@ function frame(now){
       if (!zoomedHideNormalTag){
         if (isCeremony) {
           ceremonyLabels.push([v, headY, effAlpha]);
-        } else if (activeSet.has(v.id)) {
+        } else {
           seatedCandidates.push([v, headY, effAlpha]);
         }
       }
       const lbCfg = (V4 && V4.labels) ? V4.labels : (V3 ? V3.labels : { avatarPx: 28, nameFontPx: 14 });
-      if (!isCeremony && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, headY - lbCfg.avatarPx - lbCfg.nameFontPx * 1.6 - 12, ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
+      if (!isCeremony && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, headY - lbCfg.avatarPx - lbCfg.nameFontPx * 1.6 - 12, ws, effAlpha, v.bubble.createdAt || v.bubble.until]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
     } else if (!zoomedHideNormalTag){
       ctx.save();
       ctx.globalAlpha = effAlpha;
@@ -1340,31 +1362,39 @@ function frame(now){
       tag(v.name, v.x, ty, ws, tagStyle, avImg, maxTagW);
       ctx.restore();
     }
-    if (!v3){ if (!v.atAltarSpot && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws, effAlpha]); else if (v.bubble && now>=v.bubble.until) v.bubble=null; }
+    if (!v3){ if (!v.atAltarSpot && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws, effAlpha, v.bubble.createdAt || v.bubble.until]); else if (v.bubble && now>=v.bubble.until) v.bubble=null; }
   }
   // Thẻ tên người lên lễ: chỉ 1 nhãn mỗi người, cập nhật số tại chỗ (không tạo nhãn mới)
   const drawnCeremonyIds = new Set();
-  const drawnTagBoxes = [];
+  const drawnCeremonyBoxes = [];
   for (const [cv, ch, ca] of ceremonyLabels){
     if (drawnCeremonyIds.has(cv.id)) continue;
     drawnCeremonyIds.add(cv.id);
     const b = drawCeremonyTag(cv, ch, ca);
-    if (b) drawnTagBoxes.push(b);
+    if (b) drawnCeremonyBoxes.push(b);
   }
-  // Thẻ người xem ngồi: tối đa 12 thẻ tên, không chồng lấn (bỏ qua thẻ cắt thẻ đã vẽ, không đè thảm lễ)
-  seatedCandidates.sort((a, b) => (b[0].lastActive || 0) - (a[0].lastActive || 0));
-  let seatedTagCount = 0;
-  const rugBox = isCeremonyCode() && V4?.ceremony?.carpet && V4.ceremony.carpet.enabled !== false ? V4.ceremony.carpet : (V3?.rug || { x: 148, y: 1330, w: 784, h: 158 });
+  // Thẻ người xem ngồi: thanh tên cho MỌI người đang ngồi (tối đa maxTags = 94)
+  // Thanh tên người ngồi được phép đè nhau một phần: bỏ điều kiện bỏ qua khi giao với thanh tên người ngồi khác
+  // Vẫn giữ: không đè thảm lễ và không đè thẻ người đang lên lễ
+  // Thứ tự vẽ: người hoạt động lâu nhất vẽ trước, người mới nhất vẽ sau cùng (nằm trên)
   const cfg = getNameTagConfig();
-  const maxTags = cfg.maxTags || 12;
+  const maxTags = cfg.maxTags || 94;
+  if (seatedCandidates.length > maxTags) {
+    seatedCandidates.sort((a, b) => (b[0].lastActive || 0) - (a[0].lastActive || 0));
+    seatedCandidates.length = maxTags;
+  }
+  seatedCandidates.sort((a, b) => (a[0].lastActive || 0) - (b[0].lastActive || 0));
+  const rugBox = isCeremonyCode() && V4?.ceremony?.carpet && V4.ceremony.carpet.enabled !== false ? V4.ceremony.carpet : (V3?.rug || { x: 148, y: 1330, w: 784, h: 158 });
   for (const [lv, lh, la] of seatedCandidates){
-    if (seatedTagCount >= maxTags) break;
     const box = getLabelBox(lv, lh);
     if (boxesIntersect(box, rugBox)) continue;
-    if (drawnTagBoxes.some(b => boxesIntersect(box, b))) continue;
+    if (drawnCeremonyBoxes.some(b => boxesIntersect(box, b))) continue;
     drawLabelDirect(lv, box, la);
-    drawnTagBoxes.push(box);
-    seatedTagCount++;
+  }
+  const elCard = document.getElementById('oracleCard');
+  let cardBox = null;
+  if (elCard && elCard.classList.contains('show')) {
+    cardBox = { left: 230, right: 850, top: 1060, bottom: 1320 };
   }
   const resolvedBubbles = (typeof window.resolveBubbleCollisions === 'function')
     ? window.resolveBubbleCollisions(bubbles, (t, s) => {
@@ -1374,7 +1404,7 @@ function frame(now){
         while (ctx.measureText(str).width > 320 && str.length > 4) str = str.slice(0, -2);
         if (str !== t) str = str.trimEnd() + '…';
         return { w: ctx.measureText(str).width + fs * 1.1, h: fs * 1.6 };
-      })
+      }, cardBox)
     : bubbles;
   for (const [bt, bx, by, bs, ba] of resolvedBubbles){ ctx.save(); ctx.globalAlpha = ba; bubble(bt, bx, by, bs); ctx.restore(); }
 

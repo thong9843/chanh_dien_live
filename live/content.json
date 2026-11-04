@@ -633,7 +633,7 @@
         "backGapDy": 32
       },
       "labels": {
-        "recentMax": 12,
+        "recentMax": 94,
         "avatarPx": 36,
         "nameMax": 10,
         "nameFontPx": 15
@@ -816,7 +816,7 @@
         ]
       },
       "labels": {
-        "recentMax": 12,
+        "recentMax": 94,
         "avatarPx": 28,
         "nameMax": 10,
         "nameFontPx": 14
@@ -832,7 +832,7 @@
           4
         ],
         "maxChars": 6,
-        "maxTags": 12,
+        "maxTags": 94,
         "maxHeight": 24,
         "maxWidth": 86,
         "gapHead": 3

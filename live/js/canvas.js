@@ -2316,18 +2316,31 @@
 
 /**
  * Giải quyết va chạm giữa các bong bóng bình luận (bubble).
- * Khi 2 bong bóng giao nhau, đẩy bong bóng sau lên trên (y nhỏ hơn)
- * cho hết chồng, giữ nguyên cỡ chữ và thời gian hiện.
+ * Khi 2 bong bóng giao nhau thì ẩn cái CŨ hơn; bỏ phần đẩy lên.
  */
-function resolveBubbleCollisions(bubbleList, measureFn) {
-  if (!Array.isArray(bubbleList) || bubbleList.length <= 1) return bubbleList;
-  const placed = [];
-  const result = [];
+function resolveBubbleCollisions(bubbleList, measureFn, cardBox) {
+  if (!Array.isArray(bubbleList) || bubbleList.length === 0) return [];
+  if (bubbleList.length === 1 && !cardBox) return bubbleList;
 
-  for (let i = 0; i < bubbleList.length; i++) {
-    const item = bubbleList[i];
+  // Sắp xếp từ mới nhất tới cũ nhất (time lớn hơn = mới hơn).
+  // Nếu không có time thì phần tử đứng sau trong mảng được coi là mới hơn.
+  const indexed = bubbleList.map((item, idx) => ({ item, idx }));
+  indexed.sort((a, b) => {
+    const timeA = a.item[5] ?? a.idx;
+    const timeB = b.item[5] ?? b.idx;
+    return timeB - timeA;
+  });
+
+  const placed = [];
+  if (cardBox && typeof cardBox === 'object') {
+    placed.push({ left: cardBox.left, right: cardBox.right, top: cardBox.top, bottom: cardBox.bottom });
+  }
+
+  const kept = [];
+
+  for (const { item, idx } of indexed) {
     const [text, x, origY, s, alpha] = item;
-    let y = origY;
+    const y = origY;
     const fs = Math.max(18, Math.round(26 * s / 0.4));
     let w = 120, h = fs * 1.6;
     if (typeof measureFn === 'function') {
@@ -2342,34 +2355,26 @@ function resolveBubbleCollisions(bubbleList, measureFn) {
 
     const marginX = 8;
     const marginY = 6;
-    let attempts = 0;
-    let hasOverlap = true;
+    const curLeft = x - w / 2 - marginX;
+    const curRight = x + w / 2 + marginX;
+    const curBottom = y + marginY;
+    const curTop = y - h - marginY;
 
-    while (hasOverlap && attempts < 10) {
-      hasOverlap = false;
-      const curLeft = x - w / 2 - marginX;
-      const curRight = x + w / 2 + marginX;
-      const curBottom = y + marginY;
-      const curTop = y - h - marginY;
-
-      for (const p of placed) {
-        const overlapX = curLeft < p.right && curRight > p.left;
-        const overlapY = curTop < p.bottom && curBottom > p.top;
-        if (overlapX && overlapY) {
-          y = Math.min(y, p.top - marginY);
-          hasOverlap = true;
-        }
+    let overlaps = false;
+    for (const p of placed) {
+      if (curLeft < p.right && curRight > p.left && curTop < p.bottom && curBottom > p.top) {
+        overlaps = true;
+        break;
       }
-      attempts++;
     }
 
-    if (y >= 140) {
-      const curLeft = x - w / 2 - marginX;
-      const curRight = x + w / 2 + marginX;
-      placed.push({ left: curLeft, right: curRight, top: y - h - marginY, bottom: y + marginY });
-      result.push([text, x, y, s, alpha]);
+    if (!overlaps) {
+      placed.push({ left: curLeft, right: curRight, top: curTop, bottom: curBottom });
+      kept.push({ item: [text, x, y, s, alpha], idx });
     }
   }
-  return result;
+
+  kept.sort((a, b) => a.idx - b.idx);
+  return kept.map(k => k.item);
 }
 if (typeof window !== 'undefined') window.resolveBubbleCollisions = resolveBubbleCollisions;
