@@ -2355,8 +2355,9 @@ function resolveBubbleCollisions(bubbleList, measureFn, cardBox) {
 
     const marginX = 8;
     const marginY = 6;
-    const curLeft = x - w / 2 - marginX;
-    const curRight = x + w / 2 + marginX;
+    const bLeft = Math.max(8, Math.min(1072 - w, x - w / 2));
+    const curLeft = bLeft - marginX;
+    const curRight = bLeft + w + marginX;
     const curBottom = y + marginY;
     const curTop = y - h - marginY;
 

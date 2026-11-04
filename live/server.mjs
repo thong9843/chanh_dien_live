@@ -275,7 +275,7 @@ function loadContent(){
             bg: cStr(nt.bg, dnt.bg || 'rgba(0,0,0,0.55)', 40),
             padding: Array.isArray(nt.padding) && nt.padding.length === 2 ? [cNum(nt.padding[0], 0, 20, 2), cNum(nt.padding[1], 0, 30, 6)] : (dnt.padding || [2, 6]),
             maxChars: Math.round(cNum(nt.maxChars, 3, 30, dnt.maxChars || 8)),
-            maxTags: Math.round(cNum(nt.maxTags, 1, 30, dnt.maxTags || 12)),
+            maxTags: Math.round(cNum(nt.maxTags, 1, 200, dnt.maxTags || 94)),
             maxHeight: Math.round(cNum(nt.maxHeight, 16, 50, dnt.maxHeight || 24)),
             maxWidth: Math.round(cNum(nt.maxWidth, 50, 200, dnt.maxWidth || 110)),
             gapHead: Math.round(cNum(nt.gapHead, 0, 30, dnt.gapHead || 4)),

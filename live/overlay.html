@@ -1088,9 +1088,12 @@ function bubble(text,x,y,s){
   const fs=Math.max(18,Math.round(26*s/.4)); ctx.font=`500 ${fs}px "Be Vietnam Pro",system-ui,sans-serif`;
   let t=text; while (ctx.measureText(t).width>320 && t.length>4) t=t.slice(0,-2); if (t!==text) t=t.trimEnd()+'…';
   const w=ctx.measureText(t).width+fs*1.1, h=fs*1.6;
-  ctx.fillStyle='rgba(255,247,230,.95)'; rr(x-w/2,y-h,w,h,fs*.5); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(x-8,y); ctx.lineTo(x+8,y); ctx.lineTo(x,y+10); ctx.fill();
-  ctx.fillStyle='#3a1a08'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,x,y-h/2+1);
+  const bLeft = Math.max(8, Math.min(1072 - w, x - w / 2));
+  const bCenter = bLeft + w / 2;
+  ctx.fillStyle='rgba(255,247,230,.95)'; rr(bLeft,y-h,w,h,fs*.5); ctx.fill();
+  const pointerBaseX = Math.max(bLeft + 12, Math.min(bLeft + w - 12, x));
+  ctx.beginPath(); ctx.moveTo(pointerBaseX-8,y); ctx.lineTo(pointerBaseX+8,y); ctx.lineTo(x,y+10); ctx.fill();
+  ctx.fillStyle='#3a1a08'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(t,bCenter,y-h/2+1);
 }
 
 /* ---- Lớp tĩnh vẽ sẵn vào canvas ẩn: nền (hall) và 6 vị thầy + thẻ tên (tách đôi quanh thầy trụ trì để hào quang vẫn nằm đúng giữa).
@@ -1384,13 +1387,17 @@ function frame(now){
     seatedCandidates.length = maxTags;
   }
   seatedCandidates.sort((a, b) => (a[0].lastActive || 0) - (b[0].lastActive || 0));
-  const rugBox = isCeremonyCode() && V4?.ceremony?.carpet && V4.ceremony.carpet.enabled !== false ? V4.ceremony.carpet : (V3?.rug || { x: 148, y: 1330, w: 784, h: 158 });
+  const rugBox = (V4?.ceremony?.carpet && V4.ceremony.carpet.enabled === false) ? null : (isCeremonyCode() && V4?.ceremony?.carpet ? V4.ceremony.carpet : (V3?.rug || { x: 148, y: 1330, w: 784, h: 158 }));
+  let drawnTagCount = 0;
   for (const [lv, lh, la] of seatedCandidates){
     const box = getLabelBox(lv, lh);
-    if (boxesIntersect(box, rugBox)) continue;
+    if (rugBox && boxesIntersect(box, rugBox)) continue;
     if (drawnCeremonyBoxes.some(b => boxesIntersect(box, b))) continue;
     drawLabelDirect(lv, box, la);
+    drawnTagCount++;
   }
+  window.__tagCount = drawnTagCount + (drawnCeremonyBoxes ? drawnCeremonyBoxes.length : 0);
+  window.__seatedTagCount = drawnTagCount;
   const elCard = document.getElementById('oracleCard');
   let cardBox = null;
   if (elCard && elCard.classList.contains('show')) {
