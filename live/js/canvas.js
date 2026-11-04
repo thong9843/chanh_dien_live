@@ -2313,3 +2313,63 @@
   };
 })(window);
 
+
+/**
+ * Giải quyết va chạm giữa các bong bóng bình luận (bubble).
+ * Khi 2 bong bóng giao nhau, đẩy bong bóng sau lên trên (y nhỏ hơn)
+ * cho hết chồng, giữ nguyên cỡ chữ và thời gian hiện.
+ */
+function resolveBubbleCollisions(bubbleList, measureFn) {
+  if (!Array.isArray(bubbleList) || bubbleList.length <= 1) return bubbleList;
+  const placed = [];
+  const result = [];
+
+  for (let i = 0; i < bubbleList.length; i++) {
+    const item = bubbleList[i];
+    const [text, x, origY, s, alpha] = item;
+    let y = origY;
+    const fs = Math.max(18, Math.round(26 * s / 0.4));
+    let w = 120, h = fs * 1.6;
+    if (typeof measureFn === 'function') {
+      try {
+        const m = measureFn(text, s);
+        if (m && m.w) w = m.w;
+        if (m && m.h) h = m.h;
+      } catch {}
+    } else {
+      w = Math.min(320, text.length * fs * 0.6) + fs * 1.1;
+    }
+
+    const marginX = 8;
+    const marginY = 6;
+    let attempts = 0;
+    let hasOverlap = true;
+
+    while (hasOverlap && attempts < 10) {
+      hasOverlap = false;
+      const curLeft = x - w / 2 - marginX;
+      const curRight = x + w / 2 + marginX;
+      const curBottom = y + marginY;
+      const curTop = y - h - marginY;
+
+      for (const p of placed) {
+        const overlapX = curLeft < p.right && curRight > p.left;
+        const overlapY = curTop < p.bottom && curBottom > p.top;
+        if (overlapX && overlapY) {
+          y = Math.min(y, p.top - marginY);
+          hasOverlap = true;
+        }
+      }
+      attempts++;
+    }
+
+    if (y >= 140) {
+      const curLeft = x - w / 2 - marginX;
+      const curRight = x + w / 2 + marginX;
+      placed.push({ left: curLeft, right: curRight, top: y - h - marginY, bottom: y + marginY });
+      result.push([text, x, y, s, alpha]);
+    }
+  }
+  return result;
+}
+if (typeof window !== 'undefined') window.resolveBubbleCollisions = resolveBubbleCollisions;

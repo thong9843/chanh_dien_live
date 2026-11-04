@@ -793,7 +793,6 @@ export default {
     "cacheMaxMB": 200,
     "order": [
       "vieneu",
-      "edge",
       "cached"
     ],
     "vieneuVoice": "Thiền Tâm Đức",

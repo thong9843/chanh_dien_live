@@ -144,7 +144,7 @@ function loadContent(){
         const allowed = ['vieneu', 'edge', 'cached'];
         const raw = Array.isArray(o('tts')?.order) ? o('tts').order : D.tts?.order;
         const filtered = (raw || []).filter(x => allowed.includes(x));
-        return filtered.length ? filtered : ['vieneu', 'edge', 'cached'];
+        return filtered.length ? filtered : ['vieneu', 'cached'];
       })(),
       vieneuVoice: cStr(o('tts')?.vieneuVoice, D.tts?.vieneuVoice || 'Thiền Tâm Đức', 80),
       vieneuSpeed: cNum(o('tts')?.vieneuSpeed, 0.7, 1.2, D.tts?.vieneuSpeed || 0.9),
@@ -1615,14 +1615,14 @@ async function previewNameTTS(rawName, ws){
 // Các câu cố định được lưu đĩa (kinh, lời nguyện, pháp ngữ, câu chung không tên). Chỉ những file cache_* ứng với các câu này (theo giọng hiện hành) được giữ.
 function fixedTtsTexts(){
   return [
-    ...(CONTENT.chants || []),
-    ...(CONTENT.prayers || []),
-    ...((CONTENT.oracles || []).map(o => o.teaching || o.verse).filter(Boolean)),
     'Tùy hỷ công đức Phật tử đã cúng dường.',
     'Tùy hỷ Phật tử đã kết duyên lành.',
     'Pháp ngữ hôm nay gửi đến Phật tử.',
     'Chào mừng Phật tử đã đến chánh điện.',
     'Nam Mô A Di Đà Phật.',
+    ...(CONTENT.chants || []),
+    ...(CONTENT.prayers || []),
+    ...((CONTENT.oracles || []).map(o => o.teaching || o.verse).filter(Boolean)),
   ].filter(Boolean);
 }
 // Xoá file cache_* cũ không còn khớp câu cố định nào (đổi nội dung kinh/lời nguyện hoặc đổi giọng). Chạy lúc khởi động; trả về số file đã xoá.
