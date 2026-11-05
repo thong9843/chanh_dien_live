@@ -2316,66 +2316,52 @@
 
 /**
  * Giải quyết va chạm giữa các bong bóng bình luận (bubble).
- * Khi 2 bong bóng giao nhau thì ẩn cái CŨ hơn; bỏ phần đẩy lên.
+ * Bong bóng giao nhau thì vẫn hiện cả hai, cái mới vẽ trên cùng (bỏ việc ẩn cái cũ).
+ * Giữ kẹp mép 8..1072 và quy tắc tránh thẻ quẻ.
  */
 function resolveBubbleCollisions(bubbleList, measureFn, cardBox) {
   if (!Array.isArray(bubbleList) || bubbleList.length === 0) return [];
-  if (bubbleList.length === 1 && !cardBox) return bubbleList;
 
-  // Sắp xếp từ mới nhất tới cũ nhất (time lớn hơn = mới hơn).
-  // Nếu không có time thì phần tử đứng sau trong mảng được coi là mới hơn.
-  const indexed = bubbleList.map((item, idx) => ({ item, idx }));
-  indexed.sort((a, b) => {
-    const timeA = a.item[5] ?? a.idx;
-    const timeB = b.item[5] ?? b.idx;
-    return timeB - timeA;
-  });
-
-  const placed = [];
-  if (cardBox && typeof cardBox === 'object') {
-    placed.push({ left: cardBox.left, right: cardBox.right, top: cardBox.top, bottom: cardBox.bottom });
-  }
-
+  const marginX = 8;
+  const marginY = 6;
+  const hasCard = cardBox && typeof cardBox === 'object';
   const kept = [];
 
-  for (const { item, idx } of indexed) {
+  for (let idx = 0; idx < bubbleList.length; idx++) {
+    const item = bubbleList[idx];
     const [text, x, origY, s, alpha] = item;
     const y = origY;
-    const fs = Math.max(18, Math.round(26 * s / 0.4));
-    let w = 120, h = fs * 1.6;
-    if (typeof measureFn === 'function') {
-      try {
-        const m = measureFn(text, s);
-        if (m && m.w) w = m.w;
-        if (m && m.h) h = m.h;
-      } catch {}
-    } else {
-      w = Math.min(320, text.length * fs * 0.6) + fs * 1.1;
-    }
 
-    const marginX = 8;
-    const marginY = 6;
-    const bLeft = Math.max(8, Math.min(1072 - w, x - w / 2));
-    const curLeft = bLeft - marginX;
-    const curRight = bLeft + w + marginX;
-    const curBottom = y + marginY;
-    const curTop = y - h - marginY;
+    if (hasCard) {
+      const fs = Math.max(18, Math.round(26 * s / 0.4));
+      let w = 120, h = fs * 1.6;
+      if (typeof measureFn === 'function') {
+        try {
+          const m = measureFn(text, s);
+          if (m && m.w) w = m.w;
+          if (m && m.h) h = m.h;
+        } catch {}
+      } else {
+        w = Math.min(320, text.length * fs * 0.6) + fs * 1.1;
+      }
 
-    let overlaps = false;
-    for (const p of placed) {
-      if (curLeft < p.right && curRight > p.left && curTop < p.bottom && curBottom > p.top) {
-        overlaps = true;
-        break;
+      const bLeft = Math.max(8, Math.min(1072 - w, x - w / 2));
+      const curLeft = bLeft - marginX;
+      const curRight = bLeft + w + marginX;
+      const curBottom = y + marginY;
+      const curTop = y - h - marginY;
+
+      // Tránh thẻ quẻ
+      if (curLeft < cardBox.right && curRight > cardBox.left && curTop < cardBox.bottom && curBottom > cardBox.top) {
+        continue;
       }
     }
 
-    if (!overlaps) {
-      placed.push({ left: curLeft, right: curRight, top: curTop, bottom: curBottom });
-      kept.push({ item: [text, x, y, s, alpha], idx });
-    }
+    kept.push({ item: [text, x, y, s, alpha], idx, time: item[5] ?? idx });
   }
 
-  kept.sort((a, b) => a.idx - b.idx);
+  // Cái mới vẽ trên cùng: sắp xếp từ cũ nhất đến mới nhất (cũ vẽ trước, mới vẽ sau đè lên trên)
+  kept.sort((a, b) => (a.time - b.time) || (a.idx - b.idx));
   return kept.map(k => k.item);
 }
 if (typeof window !== 'undefined') window.resolveBubbleCollisions = resolveBubbleCollisions;

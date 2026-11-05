@@ -14,6 +14,7 @@ import { WebSocketServer } from 'ws';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import DEFAULT_CONTENT from './content.defaults.mjs';
 import { readGift } from './gift-event.mjs';
+import { userId, userName, userAvatar, chatText, likeCounts, viewerCount } from './tiktok-map.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');            // repo root: serves /assets, /live
@@ -1724,6 +1725,47 @@ scheduleChant();
 
 
 /* --------------------------------------------------------------- TikTok */
+// v5.5.5: tiktok-live-connector 2.x phát sự kiện theo lược đồ v3 (user.id/displayId, chat.content, like.count/total).
+// Bản cũ đọc user.uniqueId + d.comment → mọi người chung 1 id rỗng, bình luận rỗng bị bỏ. Đọc qua tiktok-map.mjs (nhận cả lược đồ cũ).
+const ttWarned = new Set();
+function ttUser(d, ev){
+  const u = d?.user, id = userId(u, d?.userId);
+  if (!id && !ttWarned.has(ev)){ ttWarned.add(ev); addLog(`⚠ Sự kiện ${ev} không có id người xem (khoá user: ${Object.keys(u || {}).slice(0, 12).join(',')})`); }
+  return { id, name: userName(u, CONTENT.labels.anonymous), avatar: userAvatar(u) };
+}
+const ttSeen = new Set();
+function ttFirst(ev, d){            // ghi 1 lần mỗi loại sự kiện: danh sách khoá (không ghi nội dung) để đối chiếu lược đồ khi live thật
+  if (ttSeen.has(ev)) return; ttSeen.add(ev);
+  addLog(`🔎 Sự kiện đầu tiên '${ev}': khoá [${Object.keys(d || {}).slice(0, 15).join(',')}] · user [${Object.keys(d?.user || {}).filter(k => /id|name|avatar/i.test(k)).join(',')}]`);
+}
+const TT_HANDLERS = {
+  chat: d => { ttFirst('chat', d); const u = ttUser(d, 'chat'); if (u.id) onChat(u.id, u.name, chatText(d), u.avatar); },
+  gift: d => {
+    ttFirst('gift', d);
+    const g = readGift(d, CONTENT.labels.defaultGift);
+    if (g.streaking) return;                                      // streak still running
+    if (!g.known) addLog('⚠ Sự kiện quà không có diamondCount, tính 1 xu');
+    const u = ttUser(d, 'gift'); if (!u.id) return;
+    onGift(u.id, u.name, g.name, g.count, g.diamonds, u.avatar);
+    addLog(`🎁 ${sanitizeDisplayName(u.name)} cúng dường ${sanitizeGiftName(g.name)} x${g.count} (${g.diamonds} xu)`);
+  },
+  member: d => { ttFirst('member', d); const u = ttUser(d, 'member'); if (u.id) onMember(u.id, u.name, u.avatar); },
+  like: d => { const u = ttUser(d, 'like'); const c = likeCounts(d); onLikes(u.id, c.n, c.total); },
+  follow: d => { ttFirst('follow', d); const u = ttUser(d, 'follow'); if (u.id) onFollow(u.id, u.name, u.avatar); },
+  share: d => { const u = ttUser(d, 'share'); onShare(u.name); },
+  roomUser: d => { ttFirst('roomUser', d); const n = viewerCount(d); if (n !== null) onViewerCount(n); },
+};
+// Người chỉ vào xem (chưa bình luận/tặng quà) không có sự kiện "rời phòng" từ TikTok → giữ số người ngồi im lặng ≤ số mắt xem hiện tại.
+let lastViewerCount = null;
+function onViewerCount(n){
+  lastViewerCount = n;
+  const live = [...viewers.values()].filter(v => !v.demo && !String(v.id).startsWith('sim_'));
+  let extra = live.length - n;
+  if (extra <= 0) return;
+  const silent = live.filter(v => !v.chatted && !v.coins && !isProtectedCeremonyViewer(v.id)).sort((a, b) => a.lastAt - b.lastAt);
+  for (const v of silent){ if (extra-- <= 0) break; removeViewer(v.id); }
+  syncMore();
+}
 let TikTokLib = null;
 // Dịch lỗi của thư viện/EulerStream ra nguyên nhân dễ hiểu cho bảng điều khiển (không bao giờ chứa key).
 function explainTikTokError(e, step, hasKey){
@@ -1799,20 +1841,7 @@ async function connectTikTok(uniqueId, opts = {}){
     tiktokState.key = !!apiKey;
     conn = new TikTokLiveConnection(uniqueId, { enableExtendedGiftInfo: false, fetchRoomInfoOnConnect: false, processInitialData: false, ...(apiKey ? { signApiKey: apiKey } : {}) });
     const on = (ev, fn) => conn.on(ev, guard('Sự kiện TikTok lỗi', fn));       // lỗi trong một sự kiện chỉ ghi log, không phá kết nối
-    const av = u => u?.profilePicture?.url?.[0] || u?.profilePicture?.urlList?.[0] || u?.avatarThumb?.urlList?.[0] || u?.avatarThumb?.url?.[0] || '';
-    const nm = u => u?.nickname || u?.uniqueId || CONTENT.labels.anonymous;
-    on(WebcastEvent.CHAT, d => onChat(d.user?.uniqueId || d.user?.userId, nm(d.user), d.comment, av(d.user)));
-    on(WebcastEvent.GIFT, d => {
-      const g = readGift(d, CONTENT.labels.defaultGift);
-      if (g.streaking) return;                                      // streak still running
-      if (!g.known) addLog('⚠ Sự kiện quà không có diamondCount, tính 1 xu');
-      onGift(d.user?.uniqueId || d.user?.userId, nm(d.user), g.name, g.count, g.diamonds, av(d.user));
-      addLog(`🎁 ${sanitizeDisplayName(nm(d.user))} cúng dường ${sanitizeGiftName(g.name)} x${g.count} (${g.diamonds} xu)`);
-    });
-    on(WebcastEvent.MEMBER, d => onMember(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
-    on(WebcastEvent.LIKE, d => onLikes(d.user?.uniqueId, d.likeCount || 1, d.totalLikeCount));
-    on(WebcastEvent.FOLLOW, d => onFollow(d.user?.uniqueId || d.user?.userId, nm(d.user), av(d.user)));
-    on(WebcastEvent.SHARE, d => onShare(nm(d.user)));
+    for (const [ev, fn] of Object.entries(TT_HANDLERS)) on(ev, fn);   // v5.5.5: cùng bộ xử lý với lệnh thử 'tt_raw'
     on(ControlEvent.DISCONNECTED, () => {
       if (gen !== ttGen) return;
       tiktokState = { ...tiktokState, status: 'disconnected' }; broadcast({ t:'tiktok', ...tiktokState }); addLog('TikTok: mất kết nối');
@@ -1900,6 +1929,7 @@ function onControl(m, ws){
     case 'connect': if (typeof m.uniqueId === 'string') bg('Kết nối TikTok lỗi', connectTikTok(m.uniqueId)); else addLog('Lệnh kết nối thiếu username'); break;
     case 'disconnect': bg('Ngắt TikTok lỗi', disconnectTikTok()); addLog('Đã ngắt kết nối TikTok'); break;
     case 'chat': { const raw = String(m.name || 'Khách').slice(0, 80); onChat('sim_' + sanitizeDisplayName(raw), raw, String(m.text || 'Nam mô A Di Đà Phật').slice(0, 120)); break; }
+    case 'tt_raw': { const fn = TT_HANDLERS[m.event]; if (fn && m.data && typeof m.data === 'object') guard('Lệnh thử tt_raw lỗi', fn)(m.data); break; }   // thử đúng đường sự kiện TikTok (lược đồ v3)
     case 'member': { const raw = String(m.name || 'Khách').slice(0, 80); onMember('sim_' + sanitizeDisplayName(raw), raw); break; }
     case 'oracle': { const raw = String(m.name || 'Khách').slice(0, 80); const clean = sanitizeDisplayName(raw); const { v } = seat('sim_' + clean, raw, { force: true }); triggerOracle(v ? v.id : ('sim_' + clean), raw, v?.avatar || '', true, m.index); break; }
     case 'ceremony': {

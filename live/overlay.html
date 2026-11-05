@@ -633,7 +633,7 @@ function stepOracle(){
 setInterval(stepOracle, 100);
 
 /* ======================= audio ======================= */
-let AC=null, master=null, musicGain=null, sfx=null, settings={ music:true, mo:true, moBpm:52, scene:'auto', zoomEnabled:true, musicTrack:'shuffle' };
+let AC=null, master=null, musicGain=null, sfx=null, ws=null, moTimer=null, settings={ music:true, mo:true, moBpm:52, scene:'auto', zoomEnabled:true, musicTrack:'shuffle' };
 const TRACKS=['/assets/music/music1.mp3','/assets/music/music2.mp3','/assets/music/music3.mp3','/assets/music/music4.mp3','/assets/music/music5.mp3'];
 let musicEl=null, trackMode='shuffle', bag=[], lastTrack=-1;
 // Phát ngẫu nhiên không lặp: "túi" các bài xáo trộn, lấy hết túi mới xáo lại (bài đầu túi mới khác bài vừa phát). Chế độ chọn bài: lặp đúng bài đó.
@@ -646,15 +646,39 @@ function pickTrack(){
   }
   return bag.pop();
 }
-document.getElementById('unmute').onclick = e => { e.currentTarget.remove(); startAudio(); };
-if (new URLSearchParams(location.search).has('shot')) {
+let audioLogged = false;
+function checkAudioState(){
+  if (AC && AC.state === 'running') {
+    const btn = document.getElementById('unmute');
+    if (btn) btn.remove();
+    if (!audioLogged && ws && ws.readyState === 1) {
+      audioLogged = true;
+      sendLogToServer('🔊 Âm thanh overlay đã bật');
+    }
+  }
+}
+setInterval(checkAudioState, 1000);
+
+const _urlParams = new URLSearchParams(location.search);
+const isStudio = _urlParams.get('studio') === '1';
+if (isStudio || _urlParams.has('shot')) {
   document.getElementById('unmute')?.remove();
 }
+const unmuteBtn = document.getElementById('unmute');
+if (unmuteBtn) {
+  unmuteBtn.onclick = e => { e.currentTarget.remove(); startAudio(); };
+}
+
 function startAudio(){
   if (!AC) {
     AC = new (window.AudioContext||window.webkitAudioContext)();
+    window.AC = AC;
+    if (AC && AC.addEventListener) {
+      AC.addEventListener('statechange', checkAudioState);
+    }
   }
-  AC.resume?.().catch(()=>{});
+  window.AC = AC;
+  AC.resume?.().then(checkAudioState).catch(()=>{});
   if (!master) {
     master = AC.createGain(); master.gain.value=.9; master.connect(AC.destination);
     musicGain = AC.createGain(); musicGain.gain.value=settings.music?.5:0; musicGain.connect(master);
@@ -662,6 +686,7 @@ function startAudio(){
     nextTrack(); scheduleMo(); bell();
   }
   playTTS();
+  checkAudioState();
 }
 window.startAudio = startAudio;
 // Chỉ MỘT phần tử Audio cho nhạc nền, nối vào đồ thị âm thanh đúng một lần; đổi bài = đổi src. (Mỗi lần new Audio + createMediaElementSource
@@ -705,7 +730,7 @@ function mo(){
   const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=700; bp.Q.value=3; const g=AC.createGain(); g.gain.setValueAtTime(.35,t); g.gain.exponentialRampToValueAtTime(.001,t+.14);
   o.connect(bp); bp.connect(g); g.connect(sfx); o.start(t); o.stop(t+.16);
 }
-let moTimer=null; function scheduleMo(){ clearInterval(moTimer); if (AC && settings.mo) moTimer=setInterval(mo, 60000/Math.max(20,settings.moBpm||52)); }
+function scheduleMo(){ clearInterval(moTimer); if (AC && settings.mo) moTimer=setInterval(mo, 60000/Math.max(20,settings.moBpm||52)); }
 
 // Hàng đợi phát giọng đọc tuần tự ở Client (chống chồng lấp, phát .mp3 Edge TTS)
 const ttsQ=[]; let ttsPlaying=false;
@@ -778,6 +803,7 @@ function playTTS(){
     } else {
       sendLogToServer(`✔ Đọc xong #${readIdx} ${targetName}`.trim());
     }
+    checkAudioState();
     setTimeout(playTTS, delay);
   };
 
@@ -820,13 +846,13 @@ function giftFx(v, m){
 function hearts(v,n){ for (let i=0;i<Math.min(6,n);i++) addPetal(v.x+(Math.random()-.5)*60, v.y-140*(v.scale||.4), (Math.random()-.5)*20, -(50+Math.random()*40), 1.6, .08, true); }
 
 /* ======================= server link ======================= */
-let ws=null;
 function connect(){
   ws = new WebSocket(`ws://${location.host}/ws?role=overlay`);
   const st=document.getElementById('conn');
   ws.onopen=()=>{
     st.textContent='';
     try { ws.send(JSON.stringify({ t: 'overlay_status', status: isPreparing ? 'preparing' : 'ready' })); } catch {}
+    checkAudioState();
   };
   ws.onclose=()=>{ st.textContent=L('lost','mất kết nối server… đang thử lại'); setTimeout(connect,2000); };
   ws.onmessage=e=>{ let m; try { m=JSON.parse(e.data); } catch { return; } handleMsg(m); };
@@ -873,10 +899,7 @@ function handleMsg(m){
       case 'chat': {
         const v = touch(m.id);
         if (v) {
-          const isCmd = m.isCmd || isCommandComment(m.text);
-          if (!isCmd) {
-            v.bubble = { text: m.text, until: performance.now() + 6000, createdAt: performance.now() };
-          }
+          v.bubble = { text: m.text, until: performance.now() + 6000, createdAt: performance.now() };
           if (!v.isBowing) v.triggerBow(1, 0);
         }
       } break;
@@ -902,6 +925,9 @@ function applySettings(){
   duck(false); scheduleMo();
 }
 connect();
+if (isStudio) {
+  startAudio();
+}
 
 
 /* ======================= VIỆC 1: Khởi động ấm & Đo mốc thời gian ======================= */
@@ -1356,7 +1382,7 @@ function frame(now){
         }
       }
       const lbCfg = (V4 && V4.labels) ? V4.labels : (V3 ? V3.labels : { avatarPx: 28, nameFontPx: 14 });
-      if (!isCeremony && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, headY - lbCfg.avatarPx - lbCfg.nameFontPx * 1.6 - 12, ws, effAlpha, v.bubble.createdAt || v.bubble.until]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
+      if (v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, headY - lbCfg.avatarPx - lbCfg.nameFontPx * 1.6 - 12, ws, effAlpha, v.bubble.createdAt || v.bubble.until]); else if (v.bubble && now>=v.bubble.until) v.bubble=null;
     } else if (!zoomedHideNormalTag){
       ctx.save();
       ctx.globalAlpha = effAlpha;
@@ -1365,7 +1391,7 @@ function frame(now){
       tag(v.name, v.x, ty, ws, tagStyle, avImg, maxTagW);
       ctx.restore();
     }
-    if (!v3){ if (!v.atAltarSpot && v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws, effAlpha, v.bubble.createdAt || v.bubble.until]); else if (v.bubble && now>=v.bubble.until) v.bubble=null; }
+    if (!v3){ if (v.bubble && now<v.bubble.until) bubbles.push([v.bubble.text, v.x, ty-Math.max(18,30*ws/.4), ws, effAlpha, v.bubble.createdAt || v.bubble.until]); else if (v.bubble && now>=v.bubble.until) v.bubble=null; }
   }
   // Thẻ tên người lên lễ: chỉ 1 nhãn mỗi người, cập nhật số tại chỗ (không tạo nhãn mới)
   const drawnCeremonyIds = new Set();
