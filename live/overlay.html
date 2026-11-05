@@ -81,8 +81,6 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
 /* lớp phủ vùng an toàn TikTok (bật từ bảng điều khiển, chỉ để canh bố cục) */
 #safe{position:absolute;inset:0;z-index:30;pointer-events:none;display:none}
 #safe .z{position:absolute;box-sizing:border-box;background:rgba(255,40,40,.32);border:2px dashed rgba(255,150,150,.9);color:#fff;font:600 22px var(--body);padding:6px 10px;text-shadow:0 1px 3px #000}
-/* enable sound (needed once: browsers block autoplay) */
-#unmute{position:absolute;z-index:9;left:50%;top:960px;transform:translateX(-50%);font:600 36px var(--body);padding:22px 44px;border-radius:24px;border:3px solid var(--gold2);background:var(--red);color:#fff4dc;cursor:pointer}
 #conn{position:absolute;z-index:4;right:16px;bottom:12px;font-size:20px;color:var(--muted);opacity:.6}
 @media (prefers-reduced-motion:reduce){#noticeBox > div{transition:none}}
 
@@ -115,7 +113,6 @@ html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:var(-
   </div>
 
   <div id="safe"></div>
-  <button id="unmute">🔔 Bấm để bật âm thanh</button>
   <div id="conn">đang kết nối…</div>
   <div id="prepScreen"><div class="prep-pill">Chánh điện đang chuẩn bị…</div></div>
 </div></div>
@@ -361,7 +358,6 @@ function applyContent(c){
   CONTENT = c; if (!c) return;
   document.getElementById('meritTitle').textContent = L('merit');
   document.getElementById('chantTitle').textContent = L('chant');
-  document.getElementById('unmute')?.replaceChildren(document.createTextNode(L('unmute')));
   const w = document.getElementById('watchLbl'); w.replaceChildren(); L('watching','').split('|').forEach((p,i)=>{ if(i) w.append(document.createElement('br')); w.append(p); });
   startTips(c.guide?.title, c.guide?.lines || [], c.layout?.ui?.tips?.perPage || 3, c.layout?.ui?.tips?.sec || 8);
   const plq = document.getElementById('plaque');
@@ -647,27 +643,51 @@ function pickTrack(){
   return bag.pop();
 }
 let audioLogged = false;
+let audioBlockedLogged = false;
+const audioAttemptStart = performance.now();
+function checkAudioBlocked(){
+  if (audioBlockedLogged) return;
+  if (!AC || AC.state !== 'running') {
+    if (performance.now() - audioAttemptStart >= 5000) {
+      if (ws && ws.readyState === 1) {
+        audioBlockedLogged = true;
+        sendLogToServer('⚠ Âm thanh overlay đang bị trình duyệt chặn tự phát');
+      }
+    }
+  }
+}
 function checkAudioState(){
   if (AC && AC.state === 'running') {
-    const btn = document.getElementById('unmute');
-    if (btn) btn.remove();
     if (!audioLogged && ws && ws.readyState === 1) {
       audioLogged = true;
       sendLogToServer('🔊 Âm thanh overlay đã bật');
     }
+  } else {
+    checkAudioBlocked();
   }
 }
-setInterval(checkAudioState, 1000);
+setTimeout(checkAudioBlocked, 5000);
+setInterval(() => {
+  if (!AC) {
+    try { startAudio(); } catch {}
+  } else if (AC.state !== 'running') {
+    AC.resume?.().then(checkAudioState).catch(()=>{});
+  }
+  checkAudioState();
+}, 2000);
 
 const _urlParams = new URLSearchParams(location.search);
 const isStudio = _urlParams.get('studio') === '1';
-if (isStudio || _urlParams.has('shot')) {
-  document.getElementById('unmute')?.remove();
-}
-const unmuteBtn = document.getElementById('unmute');
-if (unmuteBtn) {
-  unmuteBtn.onclick = e => { e.currentTarget.remove(); startAudio(); };
-}
+
+const tryStartAudio = () => { try { startAudio(); } catch {} };
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => {
+  window.addEventListener(ev, tryStartAudio, { passive: true });
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    tryStartAudio();
+  }
+}, { passive: true });
 
 function startAudio(){
   if (!AC) {
@@ -925,9 +945,9 @@ function applySettings(){
   duck(false); scheduleMo();
 }
 connect();
-if (isStudio) {
+try {
   startAudio();
-}
+} catch {}
 
 
 /* ======================= VIỆC 1: Khởi động ấm & Đo mốc thời gian ======================= */
