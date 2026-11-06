@@ -11,7 +11,6 @@ export default {
     "empty": "Chưa có",
     "chant": "✦ TỤNG KINH ĐỊNH KỲ ✦",
     "watching": "đang|thiền",
-    "unmute": "🔔 Bấm để bật âm thanh",
     "connecting": "đang kết nối…",
     "lost": "mất kết nối server… đang thử lại",
     "anonymous": "ẩn danh",

@@ -1442,7 +1442,6 @@ function frame(now){
     drawLabelDirect(lv, box, la);
     drawnTagCount++;
   }
-  window.__tagCount = drawnTagCount + (drawnCeremonyBoxes ? drawnCeremonyBoxes.length : 0);
   window.__seatedTagCount = drawnTagCount;
   const elCard = document.getElementById('oracleCard');
   let cardBox = null;

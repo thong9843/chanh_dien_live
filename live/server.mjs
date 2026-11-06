@@ -20,7 +20,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');            // repo root: serves /assets, /live
 const TTS_DIR = path.join(__dirname, 'tts');
 fs.mkdirSync(TTS_DIR, { recursive: true });
-for (const f of fs.readdirSync(TTS_DIR)) { if (!f.startsWith('cache_')) try { fs.unlinkSync(path.join(TTS_DIR, f)); } catch {} }
+for (const f of fs.readdirSync(TTS_DIR)) { if (!f.startsWith('cache_') && !f.startsWith('.')) try { fs.unlinkSync(path.join(TTS_DIR, f)); } catch {} }
 // live/.env (đã nằm trong .gitignore, không bao giờ commit): EULER_API_KEY=... — đọc bằng loadEnvFile có sẵn của Node 20.12+, không thêm dependency.
 try { process.loadEnvFile(path.join(__dirname, '.env')); } catch {}
 const PORT = +process.env.PORT || 3000;
@@ -1101,7 +1101,7 @@ function onLikes(id, n, total){
   if (m > mileDone){
     mileDone = m; const count = m * every;
     broadcast({ t:'milestone', n: count });
-    say(fill(CONTENT.milestone.line, { n: count }), { tag:'milestone' }, 3);
+    say(fill(CONTENT.milestone.line, { n: count }), { tag:'milestone', fixed: true }, 3);
   }
 }
 
@@ -1334,19 +1334,6 @@ function say(text, meta = {}, prio = 1){
 
   broadcast({ t: 'tts_queue', queueLen: ttsQueue.length }, 'control');
   pumpTTS();
-}
-
-function mergeSmallGifts(){
-  const idx = ttsQueue.map((q, i) => q.meta.small && !q.meta.generic ? i : -1).filter(i => i >= 0);
-  if (idx.length < 2) return;
-  const names = [...new Set(idx.flatMap(i => ttsQueue[i].meta.names || []))];
-  const shown = names.slice(0, 3).join(', '), more = names.length - 3;
-  const text = more > 0 ? fill(CONTENT.gift.merged, { names: shown, more }) : fill(CONTENT.gift.mergedAll, { names: shown });
-  const merged = { text: text.slice(0, 500), meta: { tag: 'gift', small: true, names }, prio: 1 };
-  const first = idx[0];
-  for (let k = idx.length - 1; k >= 0; k--) ttsQueue.splice(idx[k], 1);
-  ttsQueue.splice(first, 0, merged);
-  addLog(`Gộp ${idx.length} câu quà nhỏ thành 1 (${names.length} người)`);
 }
 
 // 1. Backend VieNeu: timeout 30s cho 3 câu đầu sau khởi động, sau đó 15s
@@ -1639,8 +1626,14 @@ async function previewNameTTS(rawName, ws){
   }
 }
 
-// Các câu cố định được lưu đĩa (kinh, lời nguyện, pháp ngữ, câu chung không tên). Chỉ những file cache_* ứng với các câu này (theo giọng hiện hành) được giữ.
+// Các câu cố định được lưu đĩa (kinh, lời nguyện, pháp ngữ, câu chung không tên, mốc thả tim). Chỉ những file cache_* ứng với các câu này (theo giọng hiện hành) được giữ.
 function fixedTtsTexts(){
+  const every = CONTENT.milestone?.every || 1000;
+  const line = CONTENT.milestone?.line;
+  const milestones = [];
+  if (line && every > 0){
+    for (let k = 1; k <= 200; k++) milestones.push(fill(line, { n: every * k }));
+  }
   return [
     'Tùy hỷ công đức Phật tử đã cúng dường.',
     'Tùy hỷ Phật tử đã kết duyên lành.',
@@ -1650,6 +1643,7 @@ function fixedTtsTexts(){
     ...(CONTENT.chants || []),
     ...(CONTENT.prayers || []),
     ...((CONTENT.oracles || []).map(o => o.teaching || o.verse).filter(Boolean)),
+    ...milestones,
   ].filter(Boolean);
 }
 // Xoá file cache_* cũ không còn khớp câu cố định nào (đổi nội dung kinh/lời nguyện hoặc đổi giọng). Chạy lúc khởi động; trả về số file đã xoá.
